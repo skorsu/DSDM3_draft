@@ -2,7 +2,6 @@ rm(list = ls())
 library(tidyverse)
 
 ### Data Simulation
-
 data_sim <- function(N, K, J, clus_prop, pi_g, pi_w, s2, lb, ub){
   
   ### cluster assignment
@@ -34,6 +33,14 @@ data_sim <- function(N, K, J, clus_prop, pi_g, pi_w, s2, lb, ub){
   }
   
   ### Return the simulated data
-  list(ci = ci, gamma = gm_mat, w = w, beta = beta, zi = zi)
+  list(ci = ci, gamma = gm_mat, w = w, beta = beta, z = zi)
 }
 
+set.seed(12)
+test_dat <- data_sim(10, 2, 20, c(0.4, 0.6), c(0.4, 0.6), 0.5, 1, 50, 100)
+
+new_gamma <- update_gamma(z = test_dat$z, clus_assign = test_dat$ci, w = test_dat$w, 
+                          old_gamma = test_dat$gamma, xi = exp(test_dat$beta), 
+                          b0g = 1, b1g = 1)
+
+cbind(test_dat$z[5, ], test_dat$gamma[5, ], new_gamma[5, ])
