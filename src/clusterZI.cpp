@@ -74,25 +74,25 @@ double log_wj(int j, arma::mat z, arma::mat gamma_mat, arma::vec w,
 
 // [[Rcpp::export]]
 arma::vec log_beta_k(arma::vec beta_k, int ci, arma::mat z, arma::mat gamma_mat, 
-                     arma::mat beta, arma::vec w, arma::uvec clus_assign, double s2){
+                     arma::vec w, arma::uvec clus_assign, double s2){
   
   // Filter only the active variables
   arma::uvec active_var = arma::find(w == 1);
   arma::mat z_active = z.cols(active_var);
   arma::mat gamma_active = gamma_mat.cols(active_var);
-  arma::mat xi_active = arma::exp(beta.cols(active_var));
+  arma::vec xi_active = arma::exp(beta_k.rows(active_var));
   arma::vec beta_k_active = beta_k.rows(active_var);
-  
+
   // Filter only the observations in the same cluster (ci)
   arma::uvec clus_index = arma::find(clus_assign == ci);
   z_active = z_active.rows(clus_index);
   gamma_active = gamma_active.rows(clus_index);
-  xi_active = xi_active.row(ci);
-  
+
   // Calculate the gamma_w_xi factor
-  xi_active = arma::repelem(xi_active.t(), 1, z_active.n_rows);
-  xi_active = xi_active.t();
-  arma::mat gwx = gamma_active % xi_active;
+  arma::mat xi_mat = arma::repelem(xi_active, 1, z_active.n_rows);
+  xi_mat = xi_mat.t();
+  
+  arma::mat gwx = gamma_active % xi_mat;
   arma::mat z_gwx = z_active + gwx;
   
   arma::vec result(active_var.size(), arma::fill::value(0.0));
@@ -251,6 +251,56 @@ arma::vec update_w(arma::mat z, arma::uvec clus_assign, arma::vec old_w,
 }
 
 // [[Rcpp::export]]
+arma::mat update_beta(arma::mat z, arma::uvec clus_assign, arma::vec w,
+                      arma::mat gamma_mat, arma::mat old_beta, double mh_var,
+                      double s2){
+  
+  arma::mat proposed_beta(old_beta);
+  arma::mat new_beta(old_beta);
+  
+  // Filter only the active variables and active clusters
+  arma::uvec active_var = arma::find(w == 1);
+  arma::uvec active_clus = arma::conv_to<arma::uvec>::from(arma::unique(clus_assign));
+  
+  // (1) Sample a new beta
+  for(int k = 0; k < active_clus.size(); ++k){
+    
+    int cc = active_clus[k];
+    
+    for(int j = 0; j < active_var.size(); ++j){
+      
+      int cv = active_var[j];
+      double pb = R::rnorm(old_beta(cc, cv), std::sqrt(mh_var)); 
+      proposed_beta.row(cc).col(cv).fill(pb);
+      
+    }
+    
+    // (2) Calculate the logA for all active betas in the cluster k
+    arma::vec beta_k_p = arma::conv_to<arma::vec>::from(proposed_beta.row(cc));
+    arma::vec beta_k_o = arma::conv_to<arma::vec>::from(old_beta.row(cc));
+    arma::vec logA = log_beta_k(beta_k_p, cc, z, gamma_mat, w, clus_assign, s2) -
+      log_beta_k(beta_k_o, cc, z, gamma_mat, w, clus_assign, s2);
+    arma::vec logU = arma::log(arma::randu(logA.size()));
+    
+    std::cout << arma::join_horiz(logU, logA) << std::endl; 
+    
+    // (3) Determine
+    for(int j = 0; j < active_var.size(); ++j){
+      
+      int cv = active_var[j];
+      
+      if(logU[j] <= logA[j]){
+        new_beta.row(cc).col(cv).fill(beta_k_p[j]);
+      }
+      
+    }
+    
+  }
+  
+  return new_beta;
+}
+
+// [[Rcpp::export]]
 arma::mat update_w_test(arma::mat z, arma::uvec clus_assign, arma::vec old_w, 
                    arma::mat gamma_mat, arma::mat xi, double b0w, double b1w,
                    int iter_w, double trh){
@@ -295,8 +345,6 @@ arma::mat update_w_test(arma::mat z, arma::uvec clus_assign, arma::vec old_w,
     result_w.row(t) = proposed_w.t();
     
   }
-  
-  
   
   return result_w;
 }

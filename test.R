@@ -59,10 +59,12 @@ test_dat <- data_sim(N = 100, K = 3, J = 50, clus_prop = c(0.3, 0.4, 0.3),
                      pi_g = c(0.75, 0.9, 0.5), pi_w = 0.15, s2 = 1, lb_a = 20, ub_a = 30, lb_ia = 25, ub_ia = 35)
 
 
-test_bet <- log_beta_k(beta_k = test_dat$beta[1, ], ci = 2 - 1, z = test_dat$z, 
-                       gamma_mat = test_dat$gamma, beta = test_dat$beta, 
-                       w = test_dat$w, clus_assign = test_dat$ci - 1, s2 = 1)
-
+test_update <- update_beta(z = test_dat$z, clus_assign = test_dat$ci - 1, w = test_dat$w,
+                           gamma_mat = test_dat$gamma, old_beta = test_dat$beta, 
+                           mh_var = 0.01, s2 = 1)
+test_dat$beta == test_update
 
 identical(round(test_bet, 1), round(log(dnorm(test_dat$beta[1, test_dat$w == 1], 0, sqrt(10))), 1))
 
+log_beta_k(beta_k = test_dat$beta[1, ], ci = 0, z = test_dat$z, gamma_mat = test_dat$gamma, 
+          w = test_dat$w, clus_assign = test_dat$ci - 1, s2 = 1)
