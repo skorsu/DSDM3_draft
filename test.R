@@ -55,13 +55,14 @@ data_sim <- function(N, K, J, clus_prop, pi_g, pi_w, s2, lb_a, ub_a, lb_ia, ub_i
 }
 
 set.seed(12)
-test_dat <- data_sim(N = 100, K = 3, J = 40, clus_prop = c(0.3, 0.4, 0.3), 
-                     pi_g = c(0.75, 0.9, 0.5), pi_w = 0.65, s2 = 1, lb_a = 500, ub_a = 1000, lb_ia = 250, ub_ia = 350)
+test_dat <- data_sim(N = 100, K = 3, J = 50, clus_prop = c(0.3, 0.4, 0.3), 
+                     pi_g = c(0.75, 0.9, 0.5), pi_w = 0.15, s2 = 1, lb_a = 20, ub_a = 30, lb_ia = 25, ub_ia = 35)
 
 
-test <- update_w(z = test_dat$z, clus_assign = test_dat$ci - 1, old_w = test_dat$w,
-         gamma_mat = test_dat$gamma, beta = test_dat$beta, b0w = 1, b1w = 1)
+test_bet <- log_beta_k(beta_k = test_dat$beta[1, ], ci = 2 - 1, z = test_dat$z, 
+                       gamma_mat = test_dat$gamma, beta = test_dat$beta, 
+                       w = test_dat$w, clus_assign = test_dat$ci - 1, s2 = 1)
 
-table(test, test_dat$w)
 
-identical((test_dat$gamma * (matrix(rep(test_dat$w, 10), nrow = 30) %>% t()) * exp(test_dat$beta[test_dat$ci, ])), test)
+identical(round(test_bet, 1), round(log(dnorm(test_dat$beta[1, test_dat$w == 1], 0, sqrt(10))), 1))
+

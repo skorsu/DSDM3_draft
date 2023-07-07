@@ -8,7 +8,7 @@
 // * Cluster index starts with 0.
 // * Update at-risk indicator (done)
 // * Update important variable indicator (done)
-// * Update beta
+// * Update beta (wip)
 // * Update the cluster assignment
 // -----------------------------------------------------------------------------
 
@@ -71,6 +71,43 @@ double log_wj(int j, arma::mat z, arma::mat gamma_mat, arma::vec w,
   return result;
   
 } 
+
+// [[Rcpp::export]]
+arma::vec log_beta_k(arma::vec beta_k, int ci, arma::mat z, arma::mat gamma_mat, 
+                     arma::mat beta, arma::vec w, arma::uvec clus_assign, double s2){
+  
+  // Filter only the active variables
+  arma::uvec active_var = arma::find(w == 1);
+  arma::mat z_active = z.cols(active_var);
+  arma::mat gamma_active = gamma_mat.cols(active_var);
+  arma::mat xi_active = arma::exp(beta.cols(active_var));
+  arma::vec beta_k_active = beta_k.rows(active_var);
+  
+  // Filter only the observations in the same cluster (ci)
+  arma::uvec clus_index = arma::find(clus_assign == ci);
+  z_active = z_active.rows(clus_index);
+  gamma_active = gamma_active.rows(clus_index);
+  xi_active = xi_active.row(ci);
+  
+  // Calculate the gamma_w_xi factor
+  xi_active = arma::repelem(xi_active.t(), 1, z_active.n_rows);
+  xi_active = xi_active.t();
+  arma::mat gwx = gamma_active % xi_active;
+  arma::mat z_gwx = z_active + gwx;
+  
+  arma::vec result(active_var.size(), arma::fill::value(0.0));
+  Rcpp::NumericVector beta_rcpp = Rcpp::NumericVector(beta_k_active.begin(), beta_k_active.end());
+  result += Rcpp::as<arma::vec>(Rcpp::wrap(Rcpp::dnorm4(beta_rcpp, 0, std::sqrt(s2), 1)));
+  result += arma::vec(active_var.size(), arma::fill::value(arma::accu(arma::lgamma(arma::sum(gwx, 1)))));
+  result -= arma::vec(active_var.size(), arma::fill::value(arma::accu(arma::lgamma(arma::sum(z_gwx, 1)))));
+  
+  // Replace 0 in the gmx with 1 as lgamma(1) = 0
+  result += arma::sum(arma::lgamma(z_gwx.replace(0.0, 1.0)), 0).t();
+  result -= arma::sum(arma::lgamma(gwx.replace(0.0, 1.0)), 0).t();
+  
+  return result;
+  
+}
 
 // [[Rcpp::export]]
 double log_w(arma::mat z, arma::mat g, arma::vec w, arma::mat xi,
