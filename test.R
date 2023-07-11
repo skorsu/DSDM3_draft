@@ -1,70 +1,52 @@
 rm(list = ls())
 library(tidyverse)
 
-### Data Simulation
-data_sim <- function(N, K, J, clus_prop, pi_g, pi_w, s2, lb_a, ub_a, lb_ia, ub_ia){
+### Function: Simulate the data
+### Note: the cluster index must start from 0
+### Note: set the number of active variable = 2*K
+data_sim <- function(K, J, r, pi_g, beta_base, lb, ub){
+
+  ### Actual Assignment
+  ci_actual <- rep(1:K, r)
+  N <- length(ci_actual)
   
-  ### cluster assignment
-  ci <- sample(1:K, N, replace = TRUE, prob = clus_prop)
+  ### Active Variables
+  conc_mat <- 1.5 * diag(K)
+  conc_mat[conc_mat == 0] <- 0.1
+  conc_mat <- apply(conc_mat, 1, rep, r)
+  conc_mat <- cbind(conc_mat, conc_mat)
   
-  ### gamma for each observation based on its cluster (at-risk indicator)
-  gm_mat <- t(apply(matrix(pi_g[ci]), 1, rbinom, n = J, size = 1))
+  xi_mat <- matrix(NA, ncol = 2*K, nrow = K)
+  z <- matrix(NA, ncol = 2*K, nrow = N)
   
-  ### w (important variable)
-  w <- sort(rbinom(J, 1, pi_w), decreasing = TRUE)
-  n_active <- sum(w)
-  
-  ### Generate xi = exp(beta) where beta ~ N(0, s2).
-  beta <- matrix(rnorm(J * K, 0, sqrt(s2)), ncol = J)
-  xi <- exp(beta)
-  
-  ### Generate the data separately for active and inactive cluster
-  alpha_mat <- matrix(rgamma(K * J, xi, 1), ncol = J)
-  
-  ### active variable
-  active_alpha <- alpha_mat[ci, (1:n_active)]
-  gm_alpha_active <- gm_mat[, (1:n_active)] * active_alpha
-  alpha_norm_active <- t(apply(gm_alpha_active, 1, function(x){x/sum(x)}))
-  sum_zi_active <- round(runif(N, lb_a, ub_a))
-  zi_active <- matrix(NA, ncol = n_active, nrow = N)
-  for(i in 1:N){
-    zi_active[i, ] <- rmultinom(1, sum_zi_active[i], alpha_norm_active[i, ])
+  for(k in 1:K){
+    xi_mat[k, ] <- exp(rnorm(2*K, beta_base[k], 0.1))
   }
   
-  ### inactive variable
-  inactive_alpha <- alpha_mat[ci, (n_active+1):J]
-  gm_alpha_inactive <- gm_mat[, (n_active+1):J] * inactive_alpha
-  alpha_norm_inactive <- t(apply(gm_alpha_inactive, 1, function(x){x/sum(x)}))
-  sum_zi_inactive <- round(runif(N, lb_ia, ub_ia))
-  zi_inactive <- matrix(NA, ncol = J - n_active, nrow = N)
   for(i in 1:N){
-    zi_inactive[i, ] <- rmultinom(1, sum_zi_inactive[i], alpha_norm_inactive[i, ])
+    sum_zi <- round(runif(1, lb, ub))
+    z[i, ] <- rmultinom(1, sum_zi, (conc_mat[i, ] * xi_mat[ci_actual[i], ])/sum(conc_mat[i, ] * xi_mat[ci_actual[i], ]))
   }
   
-  zi <- cbind(zi_active, zi_inactive)
+  ### Non-active variable
+  non_active <- J - (2*K)
+  z_non_active <- matrix(NA, ncol = non_active, nrow = N)
+  gm_mat <- matrix(NA, ncol = non_active, nrow = N)
+  for(i in 1:N){
+    gm_vec <- rbinom(non_active, 1, pi_g)
+    gm_mat[i, ] <- gm_vec
+    alp <- exp(rnorm(non_active, 0, 1)) * gm_vec
+    sum_zi <- round(runif(1, lb, ub))
+    z_non_active[i, ] <- rmultinom(1, sum_zi, alp/sum(alp))
+  }
   
-  ### Rearrange the variable order
-  variable_order <- sample(1:J, J)
-  gm_mat <- gm_mat[, variable_order]
-  w <- w[variable_order]
-  beta <- beta[, variable_order]
-  zi <- zi[, variable_order]
+  list(conc_mat = conc_mat, ci = ci_actual - 1, xi = xi_mat, 
+       z = cbind(z, z_non_active), 
+       gamma = cbind(matrix(1, ncol = 2*K, nrow = N), gm_mat))
   
-  ### Return the simulated data
-  list(ci = ci, gamma = gm_mat, w = w, beta = beta, z = zi)
 }
 
-set.seed(12)
-test_dat <- data_sim(N = 100, K = 3, J = 50, clus_prop = c(0.3, 0.4, 0.3), 
-                     pi_g = c(0.75, 0.9, 0.5), pi_w = 0.15, s2 = 1, lb_a = 20, ub_a = 30, lb_ia = 25, ub_ia = 35)
+test_dat <- data_sim(K = 5, J = 50, r = 10, pi_g = 0.25,
+                     beta_base = c(2, 1, 0, -1, -2), lb = 50, ub = 60)
+table(test_dat$gamma[2, ], test_dat$z[2, ])
 
-
-test_update <- update_beta(z = test_dat$z, clus_assign = test_dat$ci - 1, w = test_dat$w,
-                           gamma_mat = test_dat$gamma, old_beta = test_dat$beta, 
-                           mh_var = 0.01, s2 = 1)
-test_dat$beta == test_update
-
-identical(round(test_bet, 1), round(log(dnorm(test_dat$beta[1, test_dat$w == 1], 0, sqrt(10))), 1))
-
-log_beta_k(beta_k = test_dat$beta[1, ], ci = 0, z = test_dat$z, gamma_mat = test_dat$gamma, 
-          w = test_dat$w, clus_assign = test_dat$ci - 1, s2 = 1)
