@@ -48,6 +48,16 @@ Rcpp::IntegerVector rmultinom_1(Rcpp::NumericVector &probs, unsigned int &N){
   rmultinom(1, probs.begin(), N, outcome.begin());
   return outcome;
 }
+
+// [[Rcpp::export]]
+arma::vec adjust_tau(int K_max, arma::uvec clus_assign, arma::vec tau_vec){
+  arma::vec a_tau = arma::zeros(K_max);
+  
+  arma::uvec new_active_clus = arma::unique(clus_assign);
+  a_tau.elem(new_active_clus) = tau_vec.elem(new_active_clus);
+  
+  return a_tau;
+}
   
 // [[Rcpp::export]]
 double log_g_ijk(int j, arma::vec zi, arma::vec gi, arma::vec w, arma::vec xi_k,
@@ -147,8 +157,9 @@ arma::vec log_beta_k(arma::vec beta_k, int ci, arma::mat z, arma::mat gamma_mat,
 }
 
 // [[Rcpp::export]]
-arma::uvec realloc(arma::mat z, arma::uvec clus_assign, arma::vec w, 
-                   arma::mat gamma_mat, arma::mat beta, arma::vec theta){
+Rcpp::List realloc(arma::mat z, arma::uvec clus_assign, arma::vec w, 
+                   arma::mat gamma_mat, arma::mat beta, arma::vec tau, 
+                   arma::vec theta){
   
   arma::uvec new_assign(clus_assign);
   arma::uvec active_clus = arma::unique(clus_assign);
@@ -204,7 +215,14 @@ arma::uvec realloc(arma::mat z, arma::uvec clus_assign, arma::vec w,
     
   }
   
-  return new_assign;
+  // Adjust tau
+  unsigned int K_max = beta.n_rows;
+  arma::vec new_tau = adjust_tau(K_max, new_assign, tau);
+  
+  Rcpp::List result;
+  result["new_assign"] = new_assign;
+  result["new_tau"] = new_tau;
+  return result;
   
 }
 
