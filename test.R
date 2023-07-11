@@ -32,21 +32,25 @@ data_sim <- function(K, J, r, pi_g, beta_base, lb, ub){
   non_active <- J - (2*K)
   z_non_active <- matrix(NA, ncol = non_active, nrow = N)
   gm_mat <- matrix(NA, ncol = non_active, nrow = N)
+  xi_non <- exp(matrix(rnorm(non_active * K, 0, 1), ncol = non_active, nrow = K))
   for(i in 1:N){
     gm_vec <- rbinom(non_active, 1, pi_g)
     gm_mat[i, ] <- gm_vec
-    alp <- exp(rnorm(non_active, 0, 1)) * gm_vec
+    alp <- xi_non[ci_actual[i], ] * gm_vec
     sum_zi <- round(runif(1, lb, ub))
     z_non_active[i, ] <- rmultinom(1, sum_zi, alp/sum(alp))
   }
   
-  list(conc_mat = conc_mat, ci = ci_actual - 1, xi = xi_mat, 
+  list(conc_mat = conc_mat, ci = ci_actual - 1, xi = cbind(xi_mat, xi_non), 
        z = cbind(z, z_non_active), 
-       gamma = cbind(matrix(1, ncol = 2*K, nrow = N), gm_mat))
+       gamma = cbind(matrix(1, ncol = 2*K, nrow = N), gm_mat),
+       w = c(rep(1, 2*K), rep(0, non_active)))
   
 }
 
 test_dat <- data_sim(K = 5, J = 50, r = 10, pi_g = 0.25,
                      beta_base = c(2, 1, 0, -1, -2), lb = 50, ub = 60)
-table(test_dat$gamma[2, ], test_dat$z[2, ])
+test_dat$xi
+
+realloc(test_dat$z, test_dat$ci, test_dat$w, test_dat$gamma, log(test_dat$xi))
 
