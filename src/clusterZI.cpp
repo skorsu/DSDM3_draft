@@ -8,10 +8,47 @@
 // * Cluster index starts with 0.
 // * Update at-risk indicator (done)
 // * Update important variable indicator (done)
-// * Update beta (wip)
+// * Update beta (done)
 // * Update the cluster assignment
+// ** reallocation (done)
+// ** sm (wip)
 // -----------------------------------------------------------------------------
 
+arma::vec log_sum_exp(arma::vec log_unnorm_prob){
+  
+  /* Description: This function will calculate the normalized probability 
+   *              by applying log-sum-exp trick on the log-scale probability.
+   * Credit: https://gregorygundersen.com/blog/2020/02/09/log-sum-exp/
+   */
+  
+  double max_elem = log_unnorm_prob.max();
+  double t = log(0.00000000000000000001) - log(log_unnorm_prob.size());          
+  
+  for(int k = 0; k < log_unnorm_prob.size(); ++k){
+    double prob_k = log_unnorm_prob.at(k) - max_elem;
+    if(prob_k > t){
+      log_unnorm_prob.row(k).fill(std::exp(prob_k));
+    } else {
+      log_unnorm_prob.row(k).fill(0.00000000000000000001);
+    }
+  } 
+  
+  // Normalize the vector
+  return log_unnorm_prob/arma::accu(log_unnorm_prob);
+}
+
+// [[Rcpp::export]]
+Rcpp::IntegerVector rmultinom_1(Rcpp::NumericVector &probs, unsigned int &N){
+  
+  /* Description: sample from the multinomial(N, probs).
+   * Credit: https://gallery.rcpp.org/articles/recreating-rmultinom-and-rpois-with-rcpp/
+   */
+  
+  Rcpp::IntegerVector outcome(N);
+  rmultinom(1, probs.begin(), N, outcome.begin());
+  return outcome;
+}
+  
 // [[Rcpp::export]]
 double log_g_ijk(int j, arma::vec zi, arma::vec gi, arma::vec w, arma::vec xi_k,
                  double b0g, double b1g){
@@ -110,42 +147,64 @@ arma::vec log_beta_k(arma::vec beta_k, int ci, arma::mat z, arma::mat gamma_mat,
 }
 
 // [[Rcpp::export]]
-double log_w(arma::mat z, arma::mat g, arma::vec w, arma::mat xi,
-               arma::uvec clus_assign, double b0w, double b1w){
+arma::uvec realloc(arma::mat z, arma::uvec clus_assign, arma::vec w, 
+                   arma::mat gamma_mat, arma::mat beta, arma::vec theta){
   
-  /*
-   * Description: This is a function for calculating probability of the important
-   *              variable indicator for the variable j, p(wj|.), in a log scale.
-   * Input: The index of the current variable (j), the dataset (z), 
-   *        the at-risk indicator for all observation (g), the important 
-   *        variable indicator (w), the xi for all cluster (xi), the 
-   *        hyperparameter of the important variable indicator (b0w, b1w).
-   */
+  arma::uvec new_assign(clus_assign);
+  arma::uvec active_clus = arma::unique(clus_assign);
+  unsigned int K_pos = active_clus.size();
   
-  double result = 0.0;
+  // Number of the observation in each cluster
+  arma::vec n_clus(K_pos, arma::fill::value(0.0));
+  for(int i = 0; i < clus_assign.size(); ++i){
+    arma::uvec index = arma::find(active_clus == clus_assign[i]);
+    n_clus[index[0]] += 1;
+  }
+
+  // Filter only the active variables
+  arma::uvec active_var = arma::find(w == 1);
+  arma::mat z_active = z.cols(active_var);
+  arma::mat gamma_active = gamma_mat.cols(active_var);
+  arma::mat xi_active = arma::exp(beta.cols(active_var));
   
-  arma::vec b0 = b0w + w;
-  arma::vec b1 = b1w + (1 - w);
+  // Select only the component for the active clusters
+  xi_active = xi_active.rows(active_clus);
+  arma::vec theta_active = theta.rows(active_clus);
   
-  result += arma::accu(arma::lgamma(b0) + arma::lgamma(b1) - arma::lgamma(b0 + b1));
+  for(int i = 0; i < clus_assign.size(); ++i){
+    
+    // Adjust the n_clus vector
+    arma::uvec index = arma::find(active_clus == new_assign[i]);
+    n_clus[index[0]] -= 1;
+    
+    
+    // Calculate gwx for the observation i in each active cluster
+    arma::vec g_i = arma::conv_to<arma::vec>::from(gamma_active.row(i));
+    arma::mat gwx_i = xi_active % arma::repelem(g_i, 1, K_pos).t();
+    arma::mat z_gwx_i = gwx_i + arma::repelem(z_active.row(i), K_pos, 1);
+    arma::vec sum_gwx_i = arma::sum(gwx_i, 1);
+    arma::vec sum_z_gwx_i = arma::sum(z_gwx_i, 1);
+    
+    // Proportional of the log probability
+    arma::vec log_prob = arma::lgamma(sum_gwx_i.replace(0.0, 1.0)) -
+      arma::sum(arma::lgamma(gwx_i.replace(0.0, 1.0)), 1) +
+      arma::sum(arma::lgamma(z_gwx_i.replace(0.0, 1.0)), 1) -
+      arma::lgamma(sum_z_gwx_i.replace(0.0, 1.0)) +
+      arma::log(n_clus + theta_active);
+    arma::vec prob = log_sum_exp(log_prob); 
+    
+    // Reassign
+    Rcpp::NumericVector rcpp_prob = Rcpp::NumericVector(prob.begin(), prob.end());
+    arma::vec assign = Rcpp::as<arma::vec>(Rcpp::wrap(rmultinom_1(rcpp_prob, K_pos)));
+    
+    arma::uvec new_index = arma::find(assign == 1);
+    new_assign[i] = active_clus[new_index[0]];
+    index = arma::find(active_clus == new_assign[i]);
+    n_clus[index[0]] += 1;
+    
+  }
   
-  // Select xi for each observation based on its cluster
-  arma::mat xi_obs = xi.rows(clus_assign);
-  
-  // Duplicate vector w
-  arma::mat w_mat = arma::repelem(w, 1, z.n_rows); 
-  w_mat = w_mat.t();
-  
-  // Calculate gamma_w_xi and z_gamma_w_xi for all observations
-  arma::mat gwx = g % w_mat % xi_obs;
-  arma::mat z_gwx = z + gwx;
-  
-  result += arma::accu(arma::lgamma(arma::sum(gwx, 1)));
-  result -= arma::accu(arma::lgamma(gwx.elem(arma::find(gwx != 0))));
-  result += arma::accu(arma::lgamma(z_gwx.elem(arma::find(z_gwx != 0))));
-  result -= arma::accu(arma::lgamma(arma::sum(z_gwx, 1)));
-  
-  return result;
+  return new_assign;
   
 }
 
@@ -282,8 +341,6 @@ arma::mat update_beta(arma::mat z, arma::uvec clus_assign, arma::vec w,
       log_beta_k(beta_k_o, cc, z, gamma_mat, w, clus_assign, s2);
     arma::vec logU = arma::log(arma::randu(logA.size()));
     
-    std::cout << arma::join_horiz(logU, logA) << std::endl; 
-    
     // (3) Determine
     for(int j = 0; j < active_var.size(); ++j){
       
@@ -299,53 +356,3 @@ arma::mat update_beta(arma::mat z, arma::uvec clus_assign, arma::vec w,
   
   return new_beta;
 }
-
-// [[Rcpp::export]]
-arma::mat update_w_test(arma::mat z, arma::uvec clus_assign, arma::vec old_w, 
-                   arma::mat gamma_mat, arma::mat xi, double b0w, double b1w,
-                   int iter_w, double trh){
-  
-  arma::mat result_w(iter_w, old_w.size(), arma::fill::value(-1)); 
-  arma::vec final_w(5, arma::fill::value(-1));
-  
-  arma::vec previous_w(old_w);
-  for(int t = 0; t < iter_w; ++t){
-    
-    arma::vec proposed_w(old_w); 
-    
-    // Get the index of the important and not important variables
-    arma::uvec imp_index = arma::find(previous_w == 1);
-    arma::uvec n_imp_index = arma::find(previous_w == 0);
-    
-    // Decide to perform add/delete or swap
-    if(n_imp_index.size() == 0 or imp_index.size() == 0){
-      arma::uvec adj_var_index = arma::randperm(previous_w.size(), 1);
-      proposed_w.row(adj_var_index[0]).fill(!previous_w[adj_var_index[0]]);
-    } else {
-      double u = R::runif(0, 1);
-      if(u <= 0.5){ // Add/Delete
-        arma::uvec adj_var_index = arma::randperm(previous_w.size(), 1);
-        proposed_w.row(adj_var_index[0]).fill(!previous_w[adj_var_index[0]]);
-      } else { // Swap
-        arma::uvec imp_i = arma::randperm(imp_index.size(), 1);
-        arma::uvec n_imp_i = arma::randperm(n_imp_index.size(), 1);
-        proposed_w.row(imp_index[imp_i[0]]).fill(0);
-        proposed_w.row(n_imp_index[n_imp_i[0]]).fill(1);
-      }
-    }
-    
-    // Calculate the acceptance probability
-    double logA = log_w(z, gamma_mat, proposed_w, xi, clus_assign, b0w, b1w) - 
-      log_w(z, gamma_mat, previous_w, xi, clus_assign, b0w, b1w);
-    double logU = std::log(R::runif(0, 1));
-    if(logU <= logA){
-      previous_w = proposed_w;
-    }
-    
-    result_w.row(t) = proposed_w.t();
-    
-  }
-  
-  return result_w;
-}
-
