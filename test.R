@@ -50,7 +50,13 @@ data_sim <- function(K, J, r, pi_g, beta_base, lb, ub){
 
 test_dat <- data_sim(K = 5, J = 50, r = 10, pi_g = 0.25,
                      beta_base = c(2, 1, 0, -1, -2), lb = 50, ub = 60)
-test_dat$xi
+t_ci <- sample(0:4, 50, TRUE)
+tt <- sm(z = test_dat$z, clus_assign = t_ci, w = test_dat$w, 
+         gamma_mat = test_dat$gamma, beta = log(test_dat$xi),
+         tau = c(1, 1, 1, 1, 1), theta = 1:10, launch_iter = 2)
+table(t_ci)
+table(tt$launch_assign)
+table(tt$sm_assign)
+table(t_ci, tt$launch_assign)
 
-realloc(test_dat$z, test_dat$ci, test_dat$w, test_dat$gamma, log(test_dat$xi))
-
+cbind(t_ci, tt$launch_assign)

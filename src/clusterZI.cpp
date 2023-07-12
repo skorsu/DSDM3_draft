@@ -435,7 +435,33 @@ Rcpp::List sm(arma::mat z, arma::uvec clus_assign, arma::vec w,
   result["sm_assign"] = sm_assign;
   return result;
   
-} 
+}
+
+Rcpp::List update_theta_u(arma::uvec clus_assign, arma::vec tau_vec, 
+                          double old_U, arma::vec theta){
+  
+  arma::vec new_tau(tau_vec); 
+  
+  // update alpha vector
+  arma::uvec active_clus = arma::unique(clus_assign);
+  for(int k = 0; k < active_clus.size(); ++k){
+    int current_c = active_clus[k];
+    arma::uvec nk = arma::find(clus_assign == current_c);
+    double scale_gamma = 1/(1 + old_U); // change the rate to scale parameter
+    new_tau.row(current_c).fill(R::rgamma(nk.size() + theta[current_c], scale_gamma));
+  }
+  
+  // update U
+  int n = clus_assign.size();
+  double scale_u = 1/arma::accu(new_tau);
+  double new_U = R::rgamma(n, scale_u);
+  
+  Rcpp::List result;
+  result["new_tau"] = new_tau;
+  result["new_U"] = new_U;
+  return result;
+  
+}
 
 // [[Rcpp::export]]
 arma::mat update_gamma(arma::mat z, arma::uvec clus_assign, arma::vec w, 
