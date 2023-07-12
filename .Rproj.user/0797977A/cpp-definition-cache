@@ -1,5 +1,32 @@
 [
     {
+        "file": "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp",
+        "file_last_write": 1688500471.0,
+        "definitions": [
+            {
+                "usr": "c:@F@log_g_ijk#I#$@N@arma@S@Col>#d#S0_#S0_#S0_#d#d#",
+                "kind": 6,
+                "parent_name": "",
+                "name": "log_g_ijk(int, arma::vec, arma::vec, arma::vec, arma::vec, double, double)",
+                "file": "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp",
+                "line": 14,
+                "column": 8,
+                "hidden": false
+            },
+            {
+                "usr": "c:@F@update_gamma#$@N@arma@S@Mat>#d#$@N@arma@S@Col>#d#S1_#S0_#S0_#d#d#",
+                "kind": 6,
+                "parent_name": "",
+                "name": "update_gamma(arma::mat, arma::vec, arma::vec, arma::mat, arma::mat, double, double)",
+                "file": "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp",
+                "line": 45,
+                "column": 11,
+                "hidden": false
+            }
+        ],
+        "hidden": false
+    },
+    {
         "file": "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/rcpparma_hello_world.cpp",
         "file_last_write": 1688143506.0,
         "definitions": [
