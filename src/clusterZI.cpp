@@ -14,7 +14,9 @@
 // * Check the function for the at-risk indicator
 // ** log_prob_gamma_ijk: for the individual g_ijk (/)
 // ** update_gamma: for all g (/)
-// * Check the function for the important variable indicator 
+// * Check the function for the important variable indicator
+// ** log_wj (/)
+// ** update_w (/)
 // * Check the function for the beta
 // * Check the function for the assignment update
 // -----------------------------------------------------------------------------
@@ -75,7 +77,6 @@ double log_g_ijk(int j, arma::vec zi, arma::vec gi, arma::vec w, arma::vec beta_
   arma::vec z_gwx_i = zi + gwx_i;
   
   result += std::log(R::beta(b0g + g_ijk, b1g + (1 - g_ijk)));
-  result -= std::log(R::beta(b0g, b1g));
   result += std::lgamma(arma::accu(gwx_i));
   result -= arma::accu(arma::lgamma(gwx_i.replace(0.0, 1.0)));
   result -= std::lgamma(arma::accu(z_gwx_i));
@@ -86,30 +87,29 @@ double log_g_ijk(int j, arma::vec zi, arma::vec gi, arma::vec w, arma::vec beta_
 }
 
 // [[Rcpp::export]]
-double log_wj(int j, arma::mat z, arma::mat gamma_mat, arma::vec w, 
-              arma::mat beta, arma::uvec clus_assign, double b0w, double b1w){
+double log_w_j(int j, arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat, 
+               arma::vec w, arma::mat beta_mat, double b0w, double b1w){
   
-  // Convert beta to xi by taking the exponential function.
-  arma::mat xi = arma::exp(beta);
   double result = 0.0;
-  
-  // Get the value of wj
   int wj = w[j];
   
+  // Convert beta to xi by taking the exponential function.
+  arma::mat xi = arma::exp(beta_mat);
+  
   // Calculate the gamma_w_xi factor
-  arma::mat w_mat = arma::repelem(w, 1, z.n_rows); 
-  w_mat = w_mat.t();
+  arma::mat w_mat = arma::repelem(w, 1, z.n_rows).t(); 
   arma::mat xi_obs = xi.rows(clus_assign);
   arma::mat gwx = gamma_mat % w_mat % xi_obs;
   arma::mat gwx_j = gwx.col(j);
   arma::vec z_gwx_j = gwx_j + z.col(j);
   
   result += R::lbeta(b0w + wj, b1w + (1 - wj));
-  result += arma::accu(arma::lgamma(z_gwx_j.elem(arma::find(z_gwx_j != 0))));
-  result -= arma::accu(arma::lgamma(gwx_j.elem(arma::find(gwx_j != 0))));
   result += arma::accu(arma::lgamma(arma::sum(gwx, 1)));
-  result -= arma::accu(arma::lgamma(arma::sum(z, 1) + arma::sum(gwx, 1)));
-
+  result -= arma::accu(arma::lgamma(arma::sum(z + gwx, 1)));
+  
+  result += arma::accu(arma::lgamma(z_gwx_j.replace(0.0, 1.0)));
+  result -= arma::accu(arma::lgamma(gwx_j.replace(0.0, 1.0)));
+  
   return result;
   
 } 
@@ -432,32 +432,6 @@ Rcpp::List sm(arma::mat z, arma::uvec clus_assign, arma::vec w,
   
 }
 
-Rcpp::List update_theta_u(arma::uvec clus_assign, arma::vec tau_vec, 
-                          double old_U, arma::vec theta){
-  
-  arma::vec new_tau(tau_vec); 
-  
-  // update alpha vector
-  arma::uvec active_clus = arma::unique(clus_assign);
-  for(int k = 0; k < active_clus.size(); ++k){
-    int current_c = active_clus[k];
-    arma::uvec nk = arma::find(clus_assign == current_c);
-    double scale_gamma = 1/(1 + old_U); // change the rate to scale parameter
-    new_tau.row(current_c).fill(R::rgamma(nk.size() + theta[current_c], scale_gamma));
-  }
-  
-  // update U
-  int n = clus_assign.size();
-  double scale_u = 1/arma::accu(new_tau);
-  double new_U = R::rgamma(n, scale_u);
-  
-  Rcpp::List result;
-  result["new_tau"] = new_tau;
-  result["new_U"] = new_U;
-  return result;
-  
-}
-
 // [[Rcpp::export]]
 arma::mat update_gamma(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat, 
                        arma::vec w, arma::mat beta_mat, double b0g, double b1g){
@@ -498,38 +472,40 @@ arma::mat update_gamma(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat,
 }
 
 // [[Rcpp::export]]
-arma::vec update_w(arma::mat z, arma::uvec clus_assign, arma::vec old_w,
-                   arma::mat gamma_mat, arma::mat beta, double b0w, double b1w){
+arma::vec update_w(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat,
+                   arma::vec w, arma::mat beta_mat, double b0w, double b1w){
   
-  arma::vec proposed_w(old_w);
+  arma::vec proposed_w(w);
   
   // Get the index of the important and not important variables
   arma::uvec imp_index = arma::find(proposed_w == 1);
-  arma::uvec n_imp_index = arma::find(proposed_w == 0);
+  arma::uvec unimp_index = arma::find(proposed_w == 0);
   int adjusted_index = -1;
   int j_update = -1;
   
   // Propose a new vector of the important variable indicator
   if(imp_index.size() <= 1){ // If only one variable is active, it cannot delete that one out.
-    adjusted_index = arma::randperm(n_imp_index.size(), 1)[0];
-    j_update = n_imp_index[adjusted_index];
+    adjusted_index = arma::randperm(unimp_index.size(), 1)[0];
+    j_update = unimp_index[adjusted_index];
     proposed_w.row(j_update).fill(1);
   } else {
-    adjusted_index = arma::randperm(old_w.size(), 1)[0];
+    adjusted_index = arma::randperm(w.size(), 1)[0];
     j_update = adjusted_index;
-    proposed_w.row(j_update).fill(!(old_w[j_update]));
+    proposed_w.row(j_update).fill(1 - w[j_update]);
   }
   
-  // Calculate the acceptance probability
-  double logA = log_wj(j_update, z, gamma_mat, proposed_w, beta, clus_assign, b0w, b1w) - 
-    log_wj(j_update, z, gamma_mat, old_w, beta, clus_assign, b0w, b1w);
+  // MH
+  double logA = 0.0;
+  logA += log_w_j(j_update, z, clus_assign, gamma_mat, proposed_w, beta_mat, 
+                  b0w, b1w);
+  logA -= log_w_j(j_update, z, clus_assign, gamma_mat, w, beta_mat, b0w, b1w);
   double logU = std::log(R::runif(0.0, 1.0));
-  arma::vec new_w(old_w);
-  if(logU <= logA){
-    new_w = proposed_w;
-  }
   
-  return new_w;
+  if(logU <= logA){
+    w = proposed_w;
+  }
+
+  return w;
   
 }
 
@@ -580,3 +556,30 @@ arma::mat update_beta(arma::mat z, arma::uvec clus_assign, arma::vec w,
   
   return new_beta;
 }
+
+Rcpp::List update_theta_u(arma::uvec clus_assign, arma::vec tau_vec, 
+                          double old_U, arma::vec theta){
+  
+  arma::vec new_tau(tau_vec); 
+  
+  // update alpha vector
+  arma::uvec active_clus = arma::unique(clus_assign);
+  for(int k = 0; k < active_clus.size(); ++k){
+    int current_c = active_clus[k];
+    arma::uvec nk = arma::find(clus_assign == current_c);
+    double scale_gamma = 1/(1 + old_U); // change the rate to scale parameter
+    new_tau.row(current_c).fill(R::rgamma(nk.size() + theta[current_c], scale_gamma));
+  }
+  
+  // update U
+  int n = clus_assign.size();
+  double scale_u = 1/arma::accu(new_tau);
+  double new_U = R::rgamma(n, scale_u);
+  
+  Rcpp::List result;
+  result["new_tau"] = new_tau;
+  result["new_U"] = new_U;
+  return result;
+  
+}
+

@@ -4,10 +4,33 @@ library(tidyverse)
 ### Simulate the data
 set.seed(31)
 source("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/data_sim.R")
-dat_test <- data_sim(N = 100, K = 4, J = 50, J_imp = 10, z_lb = 75, z_ub = 100, 
+dat_test <- data_sim(N = 100, K = 4, J = 100, J_imp = 10, z_lb = 75, z_ub = 100, 
                      z_lb_ova = 50, z_ub_ova = 75, pi_gk = rep(0.75, 4),
                      pi_g_ova = 0.9)
 dat_test$z
+
+### Test: w_j
+set.seed(3)
+w <- rbinom(100, 1, 0.5)
+beta_mat <- matrix(rnorm(5 * 100), nrow = 5)
+w_mat <- t(matrix(rep(w, 100), nrow = 100))
+gwx <- dat_test$gm * w_mat * exp(beta_mat[dat_test$ci + 1, ])
+
+for(j in 1:100){
+  w_rcpp <- log_w_j(j - 1, z = dat_test$z, clus_assign = dat_test$ci, 
+                    gamma_mat = dat_test$gm, w = w, beta = beta_mat, 
+                    b0w = 13, b1w = 20)
+  w_base_r <- lbeta(13 + w[j], 20 + 1 - w[j]) + sum(lgamma(apply(gwx, 1, sum))) - 
+    sum(lgamma(apply(dat_test$z + gwx, 1, sum))) +
+    sum(apply(data.frame(dat_test$z[, j] + gwx[, j]), 1, function(x){ifelse(x == 0, 0, lgamma(x))})) -
+    sum(apply(data.frame(gwx[, j]), 1, function(x){ifelse(x == 0, 0, lgamma(x))}))
+  
+  print(c(w_rcpp, w_base_r))
+}
+
+t <- update_w(z = dat_test$z, clus_assign = dat_test$ci, gamma_mat = dat_test$gm,
+              w = c(rep(0, 99), 1), beta_mat = beta_mat, b0w = 10, b1w = 2)
+table(t, w)
 
 ### Test: gamma_ijk
 set.seed(3)
