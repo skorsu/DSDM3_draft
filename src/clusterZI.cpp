@@ -18,6 +18,8 @@
 // ** log_wj (/)
 // ** update_w (/)
 // * Check the function for the beta
+// ** log_beta_k: for every important variable in cluster k (/)
+// ** update_beta: for all beta (/)
 // * Check the function for the assignment update
 // -----------------------------------------------------------------------------
 
@@ -115,35 +117,35 @@ double log_w_j(int j, arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat,
 } 
 
 // [[Rcpp::export]]
-arma::vec log_beta_k(arma::vec beta_k, int ci, arma::mat z, arma::mat gamma_mat, 
-                     arma::vec w, arma::uvec clus_assign, double s2){
+arma::vec log_beta_k(int k, arma::mat z, arma::uvec clus_assign, 
+                     arma::mat gamma_mat, arma::vec w, arma::vec beta_k, 
+                     double s2){
   
-  // Filter only the active variables
-  arma::uvec active_var = arma::find(w == 1);
-  arma::mat z_active = z.cols(active_var);
-  arma::mat gamma_active = gamma_mat.cols(active_var);
-  arma::vec xi_active = arma::exp(beta_k.rows(active_var));
-  arma::vec beta_k_active = beta_k.rows(active_var);
-
-  // Filter only the observations in the same cluster (ci)
-  arma::uvec clus_index = arma::find(clus_assign == ci);
-  z_active = z_active.rows(clus_index);
-  gamma_active = gamma_active.rows(clus_index);
-
+  // Filter only the observation which in the cluster k
+  arma::uvec clus_index = arma::find(clus_assign == k);
+  arma::mat z_active = z.rows(clus_index);
+  arma::mat gamma_active = gamma_mat.rows(clus_index);
+  
+  // Filter only the important variables
+  arma::uvec imp_var = arma::find(w == 1);
+  z_active = z_active.cols(imp_var);
+  gamma_active = gamma_active.cols(imp_var);
+  arma::vec beta_active = beta_k.rows(imp_var);
+  
   // Calculate the gamma_w_xi factor
-  arma::mat xi_mat = arma::repelem(xi_active, 1, z_active.n_rows);
-  xi_mat = xi_mat.t();
-  
+  arma::mat xi_mat = arma::repelem(arma::exp(beta_active), 1, z_active.n_rows).t();
   arma::mat gwx = gamma_active % xi_mat;
   arma::mat z_gwx = z_active + gwx;
   
-  arma::vec result(active_var.size(), arma::fill::value(0.0));
-  Rcpp::NumericVector beta_rcpp = Rcpp::NumericVector(beta_k_active.begin(), beta_k_active.end());
-  result += Rcpp::as<arma::vec>(Rcpp::wrap(Rcpp::dnorm4(beta_rcpp, 0, std::sqrt(s2), 1)));
-  result += arma::vec(active_var.size(), arma::fill::value(arma::accu(arma::lgamma(arma::sum(gwx, 1)))));
-  result -= arma::vec(active_var.size(), arma::fill::value(arma::accu(arma::lgamma(arma::sum(z_gwx, 1)))));
+  Rcpp::NumericVector bb = Rcpp::NumericVector(beta_active.begin(), beta_active.end());
+  Rcpp::NumericVector bb_d = Rcpp::dnorm4(bb, 0.0, std::sqrt(s2), true);
   
-  // Replace 0 in the gmx with 1 as lgamma(1) = 0
+  arma::vec result = Rcpp::as<arma::vec>(Rcpp::wrap(bb_d));
+  result += arma::vec(imp_var.size(), 
+                      arma::fill::value(arma::accu(arma::lgamma(arma::sum(gwx, 1)))));
+  result -= arma::vec(imp_var.size(), 
+                      arma::fill::value(arma::accu(arma::lgamma(arma::sum(z_gwx, 1)))));
+  
   result += arma::sum(arma::lgamma(z_gwx.replace(0.0, 1.0)), 0).t();
   result -= arma::sum(arma::lgamma(gwx.replace(0.0, 1.0)), 0).t();
   
@@ -510,51 +512,47 @@ arma::vec update_w(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat,
 }
 
 // [[Rcpp::export]]
-arma::mat update_beta(arma::mat z, arma::uvec clus_assign, arma::vec w,
-                      arma::mat gamma_mat, arma::mat old_beta, double mh_var,
-                      double s2){
+arma::mat update_beta(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat, 
+                      arma::vec w, arma::mat beta_mat, double MH_var, double s2){
   
-  arma::mat proposed_beta(old_beta);
-  arma::mat new_beta(old_beta);
+  arma::uvec active_clus = arma::unique(clus_assign);
+  arma::uvec imp_var = arma::find(w == 1);
   
-  // Filter only the active variables and active clusters
-  arma::uvec active_var = arma::find(w == 1);
-  arma::uvec active_clus = arma::conv_to<arma::uvec>::from(arma::unique(clus_assign));
-  
-  // (1) Sample a new beta
-  for(int k = 0; k < active_clus.size(); ++k){
+  // Loop through the active cluster
+  for(int kk = 0; kk < active_clus.size(); ++kk){
+    int k = active_clus[kk];
+    arma::vec proposed_beta_k = beta_mat.row(k).t();
     
-    int cc = active_clus[k];
-    
-    for(int j = 0; j < active_var.size(); ++j){
-      
-      int cv = active_var[j];
-      double pb = R::rnorm(old_beta(cc, cv), std::sqrt(mh_var)); 
-      proposed_beta.row(cc).col(cv).fill(pb);
-      
+    // Propose a new value of beta
+    for(int jj = 0; jj < imp_var.size(); ++jj){
+      int j = imp_var[jj];
+      double new_beta = R::rnorm(proposed_beta_k[j], std::sqrt(MH_var));
+      proposed_beta_k.row(j).fill(new_beta);
     }
     
-    // (2) Calculate the logA for all active betas in the cluster k
-    arma::vec beta_k_p = arma::conv_to<arma::vec>::from(proposed_beta.row(cc));
-    arma::vec beta_k_o = arma::conv_to<arma::vec>::from(old_beta.row(cc));
-    arma::vec logA = log_beta_k(beta_k_p, cc, z, gamma_mat, w, clus_assign, s2) -
-      log_beta_k(beta_k_o, cc, z, gamma_mat, w, clus_assign, s2);
-    arma::vec logU = arma::log(arma::randu(logA.size()));
+    // Calculate the log probability for all beta given that it is for the 
+    // important variables.
     
-    // (3) Determine
-    for(int j = 0; j < active_var.size(); ++j){
+    arma::vec logA(imp_var.size(), arma::fill::zeros);
+    logA += log_beta_k(k, z, clus_assign, gamma_mat, w,  proposed_beta_k, s2);
+    logA -= log_beta_k(k, z, clus_assign, gamma_mat, w,  beta_mat.row(k).t(), s2);
+    
+    arma::vec logU = arma::log(arma::randu(imp_var.size()));
+    
+    // MH
+    for(int jj = 0; jj < imp_var.size(); ++jj){
       
-      int cv = active_var[j];
-      
-      if(logU[j] <= logA[j]){
-        new_beta.row(cc).col(cv).fill(beta_k_p[j]);
+      if(logU[jj] <= logA[jj]){
+        int j = imp_var[jj];
+        beta_mat(k, j) = proposed_beta_k[jj];
       }
       
     }
     
   }
   
-  return new_beta;
+  return beta_mat;
+
 }
 
 Rcpp::List update_theta_u(arma::uvec clus_assign, arma::vec tau_vec, 

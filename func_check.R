@@ -4,11 +4,51 @@ library(tidyverse)
 ### Simulate the data
 set.seed(31)
 source("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/data_sim.R")
-dat_test <- data_sim(N = 100, K = 4, J = 100, J_imp = 10, z_lb = 75, z_ub = 100, 
-                     z_lb_ova = 50, z_ub_ova = 75, pi_gk = rep(0.75, 4),
-                     pi_g_ova = 0.9)
-dat_test$z
+dat_test <- data_sim(N = 100, K = 5, J = 150, J_imp = 20, z_lb = 150, z_ub = 200, 
+                     z_lb_ova = 50, z_ub_ova = 75, pi_gk = rep(0.5, 5),
+                     pi_g_ova = 0.45)
 
+### Test: beta_jk
+set.seed(72)
+w <- rbinom(150, 1, 0.35)
+beta_mat <- matrix(rnorm(5 * 150), nrow = 5)
+tt <- log_beta_k(k = 0, z = dat_test$z, clus_assign = dat_test$ci, 
+                 gamma_mat = dat_test$gm, w = w, beta_k = beta_mat, s2 = 10)
+sum(tt)
+
+ldbeta <- dnorm(beta_mat, 0, sqrt(10), log = TRUE)
+xi_mat <- exp(beta_mat)
+
+for(kk in 1:5){
+  ### Base R
+  dat_active <- dat_test$z[which(dat_test$ci == (kk - 1)), which(w == 1)]
+  gam_active <- dat_test$gm[which(dat_test$ci == (kk - 1)), which(w == 1)]
+  xi_active <- matrix(rep(xi_mat[kk, which(w == 1)], sum(dat_test$ci == (kk - 1))), 
+                      ncol = sum(dat_test$ci == (kk - 1))) %>% t()
+  gwx <- (gam_active * xi_active)
+  z_gwx <- dat_active + gwx
+  gwx[gwx == 0] <- 1
+  z_gwx[z_gwx == 0] <- 1
+  
+  base_R_sum <- (ldbeta[kk, which(w == 1)] + sum(lgamma(apply(gam_active * xi_active, 1, sum))) -
+                   sum(lgamma(apply(dat_active + (gam_active * xi_active), 1, sum))) + 
+                   apply(lgamma(z_gwx), 2, sum) - apply(lgamma(gwx), 2, sum)) %>% sum()
+  
+  ### Rcpp
+  rcpp_sum <- sum(log_beta_k(k = (kk-1), z = dat_test$z, clus_assign = dat_test$ci, 
+                             gamma_mat = dat_test$gm, w = w, beta_k = beta_mat[kk, ], s2 = 10))
+  
+  print(c(base_R_sum, rcpp_sum))
+  
+}
+
+set.seed(312)
+w <- rbinom(150, 1, 0.35)
+beta_mat <- matrix(rnorm(5 * 150), nrow = 5) 
+tt <- update_beta(z = dat_test$z, clus_assign = dat_test$ci, gamma_mat = dat_test$gm, 
+                  w = w, beta_mat = beta_mat, MH_var = 0.1, s2 = 10)
+
+beta_mat == tt
 ### Test: w_j
 set.seed(3)
 w <- rbinom(100, 1, 0.5)
