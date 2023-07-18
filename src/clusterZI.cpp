@@ -6,10 +6,10 @@
 
 // Note: -----------------------------------------------------------------------
 // * Cluster index starts with 0.
-// * Debugging -- check both log probability function and sampler function.
+// (/) Debugging -- check both log probability function and sampler function.
 // * Add the description for the function.
 // * Update the overleaf for the corresponding parameters.
-// * Instead of using xi as a input, using beta as a input then take the exp().
+// (/) Instead of using xi as a input, using beta as a input then take the exp().
 //
 // * Check the function for the at-risk indicator
 // ** log_prob_gamma_ijk: for the individual g_ijk (/)
@@ -22,8 +22,8 @@
 // ** update_beta: for all beta (/)
 // * Check the function for the assignment update
 // ** alloc (/)
-// ** sm
-// ** update_tau_theta
+// ** sm (/)
+// ** update_tau_theta (/)
 // -----------------------------------------------------------------------------
 
 arma::vec log_sum_exp(arma::vec log_unnorm_prob){
@@ -648,10 +648,11 @@ arma::mat update_beta(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat,
 
 }
 
-Rcpp::List update_theta_u(arma::uvec clus_assign, arma::vec tau_vec, 
-                          double old_U, arma::vec theta){
+// [[Rcpp::export]]
+Rcpp::List update_theta_u(arma::uvec clus_assign, arma::vec tau, 
+                          arma::vec theta, double old_U){
   
-  arma::vec new_tau(tau_vec); 
+  arma::vec new_tau(tau); 
   
   // update alpha vector
   arma::uvec active_clus = arma::unique(clus_assign);

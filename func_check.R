@@ -2,7 +2,7 @@ rm(list = ls())
 library(tidyverse)
 
 ### Simulate the data
-set.seed(31)
+set.seed(1)
 source("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/data_sim.R")
 ## source("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/data_sim.R")
 dat_test <- data_sim(N = 100, K = 5, J = 150, J_imp = 20, z_lb = 150, z_ub = 200, 
@@ -14,7 +14,7 @@ set.seed(245)
 w <- rbinom(150, 1, 0.35)
 beta_mat <- matrix(rnorm(5 * 150), nrow = 5)
 
-tt <- sm(K_max = 5, z = dat_test$z, clus_assign = rep(1:2, 50), 
+tt <- sm(K_max = 5, z = dat_test$z, clus_assign = rep(1, 100), 
          gamma_mat = dat_test$gm, w = w, beta_mat = beta_mat,
          tau = c(0, 1, 1, 0, 0), theta = rep(1, 5), launch_iter = 10,
          b0c = 10, b1c = 10)
