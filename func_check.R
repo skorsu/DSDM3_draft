@@ -8,6 +8,36 @@ dat_test <- data_sim(N = 100, K = 5, J = 150, J_imp = 20, z_lb = 150, z_ub = 200
                      z_lb_ova = 50, z_ub_ova = 75, pi_gk = rep(0.5, 5),
                      pi_g_ova = 0.45)
 
+### Test: ci
+set.seed(245)
+w <- rbinom(150, 1, 0.35)
+beta_mat <- matrix(rnorm(5 * 150), nrow = 5)
+
+tt <- sm(K_max = 5, z = dat_test$z, clus_assign = rep(1:2, 50), 
+         gamma_mat = dat_test$gm, w = w, beta_mat = beta_mat,
+         tau = c(0, 1, 1, 0, 0), theta = rep(1, 5), launch_iter = 10)
+
+tt
+
+test <- realloc_sm(z = dat_test$z, clus_assign = tt$launch_assign, 
+                   gamma_mat = dat_test$gm, w = w, beta_mat = beta_mat,
+                   S = tt$S, clus_sm = tt$samp_clus)
+
+table(tt$launch_assign, test$clus_assign)
+
+table(rep(1:2, 50)[tt$S + 1])
+
+tt <- realloc(K_max = 5, z = dat_test$z, clus_assign = dat_test$ci, 
+              gamma_mat = dat_test$gm, w = w, beta_mat = beta_mat,
+              tau = rep(1, 5), theta = rep(1, 5))
+table(dat_test$ci, tt$assign)
+
+table(dat_test$ci)
+exp(beta_mat[5, which(w == 1)])
+
+
+
+
 ### Test: beta_jk
 set.seed(72)
 w <- rbinom(150, 1, 0.35)
