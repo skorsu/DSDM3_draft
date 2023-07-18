@@ -3,7 +3,8 @@ library(tidyverse)
 
 ### Simulate the data
 set.seed(31)
-source("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/data_sim.R")
+source("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/data_sim.R")
+## source("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/data_sim.R")
 dat_test <- data_sim(N = 100, K = 5, J = 150, J_imp = 20, z_lb = 150, z_ub = 200, 
                      z_lb_ova = 50, z_ub_ova = 75, pi_gk = rep(0.5, 5),
                      pi_g_ova = 0.45)
@@ -15,9 +16,14 @@ beta_mat <- matrix(rnorm(5 * 150), nrow = 5)
 
 tt <- sm(K_max = 5, z = dat_test$z, clus_assign = rep(1:2, 50), 
          gamma_mat = dat_test$gm, w = w, beta_mat = beta_mat,
-         tau = c(0, 1, 1, 0, 0), theta = rep(1, 5), launch_iter = 10)
+         tau = c(0, 1, 1, 0, 0), theta = rep(1, 5), launch_iter = 10,
+         b0c = 10, b1c = 10)
+c(tt$split_ind, tt$logA, tt$accept_proposed)
 
-tt
+test_p <- log_proposal(z = dat_test$z, clus_target = tt$proposed_assign, 
+                       clus_init = tt$launch_assign, gamma_mat = dat_test$gm, w = w, 
+                       beta_mat = beta_mat, S = tt$S, clus_sm = tt$samp_clus)
+test_p
 
 test <- realloc_sm(z = dat_test$z, clus_assign = tt$launch_assign, 
                    gamma_mat = dat_test$gm, w = w, beta_mat = beta_mat,

@@ -300,17 +300,83 @@ Rcpp::List realloc_sm(arma::mat z, arma::uvec clus_assign,
 }
 
 // [[Rcpp::export]]
+double log_proposal(arma::mat z, arma::uvec clus_target, arma::uvec clus_init, 
+                    arma::mat gamma_mat, arma::vec w, arma::mat beta_mat,
+                    arma::uvec S, arma::uvec clus_sm){
+  
+  double result = 0.0;
+  
+  // Filter only the important variable related components.
+  arma::uvec imp_var = arma::find(w == 1);
+  arma::mat z_active = z.cols(imp_var);
+  arma::mat gamma_active = gamma_mat.cols(imp_var);
+  arma::mat xi_active = arma::exp(beta_mat.cols(imp_var));
+  
+  arma::mat log_prob(S.size(), 2, arma::fill::zeros);
+  arma::vec n_clus(2, arma::fill::zeros);
+  
+  for(int kk = 0; kk < 2; ++kk){
+    
+    // Filter the component for the cluster k
+    int k = clus_sm[kk];
+    arma::mat xi_mat = arma::repelem(xi_active.row(k).t(), 1, z_active.n_rows).t();
+    arma::mat gwx_k = gamma_active % xi_mat;
+    arma::mat z_gwx_k = z_active + gwx_k;
+    
+    // Calculate P(zi|ci = k) for all possible clusters in cluster k.
+    arma::vec log_z(clus_init.size(), arma::fill::zeros);
+    log_z += arma::lgamma(arma::sum(gwx_k, 1));
+    log_z -= arma::lgamma(arma::sum(z_gwx_k, 1));
+    log_z += arma::sum(arma::lgamma(z_gwx_k.replace(0.0, 1.0)), 1);
+    log_z -= arma::sum(arma::lgamma(gwx_k.replace(0.0, 1.0)), 1);
+    
+    log_prob.col(kk) = log_z.rows(S);
+    
+    // Count the number of the observation in the cluster k
+    arma::uvec nk = arma::find(clus_init == k);
+    n_clus.row(kk).fill(nk.size());
+    
+  }
+  
+  // Calculate the log proposal
+  for(int s = 0; s < S.size(); ++s){
+    
+    // Exclude the ci from the count
+    int i = S[s];
+    int ci = clus_init[i];
+    arma::uvec k = arma::find(clus_sm == ci);
+    n_clus[k[0]] -= 1;
+    
+    // Normalize log probability and reallocate the observation
+    arma::vec norm_prob = log_sum_exp(arma::log(n_clus) + log_prob.row(s).t());
+    log_prob.row(s) = norm_prob.t();
+    
+    // Log Proposal
+    int ci_target = clus_target[i];
+    arma::uvec index = arma::find(clus_sm == clus_init[i]);
+    result += std::log(norm_prob[index[0]]);
+
+    // Reassign the observation based on the clus_target
+    clus_init[i] = ci_target;
+    n_clus[index[0]] += 1;
+    
+  }
+  
+  return result;
+  
+}
+
+// [[Rcpp::export]]
 Rcpp::List sm(unsigned int K_max, arma::mat z, arma::uvec clus_assign, 
               arma::mat gamma_mat, arma::vec w, arma::mat beta_mat,
-              arma::vec tau, arma::vec theta, unsigned int launch_iter){
+              arma::vec tau, arma::vec theta, unsigned int launch_iter,
+              double b0c, double b1c){
   
   arma::uvec active_clus = arma::unique(clus_assign);
   unsigned int K_pos = active_clus.size();
   unsigned int n = clus_assign.size();
   
   int split_ind = -1; // Indicate that we will perform split or merge
-  int accept_proposed = 0; // indicator for accepting the proposed assignment.
-  double logA = 0.0; // log of acceptance probability
   
   arma::uvec launch_assign(clus_assign);
   arma::vec launch_tau(tau);
@@ -348,7 +414,6 @@ Rcpp::List sm(unsigned int K_max, arma::mat z, arma::uvec clus_assign,
   // Randomly assign observation in S to be ci_launch or cj_launch.
   arma::vec init_ind = arma::randu(S.size(), arma::distr_param(0, 1));
   launch_assign.rows(S) = samp_clus.rows(arma::conv_to<arma::uvec>::from(init_ind > 0.5));
-  arma::uvec launch_before(launch_assign); 
   
   // Launch Step
   for(int t = 0; t < launch_iter; ++t){
@@ -357,200 +422,28 @@ Rcpp::List sm(unsigned int K_max, arma::mat z, arma::uvec clus_assign,
     launch_assign = ll;
   }
   
+  // Split-Merge
+  arma::uvec proposed_assign(launch_assign);
   
-  Rcpp::List result;
-  result["split_ind"] = split_ind;
-  result["samp_obs"] = samp_obs;
-  result["samp_clus"] = samp_clus;
-  result["launch_assign"] = launch_assign;
-  result["S"] = S;
-  return result;
+  if(split_ind == 1){ // Perform another launch step
+    Rcpp::List p_product = realloc_sm(z, launch_assign, gamma_mat, w, beta_mat, S, samp_clus);
+    arma::uvec pp = p_product["clus_assign"];
+    proposed_assign = pp;
+  } else { // Perform Merge
+    proposed_assign.rows(S).fill(samp_clus[1]);
+    proposed_assign.rows(samp_obs).fill(samp_clus[1]);
+  }
   
-}
-
-// [[Rcpp::export]]
-Rcpp::List old_sm(arma::mat z, arma::uvec clus_assign, arma::vec w, 
-              arma::mat gamma_mat, arma::mat beta, arma::vec tau, 
-              arma::vec theta, int launch_iter){
-  
-  arma::uvec new_assign(clus_assign);
-  arma::uvec active_clus = arma::unique(clus_assign);
-  unsigned int K_pos = active_clus.size();
-  unsigned int K_max = beta.n_rows;
-  unsigned int n = clus_assign.size();
-  
-  int split_ind = -1; // Indicate that we will perform split or merge
-  int accept_proposed = 0; // indicator for accepting the proposed assignment.
+  // LogA Calculation
   double logA = 0.0; // log of acceptance probability
   
-  arma::uvec launch_assign(clus_assign);
-  arma::vec launch_tau(tau);
+  arma::uvec imp_var = arma::find(w == 1);
+  arma::mat z_active = z.cols(imp_var);
+  arma::mat gamma_active = gamma_mat.cols(imp_var);
+  arma::mat xi_active = arma::exp(beta_mat.cols(imp_var));
   
-  // Select two observations to determine whether we will split or merge.
-  arma::uvec samp_obs = arma::randperm(n, 2);
-  
-  // If all cluster is already active, we can perform only merge.
-  while((K_pos == K_max) and (clus_assign[samp_obs[0]] == clus_assign[samp_obs[1]])){
-    samp_obs = arma::randperm(n, 2); // sample two observations again until we get merge.
-  }
-  arma::uvec samp_clus = clus_assign.rows(samp_obs);
-  
-  int new_clus = -1;
-  // Create the split indicator. If we split, split_ind = 1. Otherwise, split_ind = 0.
-  if(samp_clus[0] == samp_clus[1]){
-    split_ind = 1; // Split
-    
-    arma::uvec inactive_index = arma::find(tau == 0);
-    arma::uvec new_clus_index = arma::randperm(inactive_index.size(), 1);
-    new_clus = inactive_index[new_clus_index[0]]; // new active cluster
-    samp_clus.row(0).fill(new_clus);
-    
-    launch_assign.row(samp_obs[0]).fill(new_clus); // set ci_launch to be a new cluster
-    launch_tau.row(new_clus).fill(R::rgamma(theta[new_clus], 1.0));
-    
-  } else { 
-    split_ind = 0;
-  }
-  
-  // Create a set S := {same cluster as samp_obs, but not index_samp}
-  arma::uvec S = arma::find(clus_assign == clus_assign[samp_obs[0]] or clus_assign == clus_assign[samp_obs[1]]);
-  arma::uvec samp_obs_index = arma::find(S == samp_obs[0] or S == samp_obs[1]);
-  S.shed_rows(samp_obs_index);
-  
-  // Randomly assign observation in S to be ci_launch or cj_launch.
-  arma::vec init_ind = arma::randu(S.size(), arma::distr_param(0, 1));
-  launch_assign.rows(S) = samp_clus.rows(arma::conv_to<arma::uvec>::from(init_ind > 0.5));
-  
-  // Perform a launch step
-  // Number of the observation in each cluster
-  arma::vec n_clus(2, arma::fill::value(1.0));
-  for(int s = 0; s < S.size(); ++s){
-    int cs = launch_assign[S[s]];
-    arma::uvec index = arma::find(samp_clus == cs);
-    n_clus[index[0]] += 1;
-  }
-  
-  // Filter only the active variables
-  arma::uvec active_var = arma::find(w == 1);
-  arma::mat z_active = z.cols(active_var);
-  arma::mat gamma_active = gamma_mat.cols(active_var);
-  arma::mat xi_active = arma::exp(beta.cols(active_var));
-  
-  // Select only the component for the launch clusters
-  xi_active = xi_active.rows(samp_clus);
-  
-  arma::vec g_i;
-  arma::mat gwx_i;
-  arma::mat z_gwx_i;
-  arma::vec sum_gwx_i;
-  arma::vec sum_z_gwx_i;
-  
-  for(int t = 0; t < launch_iter; ++t){
-    for(int s = 0; s < S.size(); ++s){
-      
-      // Adjust the n_clus vector
-      arma::uvec index = arma::find(samp_clus == launch_assign[S[s]]);
-      n_clus[index[0]] -= 1;
-      
-      // Calculate gwx for the observation i in each active cluster
-      g_i = arma::conv_to<arma::vec>::from(gamma_active.row(S[s]));
-      gwx_i = xi_active % arma::repelem(g_i, 1, 2).t();
-      z_gwx_i = gwx_i + arma::repelem(z_active.row(S[s]), 2, 1);
-      sum_gwx_i = arma::sum(gwx_i, 1);
-      sum_z_gwx_i = arma::sum(z_gwx_i, 1);
-      
-      // Proportional of the log probability
-      arma::vec log_prob = arma::lgamma(sum_gwx_i.replace(0.0, 1.0)) -
-        arma::sum(arma::lgamma(gwx_i.replace(0.0, 1.0)), 1) +
-        arma::sum(arma::lgamma(z_gwx_i.replace(0.0, 1.0)), 1) -
-        arma::lgamma(sum_z_gwx_i.replace(0.0, 1.0)) +
-        arma::log(n_clus);
-      arma::vec prob = log_sum_exp(log_prob);
-
-      // Reassign
-      Rcpp::NumericVector rcpp_prob = Rcpp::NumericVector(prob.begin(), prob.end());
-      arma::vec assign = Rcpp::as<arma::vec>(Rcpp::wrap(rmultinom_1(rcpp_prob, K_pos)));
-
-      arma::uvec new_index = arma::find(assign == 1);
-      launch_assign[S[s]] = samp_clus[new_index[0]];
-      index = arma::find(samp_clus == launch_assign[S[s]]);
-      n_clus[index[0]] += 1;
-      }
-    }
-  
-  // Split-Merge
-  arma::uvec sm_assign(launch_assign);
-  
-  if(split_ind == 1){
-    
-    for(int s = 0; s < S.size(); ++s){
-      
-      // Adjust the n_clus vector
-      arma::uvec index = arma::find(samp_clus == sm_assign[S[s]]);
-      n_clus[index[0]] -= 1;
-      
-      // Calculate gwx for the observation i in each active cluster
-      g_i = arma::conv_to<arma::vec>::from(gamma_active.row(S[s]));
-      gwx_i = xi_active % arma::repelem(g_i, 1, 2).t();
-      z_gwx_i = gwx_i + arma::repelem(z_active.row(S[s]), 2, 1);
-      sum_gwx_i = arma::sum(gwx_i, 1);
-      sum_z_gwx_i = arma::sum(z_gwx_i, 1);
-      
-      // Proportional of the log probability
-      arma::vec log_prob = arma::lgamma(sum_gwx_i.replace(0.0, 1.0)) -
-        arma::sum(arma::lgamma(gwx_i.replace(0.0, 1.0)), 1) +
-        arma::sum(arma::lgamma(z_gwx_i.replace(0.0, 1.0)), 1) -
-        arma::lgamma(sum_z_gwx_i.replace(0.0, 1.0)) +
-        arma::log(n_clus);
-      arma::vec prob = log_sum_exp(log_prob);
-      
-      // Reassign
-      Rcpp::NumericVector rcpp_prob = Rcpp::NumericVector(prob.begin(), prob.end());
-      arma::vec assign = Rcpp::as<arma::vec>(Rcpp::wrap(rmultinom_1(rcpp_prob, K_pos)));
-      
-      arma::uvec new_index = arma::find(assign == 1);
-      sm_assign[S[s]] = samp_clus[new_index[0]];
-      index = arma::find(samp_clus == sm_assign[S[s]]);
-      n_clus[index[0]] += 1;
-    }
-  } else {
-    sm_assign.rows(S).fill(samp_clus[1]);
-    sm_assign.rows(samp_obs).fill(samp_clus[1]);
-    n_clus[0] -= (S.size() + 2);
-    n_clus[1] += (S.size() + 2);
-  }
-  
-  // Calculate the acceptance probability
-  arma::vec n_old(K_max, arma::fill::value(0.0));
-  arma::vec n_proposed(K_max, arma::fill::value(0.0)); 
-  for(int i = 0; i < clus_assign.size(); ++i){
-    n_old[clus_assign[i]] += 1;
-    n_proposed[sm_assign[i]] += 1;
-  }
-  arma::uvec unique_old = arma::unique(clus_assign);
-  arma::uvec unique_proposed = arma::unique(sm_assign);
-  
-  // Proposed: ci part
-  logA += std::lgamma(arma::accu(theta.rows(unique_proposed)));
-  logA -= arma::accu(arma::lgamma(theta.rows(unique_proposed)));
-  
-  arma::vec tn_proposed = n_proposed.rows(unique_proposed) + theta.rows(unique_proposed);
-  
-  logA += arma::accu(arma::lgamma(tn_proposed));
-  logA -= std::lgamma(arma::accu(tn_proposed));
-  
-  // Old: ci part
-  logA -= std::lgamma(arma::accu(theta.rows(unique_old)));
-  logA += arma::accu(arma::lgamma(theta.rows(unique_old)));
-  
-  arma::vec tn_old = n_old.rows(unique_old) + theta.rows(unique_old);
-  
-  logA -= arma::accu(arma::lgamma(tn_old));
-  logA += std::lgamma(arma::accu(tn_old));
-  
-  // Proposed: zi part
-  
-  arma::mat gwx_proposed = gamma_active % xi_active.rows(sm_assign);
+  // Marginal Probability (Data): Proposed
+  arma::mat gwx_proposed = gamma_active % xi_active.rows(proposed_assign);
   arma::mat z_gwx_proposed = z_active + gwx_proposed;
   arma::vec sum_gwx_proposed = arma::sum(gwx_proposed, 1);
   arma::vec sum_z_gwx_proposed = arma::sum(z_gwx_proposed, 1);
@@ -560,22 +453,76 @@ Rcpp::List old_sm(arma::mat z, arma::uvec clus_assign, arma::vec w,
   logA += arma::accu(arma::lgamma(z_gwx_proposed.replace(0, 1)));
   logA -= arma::accu(arma::lgamma(sum_z_gwx_proposed.replace(0, 1)));
   
-  // Old: zi part
+  // Marginal Probability (Data): Initial
+  arma::mat gwx_init = gamma_active % xi_active.rows(clus_assign);
+  arma::mat z_gwx_init = z_active + gwx_init;
+  arma::vec sum_gwx_init = arma::sum(gwx_init, 1);
+  arma::vec sum_z_gwx_init = arma::sum(z_gwx_init, 1);
   
-  arma::mat gwx_old = gamma_active % xi_active.rows(clus_assign);
-  arma::mat z_gwx_old = z_active + gwx_old;
-  arma::vec sum_gwx_old = arma::sum(gwx_old, 1);
-  arma::vec sum_z_gwx_old = arma::sum(z_gwx_old, 1);
+  logA -= arma::accu(arma::lgamma(sum_gwx_init.replace(0, 1)));
+  logA += arma::accu(arma::lgamma(gwx_init.replace(0, 1)));
+  logA -= arma::accu(arma::lgamma(z_gwx_init.replace(0, 1)));
+  logA += arma::accu(arma::lgamma(sum_z_gwx_init.replace(0, 1)));
   
-  logA -= arma::accu(arma::lgamma(sum_gwx_old.replace(0, 1)));
-  logA += arma::accu(arma::lgamma(gwx_old.replace(0, 1)));
-  logA -= arma::accu(arma::lgamma(z_gwx_old.replace(0, 1)));
-  logA += arma::accu(arma::lgamma(sum_z_gwx_old.replace(0, 1)));
-
+  // Cluster Assignment part
+  double sum_theta_init = 0.0;
+  double sum_theta_proposed = 0.0;
+  
+  for(int k = 0; k < K_max; ++k){
+    
+    arma::uvec n_init = arma::find(clus_assign == k);
+    arma::uvec n_proposed = arma::find(proposed_assign == k);
+    
+    if(n_proposed.size() > 0){
+      logA += std::lgamma(n_proposed.size() + theta[k]);
+      logA -= std::lgamma(theta[k]);
+      sum_theta_proposed += theta[k];
+    }
+    
+    if(n_init.size() > 0){
+      logA -= std::lgamma(n_init.size() + theta[k]);
+      logA += std::lgamma(theta[k]);
+      sum_theta_init += theta[k];
+    }
+    
+  }
+  
+  // Proposed
+  logA += std::lgamma(sum_theta_proposed);
+  logA -= std::lgamma(clus_assign.size() + sum_theta_proposed);
+  
+  // Initial
+  logA -= std::lgamma(sum_theta_init);
+  logA += std::lgamma(clus_assign.size() + sum_theta_init);
+  
+  // Proposal
+  logA += log_proposal(z, launch_assign, proposed_assign, gamma_mat, w, 
+                       beta_mat, S, samp_clus);
+  
+  if(split_ind == 1){ // Split
+    logA -= log_proposal(z, proposed_assign, launch_assign, gamma_mat, w, 
+                         beta_mat, S, samp_clus);
+  }
+  
+  logA += (((2 * split_ind) - 1) * (std::log(b0c) - std::log(b1c)));
+  
+  // MH
+  int accept_proposed = 0; // indicator for accepting the proposed assignment.
+  arma::uvec new_assign(clus_assign);
+  arma::vec new_tau(tau);
+  double logU = std::log(R::runif(0.0, 1.0));
+  if(logU <= logA){
+    accept_proposed += 1;
+    new_assign = proposed_assign;
+    new_tau = adjust_tau(K_max, new_assign, launch_tau);
+  }
+  
   Rcpp::List result;
   result["split_ind"] = split_ind;
-  result["launch_assign"] = launch_assign;
-  result["sm_assign"] = sm_assign;
+  result["logA"] = logA;
+  result["accept_proposed"] = accept_proposed;
+  result["assign"] = new_assign;
+  result["tau"] = new_tau;
   return result;
   
 }
