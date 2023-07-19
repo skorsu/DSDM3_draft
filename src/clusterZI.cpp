@@ -675,3 +675,41 @@ Rcpp::List update_theta_u(arma::uvec clus_assign, arma::vec tau,
   
 }
 
+// [[Rcpp::export]]
+Rcpp::List clusterZI(unsigned int K_max, unsigned int iter, 
+                     arma::mat z, arma::uvec clus_assign, 
+                     double b0g, double b1g, double b0w, double b1w,
+                     double MH_var, double s2){
+  
+  // Initialize
+  unsigned int J = z.n_cols;
+  arma::mat gm_init(z.n_rows, J, arma::fill::ones);
+  arma::vec w_init(J, arma::fill::ones);
+  arma::mat beta_init(K_max, J, arma::fill::zeros);
+  
+  arma::mat gm_mcmc(gm_init);
+  arma::vec w_mcmc(w_init);
+  arma::mat beta_mcmc(beta_init);
+  
+  arma::mat w_store(iter, J, arma::fill::value(-1));
+  
+  for(int t = 0; t < iter; ++t){
+    gm_mcmc = update_gamma(z, clus_assign, gm_init, w_init, beta_init, b0g, b1g);
+    w_mcmc = update_w(z, clus_assign, gm_mcmc, w_init, beta_init, b0w, b1w);
+    beta_mcmc = update_beta(z, clus_assign, gm_mcmc, w_mcmc, beta_init, MH_var, s2);
+      
+    gm_init = gm_mcmc;
+    w_init = w_mcmc;
+    beta_init = beta_mcmc;
+    
+    w_store.row(t) = w_init.t();
+  }
+  
+  Rcpp::List result;
+  result["gamma"] = gm_init;
+  result["w"] = w_store;
+  result["beta"] = beta_init;
+  return result;
+  
+}
+
