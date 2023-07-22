@@ -1,59 +1,46 @@
-rm(list = ls())
-library(tidyverse)
-
-### Function: Simulate the data
-### Note: the cluster index must start from 0
-### Note: we have one constraint: K <= J_imp.
-data_sim <- function(N, K, J, J_imp, pi_gk, pi_g_ova, xi_conc, U_imp, U_unimp,
-                     shuffle){
+data_sim <- function(n, K, J_imp, pi_gm_mat, xi_scale, sum_zi_imp, sum_zi_unimp){
   
-  ### Cluster Assignment
-  ci_actual <- sample(1:K, N, replace = TRUE)
+  J <- ncol(pi_gm_mat)
   
-  ### Important Variables (wj = 1 for the first J_imp variables)
-  ### Note: K <= J_imp
-  gm_base <- cbind(diag(J_imp)[1:K, ])
-  xi_base <- gm_base
-  xi_base[xi_base == 1] <- xi_conc
-  xi_dum <- runif(sum(xi_base == 0))
-  xi_base[xi_base == 0] <- xi_dum
+  ### Generate the cluster assignment
+  ci <- sample(1:K, n, replace = TRUE)
   
-  ### Unimportant variable (wj = 0 for the last J - J_imp variables)
-  xi_ova <- matrix(runif((J - J_imp) * K), nrow = K, ncol = J - J_imp)
+  ### Generate the at-risk indicator variables
+  gm <- matrix(sapply(pi_gm_mat[ci, ], function(x){rbinom(1, 1, x)}), 
+                  nrow = n)
+  for(i in 1:n){
+    gm[i, ci[i]] <- 1
+  }
   
-  zi_active <- matrix(0, nrow = N, ncol = J_imp)
-  gm_active <- matrix(0, nrow = N, ncol = J_imp)
-  zi_inactive <- matrix(0, nrow = N, ncol = J - J_imp)
-  gm_inactive <- matrix(0, nrow = N, ncol = J - J_imp)
+  ### Generate xi matrix
+  xi_mat <- matrix(runif(K * J), nrow = K, ncol = J)
+  diag(xi_mat) <- xi_scale
   
-  for(i in 1:N){
-    ### Active variables
-    gm_i <- gm_base[ci_actual[i], ]
-    gm_i[gm_i == 0] <- rbinom(sum(gm_i == 0), 1, pi_gk[ci_actual[i]])
-    gm_active[i, ] <- gm_i
-    gwx_i <- gm_i * xi_base[ci_actual[i], ]
-    zi_active[i, ] <- rmultinom(1, U_imp, gwx_i/sum(gwx_i))
+  gm_xi <- gm * xi_mat[ci, ]
+  
+  z <- matrix(NA, ncol = J, nrow = n)
+  
+  for(i in 1:100){
     
-    ### Inactive variables
-    gm_inc <- rbinom(J - J_imp, 1, pi_g_ova)
-    gm_inactive[i, ] <- gm_inc
-    gwx_inc <- gm_inc * xi_ova[ci_actual[i], ]
-    zi_inactive[i, ] <- rmultinom(1, U_unimp, gwx_inc/sum(gwx_inc))
+    gm_xi_imp_i <- gm_xi[i, 1:J_imp]/sum(gm_xi[i, 1:J_imp])
+    gm_xi_unimp_i <- gm_xi[i, -(1:J_imp)]
+    
+    if(sum(gm_xi_unimp_i) != 0){
+      gm_xi_unimp_i <- gm_xi_unimp_i/sum(gm_xi_unimp_i)
+    }
+    
+    ### zi for the important variables
+    zi_active <- rmultinom(1, sum_zi_imp, gm_xi_imp_i)
+    zi_inactive <- gm_xi_unimp_i
+    
+    if(sum(zi_inactive) != 0){
+      zi_inactive <- rmultinom(1, sum_zi_unimp, gm_xi_unimp_i)
+    }
+    
+    z[i, ] <- c(zi_active, zi_inactive)
+    
   }
   
-  gm <- cbind(gm_active, gm_inactive)
-  xi <- cbind(xi_base, xi_ova)
-  z <-  cbind(zi_active, zi_inactive)
-  
-  ### Shuffle the variable order
-  if(shuffle == TRUE){
-    var_order <- sample(1:J, J, replace = FALSE)
-    gm <- gm[, var_order]
-    xi <- xi[, var_order]
-    z <- z[, var_order]
-  }
-  
-  list(gm = gm, xi = xi, z = z, ci = ci_actual - 1)  
+  list(ci = ci - 1, gamma = gm, beta = log(xi_mat), z = z)
   
 }
-
