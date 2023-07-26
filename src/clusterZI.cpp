@@ -11,20 +11,19 @@
 // * Update the overleaf for the corresponding parameters.
 // (/) Instead of using xi as a input, using beta as a input then take the exp().
 //
-// * Check the function for the at-risk indicator
-// ** log_prob_gamma_ijk: for the individual g_ijk (/)
-// ** update_gamma: for all g (/)
-// * Check the function for the important variable indicator
-// ** log_wj (/)
-// ** update_w (/)
-// * Check the function for the beta
-// ** log_beta_k: for every important variable in cluster k (/)
-// ** update_beta: for all beta (/)
-// * Check the function for the assignment update
-// ** alloc (/)
-// ** sm (/)
-// ** update_tau_theta (/)
 // -----------------------------------------------------------------------------
+
+// [[Rcpp::export]]
+Rcpp::IntegerVector rmultinom_1(Rcpp::NumericVector &probs, unsigned int &N){
+  
+  /* Description: sample from the multinomial(N, probs).
+   * Credit: https://gallery.rcpp.org/articles/recreating-rmultinom-and-rpois-with-rcpp/
+   */
+  
+  Rcpp::IntegerVector outcome(N);
+  rmultinom(1, probs.begin(), N, outcome.begin());
+  return outcome;
+}
 
 arma::vec log_sum_exp(arma::vec log_unnorm_prob){
   
@@ -49,17 +48,7 @@ arma::vec log_sum_exp(arma::vec log_unnorm_prob){
   return log_unnorm_prob/arma::accu(log_unnorm_prob);
 }
 
-// [[Rcpp::export]]
-Rcpp::IntegerVector rmultinom_1(Rcpp::NumericVector &probs, unsigned int &N){
-  
-  /* Description: sample from the multinomial(N, probs).
-   * Credit: https://gallery.rcpp.org/articles/recreating-rmultinom-and-rpois-with-rcpp/
-   */
-  
-  Rcpp::IntegerVector outcome(N);
-  rmultinom(1, probs.begin(), N, outcome.begin());
-  return outcome;
-}
+
 
 // [[Rcpp::export]]
 arma::vec adjust_tau(unsigned int K_max, arma::uvec clus_assign, 
@@ -75,19 +64,16 @@ arma::vec adjust_tau(unsigned int K_max, arma::uvec clus_assign,
   
 // [[Rcpp::export]]
 double log_g_ijk(int j, arma::vec zi, arma::vec gi, arma::vec w, arma::vec beta_k,
-                 double b0g, double b1g){
+                 double r0g, double r1g){
   
   double result = 0.0;
-  
   int g_ijk = gi[j];
   arma::vec gwx_i = gi % w % arma::exp(beta_k);
   arma::vec z_gwx_i = zi + gwx_i;
   
-  result += std::log(R::beta(b0g + g_ijk, b1g + (1 - g_ijk)));
+  result += std::log(R::beta(r0g + g_ijk, r1g + (1 - g_ijk)));
   result += std::lgamma(arma::accu(gwx_i));
-  result -= arma::accu(arma::lgamma(gwx_i.replace(0.0, 1.0)));
   result -= std::lgamma(arma::accu(z_gwx_i));
-  result += arma::accu(arma::lgamma(z_gwx_i.replace(0.0, 1.0)));
   
   return result;
   
@@ -131,26 +117,20 @@ arma::vec log_beta_k(int k, arma::mat z, arma::uvec clus_assign,
   arma::mat z_active = z.rows(clus_index);
   arma::mat gamma_active = gamma_mat.rows(clus_index);
   
-  // Filter only the important variables
-  arma::uvec imp_var = arma::find(w == 1);
-  z_active = z_active.cols(imp_var);
-  gamma_active = gamma_active.cols(imp_var);
-  arma::vec beta_active = beta_k.rows(imp_var);
-  
-  // Calculate the gamma_w_xi factor
-  arma::mat xi_mat = arma::repelem(arma::exp(beta_active), 1, z_active.n_rows).t();
-  arma::mat gwx = gamma_active % xi_mat;
-  arma::mat z_gwx = z_active + gwx;
-  
-  Rcpp::NumericVector bb = Rcpp::NumericVector(beta_active.begin(), beta_active.end());
+  // Calculate the probability of beta_jk
+  Rcpp::NumericVector bb = Rcpp::NumericVector(beta_k.begin(), beta_k.end());
   Rcpp::NumericVector bb_d = Rcpp::dnorm4(bb, 0.0, std::sqrt(s2), true);
   
-  arma::vec result = Rcpp::as<arma::vec>(Rcpp::wrap(bb_d));
-  result += arma::vec(imp_var.size(), 
-                      arma::fill::value(arma::accu(arma::lgamma(arma::sum(gwx, 1)))));
-  result -= arma::vec(imp_var.size(), 
-                      arma::fill::value(arma::accu(arma::lgamma(arma::sum(z_gwx, 1)))));
+  // Calculate gwx
+  arma::mat w_mat = arma::repelem(w, 1, z_active.n_rows).t();
+  arma::mat xi_mat = arma::repelem(arma::exp(beta_k), 1, z_active.n_rows).t();
+  arma::mat gwx = gamma_active % w_mat % xi_mat;
+  arma::mat z_gwx = z_active + gwx;
   
+  // Calculate the conditional probability
+  arma::vec result = Rcpp::as<arma::vec>(Rcpp::wrap(bb_d));
+  result += arma::accu(arma::lgamma(arma::sum(gwx, 1)));
+  result -= arma::accu(arma::lgamma(arma::sum(z_gwx, 1)));
   result += arma::sum(arma::lgamma(z_gwx.replace(0.0, 1.0)), 0).t();
   result -= arma::sum(arma::lgamma(gwx.replace(0.0, 1.0)), 0).t();
   
@@ -528,42 +508,44 @@ Rcpp::List sm(unsigned int K_max, arma::mat z, arma::uvec clus_assign,
 }
 
 // [[Rcpp::export]]
-arma::mat update_gamma(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat, 
-                       arma::vec w, arma::mat beta_mat, double b0g, double b1g){
+arma::mat update_gamma(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat,
+                       arma::vec w, arma::mat beta_mat, double r0g, double r1g){
   
   // Loop through observation
-  for(int i = 0; i < clus_assign.size(); ++i){ 
-    
+  for(int i = 0; i < clus_assign.size(); ++i){
+
     // Get the information for the observation i
     arma::vec zi_now = z.row(i).t();
     arma::vec beta_now = beta_mat.row(clus_assign[i]).t();
     arma::uvec zi_zero_w_one = arma::find(((zi_now == 0) % w) == 1);
-    
+
     // Loop through z_ijk = 0 for only wj = 1
-    for(int jj = 0; jj < zi_zero_w_one.size(); ++jj){ 
+    for(int jj = 0; jj < zi_zero_w_one.size(); ++jj){
       
+      // Get the current at-risk indicator for the observation i
+      arma::vec old_g = gamma_mat.row(i).t();
+
       // Propose a new gamma_ijk for jth location
       int j = zi_zero_w_one[jj];
-      arma::vec old_g = gamma_mat.row(i).t();
       arma::vec proposed_g(old_g);
       proposed_g.row(j).fill(1 - old_g[j]);
-      
+
       // MH
       double logA = 0.0;
-      logA += log_g_ijk(j, zi_now, proposed_g, w, beta_now, b0g, b1g);
-      logA -= log_g_ijk(j, zi_now, old_g, w, beta_now, b0g, b1g);
+      logA += log_g_ijk(j, zi_now, proposed_g, w, beta_now, r0g, r1g);
+      logA -= log_g_ijk(j, zi_now, old_g, w, beta_now, r0g, r1g);
       double logU = std::log(R::runif(0.0, 1.0));
-      
+
       if(logU <= logA){
         gamma_mat.row(i) = proposed_g.t();
       }
-      
+
     }
-    
+
   }
-  
+
   return gamma_mat;
-  
+
 }
 
 // [[Rcpp::export]]
@@ -605,52 +587,46 @@ arma::vec update_w(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat,
 }
 
 // [[Rcpp::export]]
-arma::mat update_beta(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat, 
+arma::mat update_beta(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat,
                       arma::vec w, arma::mat beta_mat, double MH_var, double s2){
-  
+
   arma::uvec active_clus = arma::unique(clus_assign);
-  arma::uvec imp_var = arma::find(w == 1);
-  
+  unsigned int J = z.n_cols;
+
   // Loop through the active cluster
   for(int kk = 0; kk < active_clus.size(); ++kk){
     int k = active_clus[kk];
-    arma::vec proposed_beta_k = beta_mat.row(k).t();
+    
+    arma::vec current_beta_k(beta_mat.row(k).t());
+    arma::vec proposed_beta_k(current_beta_k);
+    
+    arma::vec logU(J, arma::fill::randu);
+    logU = arma::log(logU);
     
     // Propose a new value of beta
-    for(int jj = 0; jj < imp_var.size(); ++jj){
-      int j = imp_var[jj];
-      double new_beta = R::rnorm(proposed_beta_k[j], std::sqrt(MH_var));
-      proposed_beta_k.row(j).fill(new_beta);
+    for(int j = 0; j < J; ++j){
+      proposed_beta_k.row(j).fill(R::rnorm(current_beta_k[j], std::sqrt(MH_var)));
     }
     
-    // Calculate the log probability for all beta given that it is for the 
-    // important variables.
-    
-    arma::vec logA(imp_var.size(), arma::fill::zeros);
-    logA += log_beta_k(k, z, clus_assign, gamma_mat, w,  proposed_beta_k, s2);
-    logA -= log_beta_k(k, z, clus_assign, gamma_mat, w,  beta_mat.row(k).t(), s2);
-    
-    arma::vec logU = arma::log(arma::randu(imp_var.size()));
+    // Calculate logA
+    arma::vec logA = log_beta_k(k, z, clus_assign, gamma_mat, w, proposed_beta_k, s2) -
+      log_beta_k(k, z, clus_assign, gamma_mat, w, current_beta_k, s2);
     
     // MH
-    for(int jj = 0; jj < imp_var.size(); ++jj){
-      
-      if(logU[jj] <= logA[jj]){
-        int j = imp_var[jj];
-        beta_mat(k, j) = proposed_beta_k[jj];
-      }
-      
-    }
+    arma::uvec accept_proposed = arma::find((logU <= logA) == 1);
+    current_beta_k.rows(accept_proposed) = proposed_beta_k.rows(accept_proposed);
+    
+    beta_mat.row(k) = current_beta_k.t();
     
   }
-  
+
   return beta_mat;
 
 }
 
 // [[Rcpp::export]]
-Rcpp::List update_theta_u(arma::uvec clus_assign, arma::vec tau, 
-                          arma::vec theta, double old_U){
+Rcpp::List update_tau_u(arma::uvec clus_assign, arma::vec tau, arma::vec theta, 
+                        double old_U){
   
   arma::vec new_tau(tau); 
   
@@ -675,41 +651,28 @@ Rcpp::List update_theta_u(arma::uvec clus_assign, arma::vec tau,
   
 }
 
+// Debug: gamma
 // [[Rcpp::export]]
-Rcpp::List clusterZI(unsigned int K_max, unsigned int iter, 
-                     arma::mat z, arma::uvec clus_assign, 
-                     double b0g, double b1g, double b0w, double b1w,
-                     double MH_var, double s2){
+arma::cube debug_gamma(unsigned int iter, unsigned int K, arma::mat z, 
+                       arma::uvec clus_assign, arma::vec w, arma::mat beta_mat,
+                       double r0g, double r1g){
   
-  // Initialize
-  unsigned int J = z.n_cols;
-  arma::mat gm_init(z.n_rows, J, arma::fill::ones);
-  arma::vec w_init(J, arma::fill::ones);
-  arma::mat beta_init(K_max, J, arma::fill::zeros);
-  
-  arma::mat gm_mcmc(gm_init);
-  arma::vec w_mcmc(w_init);
-  arma::mat beta_mcmc(beta_init);
-  
-  arma::mat w_store(iter, J, arma::fill::value(-1));
-  
-  for(int t = 0; t < iter; ++t){
-    gm_mcmc = update_gamma(z, clus_assign, gm_init, w_init, beta_init, b0g, b1g);
-    w_mcmc = update_w(z, clus_assign, gm_mcmc, w_init, beta_init, b0w, b1w);
-    beta_mcmc = update_beta(z, clus_assign, gm_mcmc, w_mcmc, beta_init, MH_var, s2);
-      
-    gm_init = gm_mcmc;
-    w_init = w_mcmc;
-    beta_init = beta_mcmc;
+  // Initialize gamma and beta
+  arma::mat gamma_init(z.n_rows, z.n_cols, arma::fill::ones); 
     
-    w_store.row(t) = w_init.t();
+  // Store the result
+  arma::cube gamma_result(gamma_init.n_rows, gamma_init.n_cols, iter);
+  arma::mat gamma_mcmc(gamma_init);
+  
+  for(int i = 0; i < iter; ++i){
+    // update at-risk matrix
+    gamma_mcmc = update_gamma(z, clus_assign, gamma_init, w, beta_mat, r0g, r1g);
+    gamma_result.slice(i) = gamma_mcmc;
+    gamma_init = gamma_mcmc;
   }
+
+  return gamma_result;
   
-  Rcpp::List result;
-  result["gamma"] = gm_init;
-  result["w"] = w_store;
-  result["beta"] = beta_init;
-  return result;
-  
-}
+} 
+
 
