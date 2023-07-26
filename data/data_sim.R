@@ -13,6 +13,9 @@ data_sim <- function(n, K, J_imp, pi_gm_mat, xi_scale, sum_zi_imp, sum_zi_unimp)
   }
   
   ### Generate xi matrix
+  xi_imp <- xi_scale * diag(J_imp)[1:K, ]
+  xi_imp[xi_imp == 0] <- xi_scale/2
+  cbind(xi_imp, matrix(runif(K * (J - J_imp)), nrow = K))
   xi_mat <- matrix(runif(K * J), nrow = K, ncol = J)
   diag(xi_mat) <- xi_scale
   
@@ -44,3 +47,4 @@ data_sim <- function(n, K, J_imp, pi_gm_mat, xi_scale, sum_zi_imp, sum_zi_unimp)
   list(ci = ci - 1, gamma = gm, beta = log(xi_mat), z = z)
   
 }
+
