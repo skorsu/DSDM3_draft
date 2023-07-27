@@ -1,150 +1,42 @@
-rm(list = ls())
-library(tidyverse)
+### Import the external function
+source("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/data/data_sim.R")
 
-### Simulate the data
-set.seed(1)
-source("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/data_sim.R")
-## source("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/data_sim.R")
-dat_test <- data_sim(N = 100, K = 5, J = 150, J_imp = 20, z_lb = 150, z_ub = 200, 
-                     z_lb_ova = 50, z_ub_ova = 75, pi_gk = rep(0.5, 5),
-                     pi_g_ova = 0.45)
-
-### Test: ci
-set.seed(245)
-w <- rbinom(150, 1, 0.35)
-beta_mat <- matrix(rnorm(5 * 150), nrow = 5)
-
-tt <- sm(K_max = 5, z = dat_test$z, clus_assign = rep(1, 100), 
-         gamma_mat = dat_test$gm, w = w, beta_mat = beta_mat,
-         tau = c(0, 1, 1, 0, 0), theta = rep(1, 5), launch_iter = 10,
-         b0c = 10, b1c = 10)
-c(tt$split_ind, tt$logA, tt$accept_proposed)
-
-test_p <- log_proposal(z = dat_test$z, clus_target = tt$proposed_assign, 
-                       clus_init = tt$launch_assign, gamma_mat = dat_test$gm, w = w, 
-                       beta_mat = beta_mat, S = tt$S, clus_sm = tt$samp_clus)
-test_p
-
-test <- realloc_sm(z = dat_test$z, clus_assign = tt$launch_assign, 
-                   gamma_mat = dat_test$gm, w = w, beta_mat = beta_mat,
-                   S = tt$S, clus_sm = tt$samp_clus)
-
-table(tt$launch_assign, test$clus_assign)
-
-table(rep(1:2, 50)[tt$S + 1])
-
-tt <- realloc(K_max = 5, z = dat_test$z, clus_assign = dat_test$ci, 
-              gamma_mat = dat_test$gm, w = w, beta_mat = beta_mat,
-              tau = rep(1, 5), theta = rep(1, 5))
-table(dat_test$ci, tt$assign)
-
-table(dat_test$ci)
-exp(beta_mat[5, which(w == 1)])
-
-
-
-
-### Test: beta_jk
-set.seed(72)
-w <- rbinom(150, 1, 0.35)
-beta_mat <- matrix(rnorm(5 * 150), nrow = 5)
-tt <- log_beta_k(k = 0, z = dat_test$z, clus_assign = dat_test$ci, 
-                 gamma_mat = dat_test$gm, w = w, beta_k = beta_mat, s2 = 10)
-sum(tt)
-
-ldbeta <- dnorm(beta_mat, 0, sqrt(10), log = TRUE)
-xi_mat <- exp(beta_mat)
-
-for(kk in 1:5){
-  ### Base R
-  dat_active <- dat_test$z[which(dat_test$ci == (kk - 1)), which(w == 1)]
-  gam_active <- dat_test$gm[which(dat_test$ci == (kk - 1)), which(w == 1)]
-  xi_active <- matrix(rep(xi_mat[kk, which(w == 1)], sum(dat_test$ci == (kk - 1))), 
-                      ncol = sum(dat_test$ci == (kk - 1))) %>% t()
-  gwx <- (gam_active * xi_active)
-  z_gwx <- dat_active + gwx
-  gwx[gwx == 0] <- 1
-  z_gwx[z_gwx == 0] <- 1
-  
-  base_R_sum <- (ldbeta[kk, which(w == 1)] + sum(lgamma(apply(gam_active * xi_active, 1, sum))) -
-                   sum(lgamma(apply(dat_active + (gam_active * xi_active), 1, sum))) + 
-                   apply(lgamma(z_gwx), 2, sum) - apply(lgamma(gwx), 2, sum)) %>% sum()
-  
-  ### Rcpp
-  rcpp_sum <- sum(log_beta_k(k = (kk-1), z = dat_test$z, clus_assign = dat_test$ci, 
-                             gamma_mat = dat_test$gm, w = w, beta_k = beta_mat[kk, ], s2 = 10))
-  
-  print(c(base_R_sum, rcpp_sum))
-  
-}
-
-set.seed(312)
-w <- rbinom(150, 1, 0.35)
-beta_mat <- matrix(rnorm(5 * 150), nrow = 5) 
-tt <- update_beta(z = dat_test$z, clus_assign = dat_test$ci, gamma_mat = dat_test$gm, 
-                  w = w, beta_mat = beta_mat, MH_var = 0.1, s2 = 10)
-
-beta_mat == tt
-### Test: w_j
-set.seed(3)
-w <- rbinom(100, 1, 0.5)
-beta_mat <- matrix(rnorm(5 * 100), nrow = 5)
-w_mat <- t(matrix(rep(w, 100), nrow = 100))
-gwx <- dat_test$gm * w_mat * exp(beta_mat[dat_test$ci + 1, ])
-
-for(j in 1:100){
-  w_rcpp <- log_w_j(j - 1, z = dat_test$z, clus_assign = dat_test$ci, 
-                    gamma_mat = dat_test$gm, w = w, beta = beta_mat, 
-                    b0w = 13, b1w = 20)
-  w_base_r <- lbeta(13 + w[j], 20 + 1 - w[j]) + sum(lgamma(apply(gwx, 1, sum))) - 
-    sum(lgamma(apply(dat_test$z + gwx, 1, sum))) +
-    sum(apply(data.frame(dat_test$z[, j] + gwx[, j]), 1, function(x){ifelse(x == 0, 0, lgamma(x))})) -
-    sum(apply(data.frame(gwx[, j]), 1, function(x){ifelse(x == 0, 0, lgamma(x))}))
-  
-  print(c(w_rcpp, w_base_r))
-}
-
-t <- update_w(z = dat_test$z, clus_assign = dat_test$ci, gamma_mat = dat_test$gm,
-              w = c(rep(0, 99), 1), beta_mat = beta_mat, b0w = 10, b1w = 2)
-table(t, w)
-
-### Test: gamma_ijk
-set.seed(3)
-w <- rbinom(50, 1, 0.5)
-g <- rbinom(50, 1, 0.5)
-bet_k <- rnorm(50)
-
-for(i in 1:50){
-  ### Rcpp function
-  rcpp <- log_g_ijk(j = (i-1), zi = dat_test$z[1, ], gi = g, w = w, beta_k = bet_k,
-                    b0g = 6, b1g = 12)
-  ### base R
-  wgx_i <- w * g * exp(bet_k)
-  z_gwx_i <- dat_test$z[1, ] + wgx_i
-  base_R <- lbeta(6 + g[i], 12 + (1 - g[i])) - lbeta(6, 12) + lgamma(sum(wgx_i)) - 
-    sum(lgamma(wgx_i[wgx_i != 0])) + sum(lgamma(z_gwx_i[z_gwx_i != 0])) - lgamma(sum(z_gwx_i))
-  
-  print(c(rcpp, base_R))
-  
-}
-
-
-wgx_i <- w * g * exp(bet_k)
-z_gwx_i <- dat_test$z[1, ] + wgx_i
-
-lbeta(1 + g[1], 2 + (1 - g[1])) - lbeta(1 , 2) + lgamma(sum(wgx_i)) - 
-  sum(lgamma(wgx_i[wgx_i != 0])) + sum(lgamma(z_gwx_i[z_gwx_i != 0])) - lgamma(sum(z_gwx_i))
+### Debugging: at-risk
+#### Generate the data
+#### 50 observations.
+#### 3 clusters with 10 variables (all variables are active).
 
 set.seed(12)
-w <- rbinom(50, 1, 0.5)
-beta_mat <- matrix(rnorm(5 * 50), nrow = 5)
-tt <- update_gamma(z = dat_test$z, clus_assign = dat_test$ci, gamma_mat = dat_test$gm, 
-                   w = w, beta_mat = beta_mat, b0g = 1, b1g = 1)
+ci <- sort(rep(1:3, 20))
+beta_mat <- matrix(c(1, 2, 3), nrow = 3, ncol = 10)
+gamma_mat <- matrix(rbinom(10 * 60, 1, 0.5), nrow = 60, ncol = 10)
+alpha_mat <- t(apply(gamma_mat * exp(beta_mat[ci, ]), 1, function(x){x/sum(x)}))
+z <- matrix(NA, ncol = 10, nrow = 60)
+for(i in 1:60){
+  z[i, ] <- rmultinom(1, 10, alpha_mat[i, ])
+}
+
+set.seed(12)
+start_time <- Sys.time()
+test_gamma <- debug_gamma(iter = 10000, K = 3, z = z, clus_assign = ci - 1, 
+                          w = rep(1, 10), beta_mat = beta_mat, r0g = 1, r1g = 1)
+Sys.time() - start_time
+
+gamma_hat <- matrix(NA, ncol = 10, nrow = 60)
+for(i in 1:60){
+  gamma_hat[i, ] <- rowMeans(test_gamma[i, , 5001:1000])
+}
+
+result_0726 <- list(z = z, gamma_mat = gamma_mat, gamma_hat = gamma_hat)
+saveRDS(result_0726,
+        file = "/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/result_0726.rds")
+result_0726$gamma_mat
+
+mean(result_0726$gamma_hat[2, result_0726$gamma_hat[2, ] != 1])
+sd(result_0726$gamma_hat[2, result_0726$gamma_hat[2, ] != 1])
+
+mean(result_0726$gamma_hat[3, result_0726$gamma_hat[3, ] != 1])
+sd(result_0726$gamma_hat[3, result_0726$gamma_hat[3, ] != 1])
 
 
-
-which(dat_test$z[99, ] == 0) - 1
-
-dat_test$z[100, ]
-dat_test$gm[100, ]
-w
+gamma_hat[gamma_hat < 0.5]
