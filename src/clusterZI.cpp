@@ -508,47 +508,6 @@ Rcpp::List sm(unsigned int K_max, arma::mat z, arma::uvec clus_assign,
 }
 
 // [[Rcpp::export]]
-arma::mat update_gamma_old(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat,
-                       arma::vec w, arma::mat beta_mat, double r0g, double r1g){
-  
-  // Loop through observation
-  for(int i = 0; i < clus_assign.size(); ++i){
-
-    // Get the information for the observation i
-    arma::vec zi_now = z.row(i).t();
-    arma::vec beta_now = beta_mat.row(clus_assign[i]).t();
-    arma::uvec zi_zero_w_one = arma::find(((zi_now == 0) % w) == 1);
-
-    // Loop through z_ijk = 0 for only wj = 1
-    for(int jj = 0; jj < zi_zero_w_one.size(); ++jj){
-      
-      // Get the current at-risk indicator for the observation i
-      arma::vec old_g = gamma_mat.row(i).t();
-
-      // Propose a new gamma_ijk for jth location
-      int j = zi_zero_w_one[jj];
-      arma::vec proposed_g(old_g);
-      proposed_g.row(j).fill(1 - old_g[j]);
-
-      // MH
-      double logA = 0.0;
-      logA += log_g_ijk(j, zi_now, proposed_g, w, beta_now, r0g, r1g);
-      logA -= log_g_ijk(j, zi_now, old_g, w, beta_now, r0g, r1g);
-      double logU = std::log(R::runif(0.0, 1.0));
-
-      if(logU <= logA){
-        gamma_mat.row(i) = proposed_g.t();
-      }
-
-    }
-
-  }
-
-  return gamma_mat;
-
-}
-
-// [[Rcpp::export]]
 arma::mat update_gamma(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat,
                        arma::vec w, arma::mat beta_mat, double r0g, double r1g){
 
@@ -701,7 +660,7 @@ arma::cube debug_gamma(unsigned int iter, unsigned int K, arma::mat z,
   
   for(int i = 0; i < iter; ++i){
     // update at-risk matrix
-    gamma_mcmc = update_gamma_old(z, clus_assign, gamma_init, w, beta_mat, r0g, r1g);
+    gamma_mcmc = update_gamma(z, clus_assign, gamma_init, w, beta_mat, r0g, r1g);
     gamma_result.slice(i) = gamma_mcmc;
     gamma_init = gamma_mcmc;
   }
