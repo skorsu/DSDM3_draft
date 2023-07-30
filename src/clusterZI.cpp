@@ -508,7 +508,7 @@ Rcpp::List sm(unsigned int K_max, arma::mat z, arma::uvec clus_assign,
 }
 
 // [[Rcpp::export]]
-arma::mat update_gamma(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat,
+arma::mat update_gamma_old(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat,
                        arma::vec w, arma::mat beta_mat, double r0g, double r1g){
   
   // Loop through observation
@@ -546,6 +546,41 @@ arma::mat update_gamma(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat,
 
   return gamma_mat;
 
+}
+
+// [[Rcpp::export]]
+arma::mat update_gamma(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat,
+                       arma::vec w, arma::mat beta_mat, double r0g, double r1g){
+
+  // Loop through the observation
+  for(int i = 0; i < clus_assign.size(); ++i){
+    
+    // Find the location of the zero of this particular observations
+    arma::uvec zijk_zero = arma::find(w == 1 and z.row(i).t() == 0);
+    
+    if(zijk_zero.size() != 0){
+      for(int jj = 0; jj < zijk_zero.size(); ++jj){
+        int j = zijk_zero[jj];
+        double old_gamma = gamma_mat(i, j);
+        double proposed_gamma = 1.0 - old_gamma;
+        
+        // Calculate logA
+        double logA = R::lbeta(r0g + proposed_gamma, r1g + (1.0 - proposed_gamma)) -
+          R::lbeta(r0g + old_gamma, r1g + (1.0 - old_gamma));
+        
+        // MH
+        double logU = std::log(R::runif(0.0, 1.0));
+        if(logU <= logA){
+          gamma_mat(i, j) = proposed_gamma;
+        }
+        
+      }
+    }
+
+  }
+  
+  return gamma_mat;
+  
 }
 
 // [[Rcpp::export]]
@@ -666,7 +701,7 @@ arma::cube debug_gamma(unsigned int iter, unsigned int K, arma::mat z,
   
   for(int i = 0; i < iter; ++i){
     // update at-risk matrix
-    gamma_mcmc = update_gamma(z, clus_assign, gamma_init, w, beta_mat, r0g, r1g);
+    gamma_mcmc = update_gamma_old(z, clus_assign, gamma_init, w, beta_mat, r0g, r1g);
     gamma_result.slice(i) = gamma_mcmc;
     gamma_init = gamma_mcmc;
   }
