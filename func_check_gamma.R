@@ -2,6 +2,7 @@ library(tidyverse)
 library(reshape2)
 library(ggplot2)
 library(gridExtra)
+library(xtable)
 
 ### Import the external function
 source("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/data/data_sim.R")
@@ -53,95 +54,74 @@ p2 <- ggplot(tt2, aes(x = variable, y = value)) +
   labs(x = "Variable", y = "", title = "Simulated Data: Third Cluster")
 grid.arrange(p0, p1, p2)
 
-### Experiment 1: r0g = r1g = 1
-set.seed(12)
-start_time <- Sys.time()
-test_gamma <- debug_gamma(iter = 10000, K = 3, z = sim_list$z, clus_assign = sim_list$ci - 1, 
-                          w = c(rep(1, 4), rep(0, 6)), beta_mat = sim_list$beta, r0g = 1, r1g = 1)
-Sys.time() - start_time
-
-### The function will update only the first four columns as they are the only 
-### important variables.
-
-sum(sim_list$z[, 1:4] == 0)
+### Check: log_gamma_ijk function
+### Check for only z_ijk = 0
 
 index_mat <- cbind(which(sim_list$z[, 1:4] == 0) - floor(which(sim_list$z[, 1:4] == 0)/100) * 100,
                    ceiling(which(sim_list$z[, 1:4] == 0)/100))
 
-for(i in 1:sum(sim_list$z[, 1:4] == 0)){
-  print(sim_list$z[index_mat[i, 1], index_mat[i, 2]])
+result_calc_mat <- matrix(NA, nrow = 14, ncol = 8)
+
+for(i in 1:14){
+  
+  ### Calculate by hand
+  gijk <- sim_list$gamma[index_mat[i, 1], index_mat[i, 2]]
+  gi <- sim_list$gamma[index_mat[i, 1], 1:4]
+  zi <- sim_list$z[index_mat[i, 1], 1:4]
+  ci <- sim_list$ci[index_mat[i, 1]] + 1
+  xi <- exp(sim_list$beta[ci, 1:4])
+  
+  hand_calc_1 <- lbeta(1 + gijk, 1 + (1 - gijk)) + lgamma(sum(gi * xi)) - lgamma(sum(zi + (gi*xi)))
+  
+  ### By using the function
+  jj <- index_mat[i, 2] - 1
+  func_calc_1 <- log_g_ijk(j = jj, zi = sim_list$z[index_mat[i, 1], ], gi = sim_list$gamma[index_mat[i, 1], ], 
+                         w = c(rep(1, 4), rep(0, 6)), beta_k = sim_list$beta[ci, ],
+                         r0g = 1, r1g = 1)
+  
+  ### Adjusted the gijk = (1 - gijk)
+  gijk <- 1 - gijk
+  gi[index_mat[i, 2]] <- gijk
+  hand_calc_0 <- lbeta(1 + gijk, 1 + (1 - gijk)) + lgamma(sum(gi * xi)) - lgamma(sum(zi + (gi*xi)))
+  
+  ### By using the function
+  gi_adj <- sim_list$gamma[index_mat[i, 1], ]
+  gi_adj[index_mat[i, 2]] <- gijk
+  func_calc_0 <- log_g_ijk(j = jj, zi = sim_list$z[index_mat[i, 1], ], gi = gi_adj, 
+                           w = c(rep(1, 4), rep(0, 6)), beta_k = sim_list$beta[ci, ],
+                           r0g = 1, r1g = 1)
+  
+  result_calc_mat[i, ] <- c(index_mat[i, 1], index_mat[i, 2], ci - 1, xi[index_mat[i, 2]],
+                            hand_calc_0, func_calc_0, hand_calc_1, func_calc_1)
+  
 }
 
-gamma_result_1 <- matrix(NA, ncol = 5, nrow = sum(sim_list$z[, 1:4] == 0))
-for(i in 1:sum(sim_list$z[, 1:4] == 0)){
-  gamma_result_1[i, 1] <- index_mat[i, 1]
-  gamma_result_1[i, 2] <- index_mat[i, 2]
-  gamma_result_1[i, 3] <- sim_list$z[index_mat[i, 1], index_mat[i, 2]]
-  gamma_result_1[i, 4] <- sim_list$gamma[index_mat[i, 1], index_mat[i, 2]]
-  gamma_result_1[i, 5] <- mean(test_gamma[index_mat[i, 1], index_mat[i, 2], 5001:10000])
-}
+result_mat_1 <- data.frame(result_calc_mat)
+xtable(result_mat_1, digits = c(rep(0, 4), rep(5, 5)))
 
-colnames(gamma_result_1) <- c("row", "column", "z", "actual", "mcmc")
-gamma_result_1
-
-### Experiment 2: r0g = 2, r1g = 3
-set.seed(12)
+### Experiment
 start_time <- Sys.time()
-test_gamma <- debug_gamma(iter = 10000, K = 3, z = sim_list$z, clus_assign = sim_list$ci - 1, 
-                          w = c(rep(1, 4), rep(0, 6)), beta_mat = sim_list$beta, r0g = 2, r1g = 3)
+set.seed(12)
+test_result <- debug_gamma(iter = 10000, K = 3, z = sim_list$z, 
+                           clus_assign = sim_list$ci, w = c(rep(1, 4), rep(0, 6)), 
+                           beta_mat = sim_list$beta, r0g = 1, r1g = 1)
 Sys.time() - start_time
 
-### The function will update only the first four columns as they are the only 
-### important variables.
+result_g_hat <- matrix(NA, nrow = 14, ncol = 5)
 
-sum(sim_list$z[, 1:4] == 0)
-
-index_mat <- cbind(which(sim_list$z[, 1:4] == 0) - floor(which(sim_list$z[, 1:4] == 0)/100) * 100,
-                   ceiling(which(sim_list$z[, 1:4] == 0)/100))
-
-for(i in 1:sum(sim_list$z[, 1:4] == 0)){
-  print(sim_list$z[index_mat[i, 1], index_mat[i, 2]])
+for(i in 1:14){
+  ci <- sim_list$ci[index_mat[i, 1]] + 1
+  xi <- exp(sim_list$beta[ci, 1:4])
+  gamma_hat <- mean(test_result[index_mat[i, 1], index_mat[i, 2], 5001:10000])
+  result_g_hat[i, ] <- c(index_mat[i, 1], index_mat[i, 2], ci - 1, 
+                         xi[index_mat[i, 2]], gamma_hat)
+  
 }
 
-gamma_result_2 <- matrix(NA, ncol = 5, nrow = sum(sim_list$z[, 1:4] == 0))
-for(i in 1:sum(sim_list$z[, 1:4] == 0)){
-  gamma_result_2[i, 1] <- index_mat[i, 1]
-  gamma_result_2[i, 2] <- index_mat[i, 2]
-  gamma_result_2[i, 3] <- sim_list$z[index_mat[i, 1], index_mat[i, 2]]
-  gamma_result_2[i, 4] <- sim_list$gamma[index_mat[i, 1], index_mat[i, 2]]
-  gamma_result_2[i, 5] <- mean(test_gamma[index_mat[i, 1], index_mat[i, 2], 5001:10000])
-}
+t <- data.frame(result_g_hat)
+t <- arrange(t, X3) 
+xtable(t, digits = c(rep(0, 4), rep(4, 2)))
 
-colnames(gamma_result_2) <- c("row", "column", "z", "actual", "mcmc")
-gamma_result_2
-
-### Experiment 3: r0g = 4, r1g = 1
-set.seed(12)
-start_time <- Sys.time()
-test_gamma <- debug_gamma(iter = 10000, K = 3, z = sim_list$z, clus_assign = sim_list$ci - 1, 
-                          w = c(rep(1, 4), rep(0, 6)), beta_mat = sim_list$beta, r0g = 4, r1g = 1)
-Sys.time() - start_time
-
-### The function will update only the first four columns as they are the only 
-### important variables.
-
-sum(sim_list$z[, 1:4] == 0)
-
-index_mat <- cbind(which(sim_list$z[, 1:4] == 0) - floor(which(sim_list$z[, 1:4] == 0)/100) * 100,
-                   ceiling(which(sim_list$z[, 1:4] == 0)/100))
-
-for(i in 1:sum(sim_list$z[, 1:4] == 0)){
-  print(sim_list$z[index_mat[i, 1], index_mat[i, 2]])
-}
-
-gamma_result_3 <- matrix(NA, ncol = 5, nrow = sum(sim_list$z[, 1:4] == 0))
-for(i in 1:sum(sim_list$z[, 1:4] == 0)){
-  gamma_result_3[i, 1] <- index_mat[i, 1]
-  gamma_result_3[i, 2] <- index_mat[i, 2]
-  gamma_result_3[i, 3] <- sim_list$z[index_mat[i, 1], index_mat[i, 2]]
-  gamma_result_3[i, 4] <- sim_list$gamma[index_mat[i, 1], index_mat[i, 2]]
-  gamma_result_3[i, 5] <- mean(test_gamma[index_mat[i, 1], index_mat[i, 2], 5001:10000])
-}
-
-colnames(gamma_result_3) <- c("row", "column", "z", "actual", "mcmc")
-gamma_result_3
+### Save the data and result
+save(list = c("sim_list", "test_result"), 
+     file = "/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/data/debug_gamma.RData")
