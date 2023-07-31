@@ -66,11 +66,20 @@ arma::vec adjust_tau(unsigned int K_max, arma::uvec clus_assign,
 double log_g_ijk(int j, arma::vec zi, arma::vec gi, arma::vec w, arma::vec beta_k,
                  double r0g, double r1g){
   
-  double result = 0.0;
   int g_ijk = gi[j];
-  arma::vec gwx_i = gi % w % arma::exp(beta_k);
-  arma::vec z_gwx_i = zi + gwx_i;
   
+  // Filter only the important variables
+  arma::uvec imp_var = arma::find(w == 1);
+  arma::vec zi_active = zi.rows(imp_var);
+  arma::vec gi_active = gi.rows(imp_var);
+  arma::vec xi_active = arma::exp(beta_k.rows(imp_var));
+  
+  // Calculate gwx
+  arma::vec gwx_i = gi_active % xi_active;
+  arma::vec z_gwx_i = zi_active + gwx_i;
+  
+  // Calculate the probability
+  double result = 0.0;
   result += std::log(R::beta(r0g + g_ijk, r1g + (1 - g_ijk)));
   result += std::lgamma(arma::accu(gwx_i));
   result -= std::lgamma(arma::accu(z_gwx_i));
@@ -510,32 +519,40 @@ Rcpp::List sm(unsigned int K_max, arma::mat z, arma::uvec clus_assign,
 // [[Rcpp::export]]
 arma::mat update_gamma(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat,
                        arma::vec w, arma::mat beta_mat, double r0g, double r1g){
-
+  
   // Loop through the observation
   for(int i = 0; i < clus_assign.size(); ++i){
     
+    arma::vec zi = z.row(i).t();
+    arma::vec beta_k = beta_mat.row(clus_assign[i]).t();
+    
     // Find the location of the zero of this particular observations
+    
     arma::uvec zijk_zero = arma::find(w == 1 and z.row(i).t() == 0);
     
     if(zijk_zero.size() != 0){
       for(int jj = 0; jj < zijk_zero.size(); ++jj){
         int j = zijk_zero[jj];
-        double old_gamma = gamma_mat(i, j);
-        double proposed_gamma = 1.0 - old_gamma;
+        
+        // Proposed a new at-risk indicator for (i, j)
+        arma::vec gi = gamma_mat.row(i).t();
+        int proposed_g_ijk = 1 - gamma_mat(i, j);
         
         // Calculate logA
-        double logA = R::lbeta(r0g + proposed_gamma, r1g + (1.0 - proposed_gamma)) -
-          R::lbeta(r0g + old_gamma, r1g + (1.0 - old_gamma));
+        double logA = ((-1.0) * log_g_ijk(j, zi, gi, w, beta_k, r0g, r1g)); // Old
+        gi.row(j).fill(proposed_g_ijk);
+        logA += log_g_ijk(j, zi, gi, w, beta_k, r0g, r1g); // Proposed
         
         // MH
         double logU = std::log(R::runif(0.0, 1.0));
         if(logU <= logA){
-          gamma_mat(i, j) = proposed_gamma;
+          gamma_mat.row(i).col(j).fill(proposed_g_ijk);
         }
         
       }
+      
     }
-
+    
   }
   
   return gamma_mat;
@@ -653,7 +670,7 @@ arma::cube debug_gamma(unsigned int iter, unsigned int K, arma::mat z,
   
   // Initialize gamma and beta
   arma::mat gamma_init(z.n_rows, z.n_cols, arma::fill::ones); 
-    
+  
   // Store the result
   arma::cube gamma_result(gamma_init.n_rows, gamma_init.n_cols, iter);
   arma::mat gamma_mcmc(gamma_init);
@@ -663,10 +680,8 @@ arma::cube debug_gamma(unsigned int iter, unsigned int K, arma::mat z,
     gamma_mcmc = update_gamma(z, clus_assign, gamma_init, w, beta_mat, r0g, r1g);
     gamma_result.slice(i) = gamma_mcmc;
     gamma_init = gamma_mcmc;
-  }
-
+  } 
+  
   return gamma_result;
   
 } 
-
-
