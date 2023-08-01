@@ -10,8 +10,8 @@ source("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/data/data_sim.R")
 
 ### Data Simulation
 set.seed(12)
-sim_list <- data_sim(n = 100, K = 3, J_imp = 4, 
-                     pi_gm_mat = matrix(c(0.95), ncol = 10, nrow = 3),
+sim_list <- data_sim(n = 100, K = 3, J_imp = 5, 
+                     pi_gm_mat = matrix(c(1), ncol = 10, nrow = 3),
                      xi_scale = 10, sum_zi = 100)
 
 table(sim_list$ci)
@@ -55,6 +55,9 @@ p2 <- ggplot(tt2, aes(x = variable, y = value)) +
         legend.position = "hide", plot.title = element_text(size = 30)) +
   labs(x = "Variable", y = "", title = "Simulated Data: Third Cluster")
 grid.arrange(p0, p1, p2)
+
+### Check: log_w function
+### Check for all variables (j = 1,2, ..., 10)
 
 ### Check: log_gamma_ijk function
 ### Check for only z_ijk = 0
