@@ -6,12 +6,12 @@ library(latex2exp)
 library(gridExtra)
 
 ### Simulate the data
-# source("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/data/data_sim.R")
-source("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/data/data_sim.R")
+source("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/data/data_sim.R")
+# source("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/data/data_sim.R")
 set.seed(31807)
 dat_test <- data_sim(n = 100, K = 2, J_imp = 4, 
                      pi_gm_mat = matrix(c(0.95, 0.5), nrow = 2, ncol = 10), 
-                     xi_scale = 5, sum_zi_imp = 80, sum_zi_unimp = 20)
+                     xi_scale = 5, sum_zi = 100)
 dat_test$z
 
 ### Heat map
