@@ -5,13 +5,13 @@ library(gridExtra)
 library(xtable)
 
 ### Import the external function
-# source("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/data/data_sim.R")
-source("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/data/data_sim.R")
+source("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/data/data_sim.R")
+# source("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/data/data_sim.R")
 
 ### Data Simulation
 set.seed(12)
 sim_list <- data_sim(n = 100, K = 3, J_imp = 5, 
-                     pi_gm_mat = matrix(c(1), ncol = 10, nrow = 3),
+                     pi_gm_mat = matrix(c(0.95), ncol = 10, nrow = 3),
                      xi_scale = 10, sum_zi = 100)
 
 table(sim_list$ci)
@@ -59,47 +59,31 @@ grid.arrange(p0, p1, p2)
 ### Check: log_w function
 ### Check for all variables (j = 1,2, ..., 10)
 
-### Check: log_gamma_ijk function
+(sim_list$gamma * exp(sim_list$beta[sim_list$ci + 1, ]))[, 1]
+
+log_w(z = sim_list$z, clus_assign = sim_list$ci, gamma_mat = sim_list$gamma, 
+      w = c(rep(1, 9), rep(0, 1)), beta_mat = sim_list$beta, r0w = 1, r1w = 1) -
+  log_w(z = sim_list$z, clus_assign = sim_list$ci, gamma_mat = sim_list$gamma, 
+      w = c(rep(1, 10), rep(0, 0)), beta_mat = sim_list$beta, r0w = 1, r1w = 1)
+
+exp(-2506.781)
+lgamma(10)
+lgamma(1 + c(rep(1, 5), rep(0, 5))) + lgamma(1 + (1 - c(rep(1, 5), rep(0, 5))))
+
+-10 * lgamma(3)
+
 ### Check for only z_ijk = 0
 
-index_mat <- cbind(which(sim_list$z[, 1:4] == 0) - floor(which(sim_list$z[, 1:4] == 0)/100) * 100,
-                   ceiling(which(sim_list$z[, 1:4] == 0)/100))
+sum(log(dnorm(sim_list$beta[1, ])))
 
-result_calc_mat <- matrix(NA, nrow = 11, ncol = 9)
+update_w(z = sim_list$z, clus_assign = sim_list$ci, gamma_mat = sim_list$gamma,
+         w = c(rep(1, 5), rep(0, 5)), beta_mat = sim_list$beta, r0w = 1, r1w = 1)
 
-for(i in 1:11){
-  
-  ### Calculate by hand
-  gijk <- sim_list$gamma[index_mat[i, 1], index_mat[i, 2]]
-  gi <- sim_list$gamma[index_mat[i, 1], 1:4]
-  zi <- sim_list$z[index_mat[i, 1], 1:4]
-  ci <- sim_list$ci[index_mat[i, 1]] + 1
-  xi <- exp(sim_list$beta[ci, 1:4])
-  
-  hand_calc_1 <- lbeta(1 + gijk, 1 + (1 - gijk)) + lgamma(sum(gi * xi)) - lgamma(sum(zi + (gi*xi)))
-  
-  ### By using the function
-  jj <- index_mat[i, 2] - 1
-  func_calc_1 <- log_g_ijk(j = jj, zi = sim_list$z[index_mat[i, 1], ], gi = sim_list$gamma[index_mat[i, 1], ], 
-                         w = c(rep(1, 4), rep(0, 6)), beta_k = sim_list$beta[ci, ],
-                         r0g = 1, r1g = 1)
-  
-  ### Adjusted the gijk = (1 - gijk)
-  gijk <- 1 - gijk
-  gi[index_mat[i, 2]] <- gijk
-  hand_calc_0 <- lbeta(1 + gijk, 1 + (1 - gijk)) + lgamma(sum(gi * xi)) - lgamma(sum(zi + (gi*xi)))
-  
-  ### By using the function
-  gi_adj <- sim_list$gamma[index_mat[i, 1], ]
-  gi_adj[index_mat[i, 2]] <- gijk
-  func_calc_0 <- log_g_ijk(j = jj, zi = sim_list$z[index_mat[i, 1], ], gi = gi_adj, 
-                           w = c(rep(1, 4), rep(0, 6)), beta_k = sim_list$beta[ci, ],
-                           r0g = 1, r1g = 1)
-  
-  result_calc_mat[i, ] <- c(index_mat[i, 1], index_mat[i, 2], ci - 1, 1 - gijk, 
-                            xi[index_mat[i, 2]], hand_calc_0, func_calc_0, hand_calc_1, func_calc_1)
-  
-}
+test_result <- debug_w(iter = 10000, K = 3, z = sim_list$z, clus_assign = sim_list$ci, 
+                       gamma_mat = sim_list$gamma, beta_mat = sim_list$beta, r0w = 1, r1w = 1)
 
-result_mat_1 <- data.frame(result_calc_mat)
-xtable(result_mat_1, digits = c(rep(0, 5), rep(5, 5)))
+plot(apply(test_result, 1, sum), type = "l")
+
+update_beta(z = sim_list$z, clus_assign = sim_list$ci, gamma_mat = sim_list$gamma,
+            w = rep(1, 10), beta_mat = sim_list$beta, MH_var = 0.01, s2 = 1)
+
