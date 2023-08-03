@@ -132,15 +132,15 @@ double log_beta_k(int k, arma::mat z, arma::uvec clus_assign,
   
   // Filter only the observation which in the cluster k
   arma::uvec clus_index = arma::find(clus_assign == k);
-  z_active = z.rows(clus_index);
-  gamma_active = gamma_mat.rows(clus_index);
+  z_active = z_active.rows(clus_index);
+  gamma_active = gamma_active.rows(clus_index);
   
   // Calculate the probability of beta_jk
   Rcpp::NumericVector bb = Rcpp::NumericVector(beta_k.begin(), beta_k.end());
   Rcpp::NumericVector bb_d = Rcpp::dnorm4(bb, 0.0, std::sqrt(s2), true);
   
   // Calculate gwx
-  arma::mat xi_mat = arma::repelem(arma::exp(beta_k), 1, z_active.n_rows).t();
+  arma::mat xi_mat = arma::repelem(xi_active, 1, z_active.n_rows).t();
   arma::mat gwx = gamma_active % xi_mat;
   arma::mat z_gwx = z_active + gwx;
   arma::vec sum_gwx = arma::sum(gwx, 1);
