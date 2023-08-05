@@ -708,3 +708,27 @@ arma::mat debug_w(unsigned int iter, unsigned int K, arma::mat z,
   return w_result;
   
 }
+
+// Debug: beta
+// [[Rcpp::export]]
+arma::cube debug_beta(unsigned int iter, unsigned int K, arma::mat z, 
+                      arma::uvec clus_assign, arma::mat gamma_mat, arma::vec w,
+                      double MH_var, double s2){
+  
+  // Initialize beta
+  arma::mat beta_init(K, w.size(), arma::fill::zeros); 
+  
+  // Store the result
+  arma::cube beta_result(K, w.size(), iter);
+  arma::mat beta_mcmc(beta_init);
+  
+  for(int i = 0; i < iter; ++i){
+    // update at-risk matrix
+    beta_mcmc = update_beta(z, clus_assign, gamma_mat, w, beta_init, MH_var, s2);
+    beta_result.slice(i) = beta_mcmc;
+    beta_init = beta_mcmc;
+  } 
+  
+  return beta_result;
+  
+} 

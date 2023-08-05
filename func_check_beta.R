@@ -3,6 +3,7 @@ library(reshape2)
 library(ggplot2)
 library(gridExtra)
 library(xtable)
+library(latex2exp)
 
 ### Import the external function
 # source("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/data/data_sim.R")
@@ -16,7 +17,6 @@ sim_list <- data_sim(n = 100, K = 2, J_imp = 3,
 
 table(sim_list$ci)
 exp(sim_list$beta)
-
 
 ### Check: log_w function
 ### go through every active cluster
@@ -52,26 +52,65 @@ log_beta_k(k = k, z = sim_list$z, clus_assign = sim_list$ci,
            gamma_mat = sim_list$gamma, w = w, beta_k = sim_list$beta[(k+1), ], 
            s2 = 1)
 
-int k, arma::mat z, arma::uvec clus_assign, 
-arma::mat gamma_mat, arma::vec w, arma::vec beta_k, 
-double s2
 
 ### Sampler
-store_plot <- list()
+set.seed(124)
+beta_result <- debug_beta(iter = 10000, K = 2, z = sim_list$z, 
+                          clus_assign = sim_list$ci, gamma_mat = sim_list$gamma, 
+                          w = c(1, 1, 1, 0, 0), MH_var = 0.01, s2 = 1)
 
-set.seed(21408)
-for(i in 1:10){
-  w_samp <- debug_w(iter = 10000, K = 2, z = sim_list$z, clus_assign = sim_list$ci, 
-                    gamma_mat = sim_list$gamma, beta_mat = sim_list$beta,
-                    r0w = 1, r1w = 1)
-  store_plot[[i]] <- ggplot(data.frame(x = 1:10000, y = apply(w_samp, 1, sum)), 
-                            aes(x = x, y = y)) +
-    geom_line() +
-    theme_bw() +
-    geom_vline(xintercept = 5000, color = "red", linetype = "dashed") +
-    labs(title = "MCMC: Important variables", x = "Iteration", 
-         y = "# Imp Variable")
-  apply(w_samp[-(1:5000), ], 2, mean) %>% print()
-}
+### Cluster 0
+sim_list$z[which(sim_list$ci == 0), ]/100
+pop_x1 <- apply(sim_list$z[which(sim_list$ci == 0), ], 2, sum)/sum(sim_list$z[which(sim_list$ci == 0), ])
 
-grid.arrange(grobs = store_plot)
+#### MCMC
+mcmc_b1 <- exp(t(beta_result[1, , 5001:10000]))
+mcmc_x1 <- apply(mcmc_b1, 1, function(x){x/sum(x)}) %>% t()
+apply(mcmc_x1, 2, sum)/sum(mcmc_x1)
+
+par(mfrow = c(2, 3))
+plot(mcmc_x1[, 1], type = "l", ylim = c(0, 1), 
+     main = TeX("$\\xi_{10}$"), xlab = "Iteration", ylab = TeX("\\xi"))
+abline(a = pop_x1[1], b = 0, col = "red")
+plot(mcmc_x1[, 2], type = "l", ylim = c(0, 1),
+     main = TeX("$\\xi_{20}$"), xlab = "Iteration", ylab = TeX("\\xi"))
+abline(a = pop_x1[2], b = 0, col = "red")
+plot(mcmc_x1[, 3], type = "l", ylim = c(0, 1), 
+     main = TeX("$\\xi_{30}$"), xlab = "Iteration", ylab = TeX("\\xi"))
+abline(a = pop_x1[3], b = 0, col = "red")
+plot(mcmc_x1[, 4], type = "l", ylim = c(0, 1),
+     main = TeX("$\\xi_{40}$"), xlab = "Iteration", ylab = TeX("\\xi"))
+abline(a = pop_x1[4], b = 0, col = "red")
+plot(mcmc_x1[, 5], type = "l", ylim = c(0, 1), 
+     main = TeX("$\\xi_{50}$"), xlab = "Iteration", ylab = TeX("\\xi"))
+abline(a = pop_x1[5], b = 0, col = "red")
+
+### Cluster 1
+sim_list$z[which(sim_list$ci == 1), ]/100
+pop_x2 <- apply(sim_list$z[which(sim_list$ci == 1), ], 2, sum)/sum(sim_list$z[which(sim_list$ci == 1), ])
+
+#### MCMC
+mcmc_b2 <- exp(t(beta_result[2, , 5001:10000]))
+mcmc_x2 <- apply(mcmc_b2, 1, function(x){x/sum(x)}) %>% t()
+apply(mcmc_x2, 2, sum)/sum(mcmc_x2)
+
+par(mfrow = c(2, 3))
+plot(mcmc_x2[, 1], type = "l", ylim = c(0, 1), 
+     main = TeX("$\\xi_{11}$"), xlab = "Iteration", ylab = TeX("\\xi"))
+abline(a = pop_x2[1], b = 0, col = "red")
+plot(mcmc_x2[, 2], type = "l", ylim = c(0, 1),
+     main = TeX("$\\xi_{21}$"), xlab = "Iteration", ylab = TeX("\\xi"))
+abline(a = pop_x2[2], b = 0, col = "red")
+plot(mcmc_x2[, 3], type = "l", ylim = c(0, 1), 
+     main = TeX("$\\xi_{31}$"), xlab = "Iteration", ylab = TeX("\\xi"))
+abline(a = pop_x2[3], b = 0, col = "red")
+plot(mcmc_x2[, 4], type = "l", ylim = c(0, 1),
+     main = TeX("$\\xi_{41}$"), xlab = "Iteration", ylab = TeX("\\xi"))
+abline(a = pop_x2[4], b = 0, col = "red")
+plot(mcmc_x2[, 5], type = "l", ylim = c(0, 1), 
+     main = TeX("$\\xi_{51}$"), xlab = "Iteration", ylab = TeX("\\xi"))
+abline(a = pop_x2[5], b = 0, col = "red")
+
+
+
+
