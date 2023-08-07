@@ -731,4 +731,59 @@ arma::cube debug_beta(unsigned int iter, unsigned int K, arma::mat z,
   
   return beta_result;
   
-} 
+}
+
+// Realloc without SM
+// [[Rcpp::export]]
+Rcpp::List realloc_no_sm(unsigned int K_max, arma::mat z, arma::uvec clus_assign, 
+                         arma::mat gamma_mat, arma::vec w, arma::mat beta_mat,
+                         arma::vec theta){
+  
+  Rcpp::List result;
+  
+  // Filter only the important variables
+  arma::uvec imp_var = arma::find(w == 1); 
+  arma::mat z_active = z.cols(imp_var);
+  arma::mat gamma_active = gamma_mat.cols(imp_var);
+  arma::mat xi_active = arma::exp(beta_mat.cols(imp_var));
+  
+  // Count the number of the observation for each cluster
+  arma::vec n_clus(K_max, arma::fill::zeros); 
+  for(int i = 0; i < clus_assign.size(); ++i){
+    n_clus[clus_assign[i]] += 1;
+  }
+  
+  // Calculate the posterior predictive (= marginal distribution)
+  // I will create a matrix that store the marginal distribution for all 
+  // observation in every clusters.
+  
+  arma::mat gwx(z_active.n_rows, imp_var.size(), arma::fill::zeros); 
+  arma::mat z_gwx(z_active.n_rows, imp_var.size(), arma::fill::zeros);
+  arma::vec sum_gwx(z_active.n_rows, arma::fill::zeros);
+  arma::vec sum_z_gwx(z_active.n_rows, arma::fill::zeros);
+  
+  arma::vec log_k(z_active.n_rows, arma::fill::zeros);
+  arma::mat log_postpred(z_active.n_rows, K_max, arma::fill::zeros);
+  
+  for(int k = 0; k < K_max; ++k){
+    
+    gwx = gamma_active % (arma::repelem(xi_active.row(k).t(), 1, z_active.n_rows).t());
+    z_gwx = z_active + gwx;
+    sum_gwx = arma::sum(gwx, 1);
+    sum_z_gwx = arma::sum(z_gwx, 1);
+    
+    log_k += arma::lgamma(sum_gwx.replace(0.0, 1.0));
+    log_k -= arma::lgamma(sum_z_gwx.replace(0.0, 1.0));
+    log_k += arma::sum(arma::lgamma(z_gwx.replace(0.0, 1.0)), 1);
+    log_k -= arma::sum(arma::lgamma(gwx.replace(0.0, 1.0)), 1);
+    
+    log_postpred.col(k) = log_k;
+  }
+  
+  result["z_active"] = z_active;
+  result["n_clus"] = n_clus;
+  result["log_postpred"] = log_postpred;
+  return result;
+  
+}
+
