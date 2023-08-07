@@ -20,7 +20,7 @@ data_sim <- function(n, K, J_imp, pi_gm_mat, xi_scale, sum_zi){
   
   z <- matrix(NA, ncol = J, nrow = n)
   
-  for(i in 1:100){
+  for(i in 1:n){
     
     ### Normalize the alpha vector
     norm_alp <- gm_xi[i, ]/sum(gm_xi[i, ])
