@@ -6,8 +6,8 @@ library(xtable)
 library(latex2exp)
 
 ### Import the external function
-source("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/data/data_sim.R")
-# source("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/data/data_sim.R")
+# source("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/data/data_sim.R")
+source("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/data/data_sim.R")
 
 ### Data Simulation
 set.seed(184)
@@ -44,15 +44,24 @@ table(sim_list$ci)
 realloc_no_sm(K_max = 3, z = sim_list$z, clus_assign = sim_list$ci, 
               gamma_mat = sim_list$gamma, w = c(rep(1, 5), 0, 0), 
               beta_mat = sim_list$beta, theta = c(1, 1, 1))
-t <- realloc_no_sm(K_max = 3, z = sim_list$z, clus_assign = sim_list$ci, 
+t <- realloc_no_sm(K_max = 3, z = sim_list$z, clus_assign = rep(1, 100), 
                    gamma_mat = sim_list$gamma, w = c(rep(1, 5), 0, 0), 
                    beta_mat = beta_result[, , 10000], theta = c(1, 1, 1))
-sim_list$ci
+table(sim_list$ci, t$clus_assign)
+table(t$clus_assign)
 
-t$log_postpred[1, ]
-sim_list$z[1, ]
+i <- 50
+k <- 0
+zi <- sim_list$z[i, 1:5]
+gwx <- exp(beta_result[(k + 1), 1:5, 10000])
 
-lgamma(sum(exp(beta_result[3, 1:5, 10000]))) - 
-  lgamma(sum(sim_list$z[1, 1:5] + exp(beta_result[3, 1:5, 10000]))) - 
-  sum(lgamma(exp(beta_result[3, 1:5, 10000]))) + 
-  sum(lgamma(sim_list$z[1, 1:5] + exp(beta_result[3, 1:5, 10000])))
+lgamma(sum(gwx)) - lgamma(sum(zi + gwx)) + sum(lgamma(zi + gwx)) - sum(lgamma(gwx))
+
+test_result <- clus_no_SM(iter = 10000, K_max = 3, z = sim_list$z, 
+                          gamma_mat = sim_list$gamma, w = c(rep(1, 5), 0, 0),
+                          MH_var = 0.01, s2 = 1, theta_vec = c(1, 1, 1))
+
+plot(exp(t(test_result$beta[1, , 5001:10000]))[, 7])
+
+apply(sim_list$z, 2, sum)/10000
+

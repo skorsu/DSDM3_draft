@@ -737,7 +737,7 @@ arma::cube debug_beta(unsigned int iter, unsigned int K, arma::mat z,
 // [[Rcpp::export]]
 Rcpp::List realloc_no_sm(unsigned int K_max, arma::mat z, arma::uvec clus_assign, 
                          arma::mat gamma_mat, arma::vec w, arma::mat beta_mat,
-                         arma::vec theta){
+                         arma::vec theta_vec){
   
   Rcpp::List result;
   
@@ -762,7 +762,6 @@ Rcpp::List realloc_no_sm(unsigned int K_max, arma::mat z, arma::uvec clus_assign
   arma::vec sum_gwx(z_active.n_rows, arma::fill::zeros);
   arma::vec sum_z_gwx(z_active.n_rows, arma::fill::zeros);
   
-  arma::vec log_k(z_active.n_rows, arma::fill::zeros);
   arma::mat log_postpred(z_active.n_rows, K_max, arma::fill::zeros);
   
   for(int k = 0; k < K_max; ++k){
@@ -772,18 +771,79 @@ Rcpp::List realloc_no_sm(unsigned int K_max, arma::mat z, arma::uvec clus_assign
     sum_gwx = arma::sum(gwx, 1);
     sum_z_gwx = arma::sum(z_gwx, 1);
     
+    arma::vec log_k(z_active.n_rows, arma::fill::zeros);
     log_k += arma::lgamma(sum_gwx.replace(0.0, 1.0));
     log_k -= arma::lgamma(sum_z_gwx.replace(0.0, 1.0));
     log_k += arma::sum(arma::lgamma(z_gwx.replace(0.0, 1.0)), 1);
     log_k -= arma::sum(arma::lgamma(gwx.replace(0.0, 1.0)), 1);
     
     log_postpred.col(k) = log_k;
+    
   }
   
+  // Reallocate
+  for(int i = 0; i < clus_assign.size(); ++i){
+    // Remove the i from the count
+    int ci = clus_assign[i];
+    n_clus[ci] -= 1;
+    
+    // Calculate the reallocation probability
+    arma::vec log_realloc_prob = log_postpred.row(i).t();
+    log_realloc_prob += arma::log(n_clus + theta_vec);
+    arma::vec realloc_prob = log_sum_exp(log_realloc_prob);
+      
+    // Sampling the new cluster assignment
+    Rcpp::NumericVector rprob = Rcpp::NumericVector(realloc_prob.begin(), realloc_prob.end());
+    Rcpp::IntegerVector newci = rmultinom_1(rprob, K_max);
+    arma::uvec new_ci = Rcpp::as<arma::uvec>(Rcpp::wrap(newci));
+    arma::uvec index_new_c = arma::find(new_ci == 1);
+    
+    // Reassign
+    clus_assign[i] = index_new_c[0];
+    n_clus[index_new_c[0]] += 1;
+  }
+  
+  result["clus_assign"] = clus_assign;
   result["z_active"] = z_active;
   result["n_clus"] = n_clus;
   result["log_postpred"] = log_postpred;
   return result;
   
+}
+
+// [[Rcpp::export]]
+Rcpp::List clus_no_SM(unsigned int iter, unsigned int K_max, arma::mat z, 
+                      arma::mat gamma_mat, arma::vec w,
+                      double MH_var, double s2, arma::vec theta_vec){
+  
+  Rcpp::List result;
+  
+  // Create objects for storing the result.
+  arma::cube beta_result(K_max, w.size(), iter);
+  arma::mat ci_result(z.n_rows, iter, arma::fill::value(-1));
+  
+  // Initialize the cluster assignment and beta matrix
+  arma::mat beta_init(K_max, w.size(), arma::fill::zeros);
+  arma::vec ci_init(z.n_rows, arma::fill::zeros);
+  
+  arma::mat beta_mcmc(beta_init);
+  arma::vec ci_mcmc(ci_init);
+  
+  // Begin
+  for(int t = 0; t < iter; ++t){
+    
+    // Update
+    beta_mcmc = update_beta(z, arma::conv_to<arma::uvec>::from(ci_init), 
+                            gamma_mat, w, beta_init, MH_var, s2);
+    
+    // ci_mcmc = realloc_no_sm(K_max, z, ci_init, gamma_mat, w, beta_mcmc, theta_vec);
+    
+    beta_init = beta_mcmc;
+    beta_result.slice(t) = beta_init;
+  }
+  
+  result["beta"] = beta_result;
+  result["ci"] = ci_result;
+  return result;
 }
 
