@@ -824,26 +824,27 @@ Rcpp::List clus_no_SM(unsigned int iter, unsigned int K_max, arma::mat z,
   
   // Initialize the cluster assignment and beta matrix
   arma::mat beta_init(K_max, w.size(), arma::fill::zeros);
-  arma::vec ci_init(z.n_rows, arma::fill::zeros);
+  arma::uvec ci_init(z.n_rows, arma::fill::zeros);
   
   arma::mat beta_mcmc(beta_init);
-  arma::vec ci_mcmc(ci_init);
   
   // Begin
   for(int t = 0; t < iter; ++t){
     
     // Update
-    beta_mcmc = update_beta(z, arma::conv_to<arma::uvec>::from(ci_init), 
-                            gamma_mat, w, beta_init, MH_var, s2);
-    
-    // ci_mcmc = realloc_no_sm(K_max, z, ci_init, gamma_mat, w, beta_mcmc, theta_vec);
+    beta_mcmc = update_beta(z, ci_init, gamma_mat, w, beta_init, MH_var, s2);
+    Rcpp::List ci_List = realloc_no_sm(K_max, z, ci_init, gamma_mat, w, 
+                                       beta_mcmc, theta_vec);
+    arma::uvec ci_mcmc = ci_List["clus_assign"];
     
     beta_init = beta_mcmc;
+    ci_init = ci_mcmc;
     beta_result.slice(t) = beta_init;
+    ci_result.col(t) = arma::conv_to<arma::vec>::from(ci_init);
   }
   
   result["beta"] = beta_result;
-  result["ci"] = ci_result;
+  result["ci"] = ci_result.t();
   return result;
 }
 

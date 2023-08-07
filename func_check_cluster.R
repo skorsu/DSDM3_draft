@@ -4,6 +4,7 @@ library(ggplot2)
 library(gridExtra)
 library(xtable)
 library(latex2exp)
+library(salso)
 
 ### Import the external function
 # source("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/data/data_sim.R")
@@ -50,18 +51,20 @@ t <- realloc_no_sm(K_max = 3, z = sim_list$z, clus_assign = rep(1, 100),
 table(sim_list$ci, t$clus_assign)
 table(t$clus_assign)
 
-i <- 50
-k <- 0
-zi <- sim_list$z[i, 1:5]
-gwx <- exp(beta_result[(k + 1), 1:5, 10000])
-
-lgamma(sum(gwx)) - lgamma(sum(zi + gwx)) + sum(lgamma(zi + gwx)) - sum(lgamma(gwx))
-
+set.seed(124)
 test_result <- clus_no_SM(iter = 10000, K_max = 3, z = sim_list$z, 
                           gamma_mat = sim_list$gamma, w = c(rep(1, 5), 0, 0),
                           MH_var = 0.01, s2 = 1, theta_vec = c(1, 1, 1))
+mcmc_ci <- salso(test_result$ci[5001:10000, ], maxNClusters = 10)
+table(mcmc_ci, sim_list$ci)
 
-plot(exp(t(test_result$beta[1, , 5001:10000]))[, 7])
+## Beta
+b0_mcmc <- t(test_result$beta[1, , 5001:10000])
+sum_x0 <- apply(exp(b0_mcmc), 1, sum)
+norm_x0 <- data.frame(iter = 1:5000, exp(b0_mcmc)/sum_x0)
+melt_norm_x0 <- melt(norm_x0 ,  id.vars = 'iter', variable.name = 'Variable')
+ggplot(melt_norm_x0, aes(x = iter, y = value)) + 
+  geom_line(aes(colour = Variable)) +
+  theme_bw()
 
-apply(sim_list$z, 2, sum)/10000
-
+exp(t(test_result$beta[1, , 5001:10000]))
