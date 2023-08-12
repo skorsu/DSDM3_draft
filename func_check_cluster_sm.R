@@ -52,3 +52,55 @@ tt2 <- sm(K_max = 5, z = sim_list$z, clus_assign = rep(0, 100),
           launch_iter = 10, s2 = 1, r0c = 1, r1c = 1)
 table(sim_list$ci, tt2$clus_assign)
 c(tt2$split_ind, tt2$accept_MH, tt2$logA)
+
+tau_vec <- rgamma(5, 1, 1)
+U <- rgamma(1, 1, 1)
+ttt <- update_tau_u(clus_assign = sim_list$ci, tau_vec = tau_vec, 
+                    theta_vec = rep(1, 5), old_U = U)
+cbind(tau_vec, ttt$new_tau)
+cbind(U, ttt$new_U)
+
+### Test: Full Function
+start_time <- Sys.time()
+test_result <- full_func(iter = 10000, K_max = 5, z = sim_list$z,
+                         gamma_mat = sim_list$gamma, w = c(rep(1, 5), rep(0, 5)),
+                         theta = rep(1, 5), launch_iter = 10,
+                         MH_var = 0.01, s2 = 1, r0c = 1, r1c = 1)
+Sys.time() - start_time
+table(test_result$ci)
+test_result$beta[, , 2000]
+table(test_result$sm_result)
+table(test_result$accept_result)
+table(test_result$sm_result, test_result$accept_result)
+
+table(salso(t(test_result$ci)[5001:10000, ]), sim_list$ci)
+
+### Test with the same simulated dataset
+rm(list = ls())
+load("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/data/result_c1.Rdata")
+
+KK <- 5
+run_time <- Sys.time()
+result <- full_func(iter = 10000, K_max = KK, z = result_list$data$z,
+                    gamma_mat = result_list$data$gamma, w = c(rep(1, 5), rep(0, 2)),
+                    theta = rep(1, KK), launch_iter = 10, MH_var = 0.01, 
+                    s2 = 1, r0c = 1, r1c = 1)
+Sys.time() - run_time
+ci_result <- salso(t(result$ci)[-c(1:5000), ], maxNClusters = KK)
+table(actual = result_list$data$ci, result = ci_result)
+
+table(result$accept_result)
+
+plot(apply(t(result$ci), 1, function(x){length(unique(x))}), type = "l")
+
+KK <- 30
+run_time <- Sys.time()
+result <- full_func_1(iter = 10000, K_max = KK, z = result_list$data$z,
+                    gamma_mat = result_list$data$gamma, w = c(rep(1, 5), rep(0, 2)),
+                    theta = rep(1, KK), launch_iter = 10, MH_var = 0.01, 
+                    s2 = 1, r0c = 1, r1c = 1)
+Sys.time() - run_time
+ci_result <- salso(t(result$ci)[-c(1:5000), ], maxNClusters = KK)
+table(actual = result_list$data$ci, result = ci_result)
+
+plot(apply(t(result$ci), 1, function(x){length(unique(x))}), type = "l")
