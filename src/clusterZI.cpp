@@ -932,8 +932,6 @@ Rcpp::List full_func_1(unsigned int iter, unsigned int K_max, arma::mat z,
     n_init[ci_init[i]] += 1;
   }
   
-  std::cout << "Initial Cluster: " << n_init << std::endl;
-  
   // Initialize tau and beta
   arma::uvec active_init = arma::unique(ci_init);
   arma::vec tau_init(K_max, arma::fill::zeros);
@@ -947,9 +945,6 @@ Rcpp::List full_func_1(unsigned int iter, unsigned int K_max, arma::mat z,
   
   // Initialize U
   double U_init = R::rgamma(z.n_rows, 1/(arma::accu(tau_init)));
-  
-  std::cout << tau_init << std::endl;
-  std::cout << beta_init << std::endl;
   
   arma::mat beta_mcmc(beta_init);
   Rcpp::List realloc_list;
@@ -1002,6 +997,7 @@ Rcpp::List full_func_1(unsigned int iter, unsigned int K_max, arma::mat z,
   result["accept_result"] = accept_result;
   result["sm_result"] = sm_result;
   result["logA"] = logA_sm_result;
+  result["init_clus"] = active_init.size();
   return result;
   
 } 
