@@ -370,31 +370,58 @@ arma::mat update_gamma(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat,
 
 // [[Rcpp::export]]
 arma::vec update_w(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat,
-                   arma::vec w, arma::mat beta_mat, double r0w, double r1w){
+                   arma::vec w, arma::mat beta_mat, unsigned int launch_iter_w,
+                   double r0w, double r1w){
   
-  arma::vec proposed_w(w); 
-  
-  // Propose a new vector of the important variable indicator
   arma::uvec imp_var = arma::find(w == 1);
   arma::uvec unimp_var = arma::find(w == 0);
-  int proposed_index = -1;
   
-  if(imp_var.size() <= 1){
-    proposed_index = unimp_var[arma::randperm(unimp_var.size())[0]];
-    proposed_w[proposed_index] = 1 - proposed_w[proposed_index];
+  arma::vec launch_w(w);
+  
+  // Proposed an initial step for the launch step.
+  if(imp_var.size() == 2){
+    int new_imp = unimp_var[arma::randperm(unimp_var.size())[0]];
+    launch_w.row(new_imp).fill(1);
   } else {
-    proposed_index = arma::randperm(w.size())[0];
-    proposed_w[proposed_index] = 1 - proposed_w[proposed_index];
+    int change_var = arma::randperm(w.size())[0];
+    launch_w.row(change_var).fill(1 - w[change_var]);
+  }
+    
+  // Create an add/delete index (add = 1; delete = 0)
+  // int ad_index = 0.5 * (arma::accu(launch_w - w) + 1);
+  
+  // Perform a launch step (= swap)
+  for(int t = 0; t < launch_iter_w; ++t){
+    
+    arma::uvec launch_imp_var = arma::find(launch_w == 1);
+    arma::uvec launch_unimp_var = arma::find(launch_w == 0);
+    
+    arma::vec p_launch_w(launch_w);
+    
+    int new_imp = launch_unimp_var[arma::randperm(launch_unimp_var.size())[0]];
+    int new_unimp = launch_imp_var[arma::randperm(launch_imp_var.size())[0]];
+    
+    p_launch_w.row(new_imp).fill(1);
+    p_launch_w.row(new_unimp).fill(0);
+    
+    // logA
+    double logA_l = log_w(z, clus_assign, gamma_mat, p_launch_w, beta_mat, r0w, r1w) -
+      log_w(z, clus_assign, gamma_mat, launch_w, beta_mat, r0w, r1w);
+    
+    // MH
+    double logU_l = std::log(R::runif(0.0, 1.0));
+    if(logU_l <= logA_l){
+      launch_w = p_launch_w;
+    }
+    
   }
   
-  // Calculate logA
-  double logA = log_w(z, clus_assign, gamma_mat, proposed_w, beta_mat, r0w, r1w);
-  logA -= log_w(z, clus_assign, gamma_mat, w, beta_mat, r0w, r1w);
-  
-  // MH
+  // Propose
+  double logA = log_w(z, clus_assign, gamma_mat, launch_w, beta_mat, r0w, r1w) -
+    log_w(z, clus_assign, gamma_mat, w, beta_mat, r0w, r1w);
   double logU = std::log(R::runif(0.0, 1.0));
   if(logU <= logA){
-    w = proposed_w;
+    w = launch_w;
   }
   
   return w;
@@ -803,6 +830,7 @@ Rcpp::List sm(unsigned int K_max, arma::mat z, arma::uvec clus_assign,
   result["clus_assign"] = new_assign;
   result["tau"] = new_tau;
   result["beta"] = new_beta;
+  result["proposed_assign"] = proposed_assign;
   return result;
 
 }
@@ -919,7 +947,9 @@ Rcpp::List full_func_at_risk(unsigned int iter, unsigned int K_max, arma::mat z,
   
   // Object for storing the result
   arma::cube beta_result(K_max, w.size(), iter);
+  arma::cube gamma_result(z.n_rows, z.n_cols, iter);
   arma::mat ci_result(z.n_rows, iter);
+  arma::mat ci_pp(z.n_rows, iter);
   arma::vec sm_result(iter, arma::fill::zeros);
   arma::vec accept_result(iter, arma::fill::zeros);
   arma::vec logA_sm_result(iter, arma::fill::zeros);
@@ -966,6 +996,7 @@ Rcpp::List full_func_at_risk(unsigned int iter, unsigned int K_max, arma::mat z,
     sm_result.row(t).fill(sm_list["split_ind"]);
     accept_result.row(t).fill(sm_list["accept_MH"]);
     logA_sm_result.row(t).fill(sm_list["logA"]);
+    arma::uvec pp_assign = sm_list["proposed_assign"];
     
     // Update Cluster assignment: (3) Update tau and U
     param_list = update_tau_u(ci_sm, tau_sm, theta, U_init);
@@ -980,9 +1011,11 @@ Rcpp::List full_func_at_risk(unsigned int iter, unsigned int K_max, arma::mat z,
     U_init = new_U;
     
     beta_result.slice(t) = beta_init;
+    gamma_result.slice(t) = gamma_init;
     
     for(int i = 0; i < ci_init.size(); ++i){
       ci_result.row(i).col(t).fill(ci_init[i]);
+      ci_pp.row(i).col(t).fill(pp_assign[i]);
     } 
     
   } 
@@ -993,62 +1026,70 @@ Rcpp::List full_func_at_risk(unsigned int iter, unsigned int K_max, arma::mat z,
   result["accept_result"] = accept_result;
   result["sm_result"] = sm_result;
   result["logA"] = logA_sm_result;
+  result["proposed_assign"] = ci_pp;
+  result["gamma"] = gamma_result;
   return result;
   
 }
 
-Rcpp::List full_func_1(unsigned int iter, unsigned int K_max, arma::mat z,
-                       arma::mat gamma_mat, arma::vec w,
-                       arma::vec theta, unsigned int launch_iter,
-                       double MH_var, double s2, double r0c, double r1c){
+// [[Rcpp::export]]
+Rcpp::List full_func_all(unsigned int iter, unsigned int K_max, arma::mat z,
+                         arma::vec theta, unsigned int launch_iter_w, 
+                         unsigned int launch_iter, double MH_var, double s2, 
+                         double r0g, double r1g, double r0w, double r1w,
+                         double r0c, double r1c){
   
   // Object for storing the result
-  arma::cube beta_result(K_max, w.size(), iter);
+  arma::cube beta_result(K_max, z.n_cols, iter);
+  arma::cube gamma_result(z.n_rows, z.n_cols, iter);
   arma::mat ci_result(z.n_rows, iter);
+  arma::mat w_result(z.n_cols, iter);
+  arma::mat ci_pp(z.n_rows, iter);
   arma::vec sm_result(iter, arma::fill::zeros);
   arma::vec accept_result(iter, arma::fill::zeros);
   arma::vec logA_sm_result(iter, arma::fill::zeros);
   
-  // Initial the cluster assignment
-  arma::vec n_init(K_max, arma::fill::zeros);
-  arma::uvec ci_init(z.n_rows, arma::fill::zeros); 
-  for(int i = 0; i < z.n_rows; ++i){
-    ci_init[i] = arma::randperm(K_max)[0];
-    n_init[ci_init[i]] += 1;
-  }
+  // Initialize the at-risk indicator and important variable indicator
+  arma::mat gamma_init(z.n_rows, z.n_cols, arma::fill::ones);
+  arma::vec w_init(z.n_cols, arma::fill::ones);
   
-  // Initialize tau and beta
-  arma::uvec active_init = arma::unique(ci_init);
+  // Initialize beta and cluster assignment
+  arma::mat beta_init(K_max, w_init.size(), arma::fill::zeros);
+  arma::uvec ci_init(z.n_rows, arma::fill::zeros);
+  
+  // Initialize tau
   arma::vec tau_init(K_max, arma::fill::zeros);
-  arma::mat beta_init(K_max, w.size(), arma::fill::zeros);
-  
-  for(int kk = 0; kk < active_init.size(); ++kk){
-    int k = active_init[kk];
-    tau_init[k] = R::rgamma(theta[k], 1.0);
-    beta_init.row(kk) = arma::randn(w.size(), arma::distr_param(0.0, std::sqrt(s2))).t();
-  }
-  
-  // Initialize U
+  tau_init[0] = R::rgamma(theta[0], 1.0);
   double U_init = R::rgamma(z.n_rows, 1/(arma::accu(tau_init)));
   
+  arma::mat gamma_mcmc(gamma_init);
+  arma::vec w_mcmc(w_init);
   arma::mat beta_mcmc(beta_init);
   Rcpp::List realloc_list;
   Rcpp::List sm_list;
   Rcpp::List param_list;
-   
+  
   // Begin
   for(int t = 0; t < iter; ++t){
+    
+    // Update at-risk indicator
+    gamma_mcmc = update_gamma(z, ci_init, gamma_init, w_init, beta_init, r0g, r1g);
+    
+    // Update important variable indicator 
+    w_mcmc = update_w(z, ci_init, gamma_init, w_init, beta_init, launch_iter_w,
+                      r0w, r1w);
+
     // Update beta
-    beta_mcmc = update_beta(z, ci_init, gamma_mat, w, beta_init, MH_var, s2);
-     
+    beta_mcmc = update_beta(z, ci_init, gamma_mcmc, w_mcmc, beta_init, MH_var, s2);
+    
     // Update Cluster assignment: (1) Reallocate
-    realloc_list = realloc(z, ci_init, gamma_mat, w, beta_mcmc, tau_init, theta);
+    realloc_list = realloc(z, ci_init, gamma_mcmc, w_mcmc, beta_mcmc, tau_init, theta);
     arma::uvec ci_realloc = realloc_list["clus_assign"];
     arma::vec tau_realloc = realloc_list["tau"];
     arma::mat beta_realloc = realloc_list["beta"];
-     
+    
     // Update Cluster assignment: (2) SM
-    sm_list = sm(K_max, z, ci_realloc, gamma_mat, w, beta_realloc, tau_realloc,
+    sm_list = sm(K_max, z, ci_realloc, gamma_mcmc, w_mcmc, beta_realloc, tau_realloc,
                  theta, launch_iter, s2, r0c, r1c);
     arma::uvec ci_sm = sm_list["clus_assign"];
     arma::vec tau_sm = sm_list["tau"];
@@ -1056,22 +1097,28 @@ Rcpp::List full_func_1(unsigned int iter, unsigned int K_max, arma::mat z,
     sm_result.row(t).fill(sm_list["split_ind"]);
     accept_result.row(t).fill(sm_list["accept_MH"]);
     logA_sm_result.row(t).fill(sm_list["logA"]);
+    arma::uvec pp_assign = sm_list["proposed_assign"];
     
     // Update Cluster assignment: (3) Update tau and U
     param_list = update_tau_u(ci_sm, tau_sm, theta, U_init);
     double new_U = param_list["U"];
     arma::vec new_tau = param_list["tau"];
-     
+    
     // Record the result
+    gamma_init = gamma_mcmc;
+    w_init = w_mcmc;
     beta_init = beta_sm;
     ci_init = ci_sm;
     tau_init = new_tau;
     U_init = new_U;
     
     beta_result.slice(t) = beta_init;
+    gamma_result.slice(t) = gamma_init;
+    w_result.col(t) = w_init;
     
     for(int i = 0; i < ci_init.size(); ++i){
       ci_result.row(i).col(t).fill(ci_init[i]);
+      ci_pp.row(i).col(t).fill(pp_assign[i]);
     } 
     
   } 
@@ -1079,10 +1126,103 @@ Rcpp::List full_func_1(unsigned int iter, unsigned int K_max, arma::mat z,
   Rcpp::List result;
   result["beta"] = beta_result;
   result["ci"] = ci_result;
+  result["w"] = w_result;
   result["accept_result"] = accept_result;
   result["sm_result"] = sm_result;
   result["logA"] = logA_sm_result;
-  result["init_clus"] = active_init.size();
+  result["proposed_assign"] = ci_pp;
+  result["gamma"] = gamma_result;
   return result;
   
-} 
+}
+
+// 
+// Rcpp::List full_func_1(unsigned int iter, unsigned int K_max, arma::mat z,
+//                        arma::mat gamma_mat, arma::vec w,
+//                        arma::vec theta, unsigned int launch_iter,
+//                        double MH_var, double s2, double r0c, double r1c){
+//   
+//   // Object for storing the result
+//   arma::cube beta_result(K_max, w.size(), iter);
+//   arma::mat ci_result(z.n_rows, iter);
+//   arma::vec sm_result(iter, arma::fill::zeros);
+//   arma::vec accept_result(iter, arma::fill::zeros);
+//   arma::vec logA_sm_result(iter, arma::fill::zeros);
+//   
+//   // Initial the cluster assignment
+//   arma::vec n_init(K_max, arma::fill::zeros);
+//   arma::uvec ci_init(z.n_rows, arma::fill::zeros); 
+//   for(int i = 0; i < z.n_rows; ++i){
+//     ci_init[i] = arma::randperm(K_max)[0];
+//     n_init[ci_init[i]] += 1;
+//   }
+//   
+//   // Initialize tau and beta
+//   arma::uvec active_init = arma::unique(ci_init);
+//   arma::vec tau_init(K_max, arma::fill::zeros);
+//   arma::mat beta_init(K_max, w.size(), arma::fill::zeros);
+//   
+//   for(int kk = 0; kk < active_init.size(); ++kk){
+//     int k = active_init[kk];
+//     tau_init[k] = R::rgamma(theta[k], 1.0);
+//     beta_init.row(kk) = arma::randn(w.size(), arma::distr_param(0.0, std::sqrt(s2))).t();
+//   }
+//   
+//   // Initialize U
+//   double U_init = R::rgamma(z.n_rows, 1/(arma::accu(tau_init)));
+//   
+//   arma::mat beta_mcmc(beta_init);
+//   Rcpp::List realloc_list;
+//   Rcpp::List sm_list;
+//   Rcpp::List param_list;
+//    
+//   // Begin
+//   for(int t = 0; t < iter; ++t){
+//     // Update beta
+//     beta_mcmc = update_beta(z, ci_init, gamma_mat, w, beta_init, MH_var, s2);
+//      
+//     // Update Cluster assignment: (1) Reallocate
+//     realloc_list = realloc(z, ci_init, gamma_mat, w, beta_mcmc, tau_init, theta);
+//     arma::uvec ci_realloc = realloc_list["clus_assign"];
+//     arma::vec tau_realloc = realloc_list["tau"];
+//     arma::mat beta_realloc = realloc_list["beta"];
+//      
+//     // Update Cluster assignment: (2) SM
+//     sm_list = sm(K_max, z, ci_realloc, gamma_mat, w, beta_realloc, tau_realloc,
+//                  theta, launch_iter, s2, r0c, r1c);
+//     arma::uvec ci_sm = sm_list["clus_assign"];
+//     arma::vec tau_sm = sm_list["tau"];
+//     arma::mat beta_sm = sm_list["beta"];
+//     sm_result.row(t).fill(sm_list["split_ind"]);
+//     accept_result.row(t).fill(sm_list["accept_MH"]);
+//     logA_sm_result.row(t).fill(sm_list["logA"]);
+//     
+//     // Update Cluster assignment: (3) Update tau and U
+//     param_list = update_tau_u(ci_sm, tau_sm, theta, U_init);
+//     double new_U = param_list["U"];
+//     arma::vec new_tau = param_list["tau"];
+//      
+//     // Record the result
+//     beta_init = beta_sm;
+//     ci_init = ci_sm;
+//     tau_init = new_tau;
+//     U_init = new_U;
+//     
+//     beta_result.slice(t) = beta_init;
+//     
+//     for(int i = 0; i < ci_init.size(); ++i){
+//       ci_result.row(i).col(t).fill(ci_init[i]);
+//     } 
+//     
+//   } 
+//   
+//   Rcpp::List result;
+//   result["beta"] = beta_result;
+//   result["ci"] = ci_result;
+//   result["accept_result"] = accept_result;
+//   result["sm_result"] = sm_result;
+//   result["logA"] = logA_sm_result;
+//   result["init_clus"] = active_init.size();
+//   return result;
+//   
+// } 
