@@ -98,7 +98,13 @@ save(scenario3, file = "/Users/kevinkvp/Desktop/s3.RData")
 rm(list = ls())
 
 ### Try Shi
-### start_time <- Sys.time()
-### result_shi <- PerformClustering(t(sim_list$z), "DP", totaliter = 10000, burnin = 5000, thin = 1)
-### Sys.time() - start_time 
-### salso(result_shi$crec)
+load("/Users/kevinkvp/Desktop/s1.RData")
+
+set.seed(1)
+start_time <- Sys.time()
+result_shi <- PerformClustering(t(scenario1$data$z), "DP", 
+                                w = 1, totaliter = 20000, burnin = 5000, thin = 1)
+Sys.time() - start_time 
+
+salso(result_shi$crec)
+table(salso(result_shi$crec, maxNClusters = 10), scenario3$data$ci + 1)
