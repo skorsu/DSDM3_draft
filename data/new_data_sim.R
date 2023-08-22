@@ -1,62 +1,95 @@
+library(ggplot2)
+library(gridExtra)
 library(tidyverse)
 
-data_sim <- function(n, J, K, peak, prob_1, pi_gm, sum_z){
+### Function: Simulating the data
+dat_sim <- function(n, J, K, scenario, xi_conc, pi_gm, sum_z){
   
+  if(! scenario %in% 1:4){
+    warning("the scenario does not existed. use the first scenario instead.")
+    scenario <- 1
+  }
+  
+  ### Generate the cluster assignment
   ci <- sample(1:K, n, replace = TRUE)
   
-  imp_base <- expand.grid(replicate(J, list(c(0, 1))))
-  imp_clus <- NULL
-  if(length(peak) == 1){
-    imp_clus <- sample(which(rowSums(imp_base) %in% peak), K, replace = FALSE)
-  } else {
-    K_not_1 <- max(round((1 - prob_1) * K), 1)
-    imp_clus <- c(sample(which(rowSums(imp_base) == peak[1]), K - K_not_1, replace = FALSE),
-                  sample(which(rowSums(imp_base) == peak[2]), K_not_1, replace = FALSE))
+  ### Create an important matrix
+  ind_peak <- sample(1:J, 3, replace = FALSE)
+  if(scenario == 1){
+    ind_peak <- sample(1:J, 5, replace = FALSE)
+  } else if(scenario == 2){
+    ind_peak <- NULL
   }
   
-  imp_var_clus <- matrix(unlist(imp_base[imp_clus, ]), ncol = J)
+  mix_peak <- NULL
+  mix_index <- NULL
+  if(scenario == 2){
+    mix_peak <- sample(1:J, replace = FALSE)
+  } else if(scenario == 3){
+    mix_index <- sample((1:J)[! 1:J %in% ind_peak], 3, replace = FALSE)
+    t1 <- sample(mix_index, 2, replace = FALSE)
+    t2 <- sample(mix_index, 2, replace = FALSE)
+    while(sum(t2 %in% t1) == 2){
+      t2 <- sample(mix_index, 2, replace = FALSE)
+    }
+    mix_peak <- c(t1, t2)
+  } else if(scenario == 4){
+    mix_index <- sample(ind_peak, 3, replace = FALSE)
+    t1 <- sample(mix_index, 2, replace = FALSE)
+    t2 <- sample(mix_index, 2, replace = FALSE)
+    while(sum(t2 %in% t1) == 2){
+      t2 <- sample(mix_index, 2, replace = FALSE)
+    }
+    mix_peak <- c(t1, t2)
+  }
   
-  xi <- imp_base[imp_clus, ]
-  xi[xi == 0] <- 0.1
-  xi <- matrix(unlist(xi), ncol = J)
+  ind_mat <- diag(J)[ind_peak, ]
+  mix_mat <- diag(J)[mix_peak, ]
+  imp_mat <- rbind(ind_mat, rowsum(mix_mat, as.integer(gl(nrow(mix_mat), 2, nrow(mix_mat)))))
+  imp_mat <- matrix(imp_mat, ncol = J)
   
-  pi_gm_mat <- matrix(pi_gm, nrow = K, ncol = J)
+  ### Create a xi matrix
+  xi <- imp_mat
+  xi[xi == 0] <- xi_conc
   
-  zi <- matrix(NA, ncol = J, nrow = n)
-  gm <- matrix(NA, ncol = J, nrow = n)
+  ### Create an at-risk indicator matrix and simulate the data
+  gm <- matrix(NA, nrow = n, ncol = J)
+  z <- matrix(NA, nrow = n, ncol = J)
+  pi_gamma <- matrix(pi_gm, ncol = J, nrow = K)
   
   for(i in 1:n){
-    gm[i, ] <- as.numeric(rbinom(J, 1, pi_gm_mat[ci[i], ]) | imp_var_clus[ci[i], ])
-    zi[i, ] <- rmultinom(1, sum_z, xi[ci[i], ] * gm[i, ])
+    gm[i, ] <- as.numeric(rbinom(J, 1, pi_gamma[ci[i], ]) | imp_mat[ci[i], ])
+    z[i, ] <- rmultinom(1, sum_z, gm[i, ] * xi[ci[i], ])
   }
   
-  list(ci = ci - 1, xi = xi, z = zi, gm = gm)
-  
+  list(ci = ci, clus_var = imp_mat, xi = xi, gamma = gm, z = z)
+
 }
 
-set.seed(1)
-t <- data_sim(n = 100, J = 10, K = 5, peak = c(1, 2), prob_1 = 0.6, 
-              sum_z = 2500, pi_gm = c(0.75, 0.85, 0.95, 1, 0.8))
-
-data.frame(v = paste0("V", str_pad(1:10, 2, pad = "0")),
-           m = colMeans(t$z[which(t$ci == 4), ])) %>%
-  ggplot(aes(x = v, y = m)) +
-  geom_bar(stat="identity") +
-  theme_bw() +
-  ylim(0, 2000)
-
-matrix(unlist(t$xi), ncol = 10)
-t$xi
-
-as.numeric(t$xi)
-
-t$xi[4, ]/1.09
-t$xi[5, ]/2.08
-rowSums(t$xi)
-
-sapply(t$xi)
-
-tt <- matrix(c(0.5, 0.5, 0.75, 0.75, 1), ncol = 10, nrow = 5)
-xx <- rbinom(10, 1, tt[1, ])
-xx
-as.numeric(t$imp_clus[1, ] | xx)
+### Function: Plot
+sim_plot <- function(n, J, K, scenario, xi_conc, pi_gm, sum_z){
+  
+  if(! scenario %in% 1:4){
+    warning("the scenario does not existed. use the first scenario instead.")
+    scenario <- 1
+  }
+  
+  ### Simulate the data
+  sim_list <- dat_sim(n, J, K, scenario, xi_conc, pi_gm, sum_z)
+  
+  ### Create a plot
+  clus_plot <- vector(mode = "list", length = K)
+  for(k in 1:K){
+    title_text <- paste0("Cluster ", k)
+    clus_plot[[k]] <- data.frame(x = paste0("X", str_pad(1:10, 2, pad = "0")), 
+                                 y = colMeans(sim_list$z[which(sim_list$ci == k), ])) %>%
+      ggplot(aes(x = x, y = y)) +
+      geom_bar(stat = "identity", fill = "mediumaquamarine") +
+      theme_bw() +
+      ylim(0, 0.75 * sum_z) +
+      labs(x = "Variables", y = "Count", title = title_text)
+  }
+  
+  grid.arrange(grobs = clus_plot, layout_matrix = matrix(1:6, ncol = 2))
+  
+}
