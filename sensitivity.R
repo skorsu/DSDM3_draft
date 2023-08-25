@@ -1,7 +1,10 @@
 library(foreach)
 library(doParallel)
 library(salso)
+library(sparseMbClust)
 library(mclustcomp)
+library(ecodist)
+library(cluster)
 library(xtable)
 
 ### Import function
@@ -80,6 +83,34 @@ result <- foreach(t = 1:10) %dopar% {
   }
 stopImplicitCluster()
 
+### Test: Yushi
+set.seed(12)
+sim_list <- dat_sim(n = 100, J = 10, K = 5, scenario = 4, xi_conc = 0.1, pi_gm = 0.75, sum_z = 2500)
+start_time <- Sys.time()
+mod <- PerformClustering(t(sim_list$z), "DP", c = rep(1, 100), gamma = rep(1, 10),
+                         w = 1, beta1 = 100, beta2 = 1, totaliter = 20000,
+                         burnin = 5000, thin = 1)
+tot_time <- as.numeric(difftime(Sys.time(), start_time, "secs"))
+tot_time
+
+ci_result <- as.numeric(salso(mod$crec, maxNClusters = 10))
+
+length(unique(ci_result))
+
+mclustcomp(sim_list$ci, ci_result)[c(1, 5, 22), ]
+
+### hclust: Brey-Curtis Distance
+dist(sim_list$z)
+result <- hclust(dist(sim_list$z))
+sil_mat <- matrix(NA, ncol = 2, nrow = 9)
+for(i in 2:10){
+  sil_mat[(i-1), ] <- c(i, 
+                        mean(silhouette(cutree(result, k=i), dist(sim_list$z))[, 3]))
+}
+plot(sil_mat, type = "l")
+table(cutree(result, k=5), sim_list$ci)
+plot(result)
+
 ### Summarize
 our_mod <- matrix(NA, ncol = 4, nrow = 10)
 dmz_mod <- matrix(NA, ncol = 4, nrow = 10)
@@ -92,3 +123,8 @@ for(i in 1:10){
 }
 
 xtable(t(sapply(list(our_mod, dmz_mod, dmdm_mod), report_table)))
+
+set.seed(1)
+t <- dat_sim(n = 100, J = 10, K = 5, scenario = 1, xi_conc = 0.1, pi_gm = 0.75, sum_z = 2500)
+t$gamma[1:5, ]
+t$z[1:5, ]
