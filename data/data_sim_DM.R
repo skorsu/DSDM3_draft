@@ -57,7 +57,7 @@ simDM_sum <- function(simDM_list){
     group_by(ci) %>%
     summarise_all("mean") %>% 
     max() %>%
-    plyr::round_any(100, f = ceiling)
+    plyr::round_any(10, f = ceiling)
   
   list_plot <- vector(mode = "list", length =  simDM_list$K)
   for(k in 1:simDM_list$K){
