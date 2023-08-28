@@ -2,6 +2,7 @@
 library(tidyverse)
 library(ggplot2)
 library(dirmult)
+library(gridExtra)
 
 ### Function: simulate the zero-inflated DM.
 simDM <- function(n, pattern, xi_conc, pi_gm, pi_c, z_sum, theta){
@@ -51,25 +52,27 @@ simDM_sum <- function(simDM_list){
   print(round(sum_list, 5))
   
   ### Plot
-  dat_k <- simDM_list$z[which(simDM_list$ci == 1), ]
-  title_text <- paste0("Cluster ", 1)
-  data.frame(x = paste0("V", str_pad(1:simDM_list$J, ceiling(log10(simDM_list$J)), pad = "0")),
-             y = colMeans(dat_k)) %>%
-    ggplot(aes(x = x, y = y)) +
-    geom_bar(stat = "identity", fill = "mediumaquamarine") +
-    theme_bw() +
-    # ylim(0, 0.75 * simDM_list$z_sum) +
-    labs(x = "Variables", y = "Count", title = title_text)
+  
+  ylim_u <- data.frame(z = simDM_list$z, ci = simDM_list$ci) %>%
+    group_by(ci) %>%
+    summarise_all("mean") %>% 
+    max() %>%
+    plyr::round_any(100, f = ceiling)
+  
+  list_plot <- vector(mode = "list", length =  simDM_list$K)
+  for(k in 1:simDM_list$K){
+    dat_k <- simDM_list$z[which(simDM_list$ci == k), ]
+    title_text <- paste0("Cluster ", k)
+    list_plot[[k]] <- data.frame(x = paste0("V", str_pad(1:simDM_list$J, ceiling(log10(simDM_list$J)), pad = "0")),
+                                 y = colMeans(dat_k)) %>%
+      ggplot(aes(x = x, y = y)) +
+      geom_bar(stat = "identity", fill = "mediumaquamarine") +
+      theme_bw() +
+      ylim(0, ylim_u) +
+      labs(x = "Variables", y = "Count", title = title_text)
+    
+  }
+  
+  list(summary_zero = sum_list, plot = list_plot)
 
 }
-
-set.seed(1)
-pat_matrix <- as.matrix(rbind(c(rep(1, 10), rep(0, 20)),
-                              c(rep(0, 10), rep(1, 10), rep(0, 10)),
-                              c(rep(0, 20), rep(1, 10))))
-test <- simDM(n = 100, pattern = pat_matrix, xi_conc = 10, pi_gm = c(0.95, 0.9, 0.75), 
-              pi_c = c(0.2, 0.5, 0.8), z_sum = 3000, theta = 0.01)
-simDM_sum(test)
-
-test$z[test$ci == 1, ]
-test$z
