@@ -39,6 +39,7 @@ simDM <- function(n, pattern, xi_conc, pi_gm, pi_c, z_sum, theta){
   
 }
 
+set.seed(1)
 test <- simDM(n = 100, pattern = pat_matrix, xi_conc = 10, pi_gm = c(0.95, 0.9, 0.75), 
               pi_c = c(0.2, 0.5, 0.8), z_sum = 200, theta = 0.01)
 
