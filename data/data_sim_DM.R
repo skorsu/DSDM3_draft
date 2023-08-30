@@ -5,7 +5,7 @@ library(dirmult)
 library(gridExtra)
 
 ### Function: simulate the zero-inflated DM.
-simDM <- function(n, pattern, xi_conc, pi_gm, pi_c, z_sum, theta){
+simDM <- function(n, pattern, xi_conc, pi_gm, pi_c, z_sum_L, z_sum_U, theta){
   
   ### The number of cluster
   K <- nrow(pattern)
@@ -27,6 +27,7 @@ simDM <- function(n, pattern, xi_conc, pi_gm, pi_c, z_sum, theta){
   
   for(i in 1:n){
     gm_mat[i, ] <- rbinom(J, 1, pi_gm_mat[ci[i], ])
+    z_sum <- round(runif(1, z_sum_L, z_sum_U))
     z_mat[i, ] <- simPop(J = 1, n = z_sum, 
                          pi = (gm_mat[i, ] * xi[ci[i], ])/sum(gm_mat[i, ] * xi[ci[i], ]),
                          theta = theta)$data
@@ -63,10 +64,11 @@ simDM_sum <- function(simDM_list){
   for(k in 1:simDM_list$K){
     dat_k <- simDM_list$z[which(simDM_list$ci == k), ]
     title_text <- paste0("Cluster ", k)
-    list_plot[[k]] <- data.frame(x = paste0("V", str_pad(1:simDM_list$J, ceiling(log10(simDM_list$J)), pad = "0")),
+    list_plot[[k]] <- data.frame(x = paste0("V", str_pad(1:simDM_list$J, ceiling(log10(simDM_list$J)) + 1, pad = "0")),
                                  y = colMeans(dat_k)) %>%
       ggplot(aes(x = x, y = y)) +
       geom_bar(stat = "identity", fill = "mediumaquamarine") +
+      scale_x_discrete(guide = guide_axis(angle = 90))  + 
       theme_bw() +
       ylim(0, ylim_u) +
       labs(x = "Variables", y = "Count", title = title_text)
