@@ -26,7 +26,8 @@ simDM <- function(n, pattern, xi_conc, pi_gm, pi_c, z_sum_L, z_sum_U, theta){
   z_mat <- matrix(NA, ncol = J, nrow = n)
   
   for(i in 1:n){
-    gm_mat[i, ] <- rbinom(J, 1, pi_gm_mat[ci[i], ])
+    gm_vec <- rbinom(J, 1, pi_gm_mat[ci[i], ])
+    gm_mat[i, ] <- as.numeric(gm_vec | pattern[ci[i], ])
     z_sum <- round(runif(1, z_sum_L, z_sum_U))
     z_mat[i, ] <- simPop(J = 1, n = z_sum, 
                          pi = (gm_mat[i, ] * xi[ci[i], ])/sum(gm_mat[i, ] * xi[ci[i], ]),

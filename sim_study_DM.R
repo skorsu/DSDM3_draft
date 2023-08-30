@@ -27,7 +27,7 @@ registerDoParallel(detectCores() - 1)
 result <- foreach(t = 1:20, .combine = "rbind") %dopar% {
   set.seed(t + 83)
   sim_dat <- simDM(n = 100, pattern = pat_mat, xi_conc = 10, pi_gm = c(0.75), 
-                   pi_c = c(1, 1, 1), z_sum_L = 250, z_sum_U = 500, 
+                   pi_c = c(1, 1, 1, 1, 1), z_sum_L = 250, z_sum_U = 500, 
                    theta = 0.01)
   summary_data <- simDM_sum(sim_dat)
   return(summary_data$summary_zero)
