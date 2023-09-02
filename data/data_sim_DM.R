@@ -34,7 +34,7 @@ simDM <- function(n, pattern, xi_conc, pi_gm, pi_c, z_sum_L, z_sum_U, theta){
                          theta = theta)$data
   }
   
-  list(K = K, J = J, xi = xi, ci = ci, gamma = gm_mat, z = z_mat, z_sum = z_sum)
+  list(K = K, J = J, xi = xi, ci = ci, gamma = gm_mat, z = z_mat)
   
 }
 

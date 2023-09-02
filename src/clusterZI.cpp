@@ -5,12 +5,7 @@
 #define pi 3.141592653589793238462643383280
 
 // Note: -----------------------------------------------------------------------
-// * Cluster index starts with 0.
-// (/) Debugging -- check both log probability function and sampler function.
-// * Add the description for the function.
-// * Update the overleaf for the corresponding parameters.
-// (/) Instead of using xi as a input, using beta as a input then take the exp().
-//
+// * Debugging
 // -----------------------------------------------------------------------------
 
 // [[Rcpp::export]]
@@ -66,7 +61,20 @@ Rcpp::List adjust_tau_beta(arma::mat beta_mat, arma::vec tau_vec,
   return result;
   
 }
+
+// [[Rcpp::export]]
+arma::umat log_at_risk(arma::mat z, arma::mat gamma_mat){
   
+  // Find the location of zero count
+  arma::uvec z_zero = arma::find(z == 0);
+  
+  arma::umat test = arma::ind2sub(arma::size(gamma_mat), z_zero);
+  
+  return test;
+  
+}
+
+
 // [[Rcpp::export]]
 double log_g_ijk(int j, arma::vec zi, arma::vec gi, arma::vec w, arma::vec beta_k,
                  double r0g, double r1g){
