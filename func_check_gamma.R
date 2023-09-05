@@ -13,11 +13,45 @@ source(paste0(path, "data_sim_DM.R"))
 ### Data Simulation
 pat_mat1 <- diag(20)[1:5, ]
 set.seed(72)
-sim_dat <- simDM(n = 100, pattern = pat_mat1, xi_conc = 10, pi_gm = c(0.95), 
-                 pi_c = c(1, 1, 1, 1, 1), z_sum_L = 500, z_sum_U = 750, 
+sim_dat <- simDM(n = 200, pattern = pat_mat1, xi_conc = 10, pi_gm = c(0.75), 
+                 pi_c = c(1, 1, 1, 1, 1), z_sum_L = 50, z_sum_U = 100, 
                  theta = 0.01)
-simDM_sum(sim_dat)
-log_at_risk(z = sim_dat$z, gamma_mat = sim_dat$gamma)
+summa <- simDM_sum(sim_dat)
+
+xx <- sample(c(2, 3), 200, replace = TRUE)
+bb <- matrix(0, nrow = 5, ncol = 20)
+bb[2:3, ] <- rnorm(40)
+
+tt <- sm(K_max = 5, z = sim_dat$z, clus_assign = xx,
+   gamma_mat = sim_dat$gamma, beta_mat = bb,
+   tau_vec = c(0, 0, 1, 1, 0), theta_vec = rep(1, 5), launch_iter = 10, 
+   mu = 0, s2 = 100, r0c = 1, r1c = 1)
+
+tt$expand_ind
+table(`launch` = tt$launch_assign)
+table(`launch` = tt$launch_assign, init = xx)
+table(sim_dat$ci - 1, xx)
+table(sim_dat$ci - 1, tt$launch_assign)
+tt$samp_ind
+tt$samp_clus
+
+
+
+(sim_dat$ci - 1)[which((sim_dat$ci - 1) %in% c(4, 2))]
+
+table(sim_dat$ci - 1)
+
+
+table(x - 1)
+
+colSums(sim_dat$z[which(sim_dat$ci == 2), ])/sum(sim_dat$z[which(sim_dat$ci == 2), ])
+start_time <- Sys.time()
+result <- beta_ar_update(K = 5, iter = 10000, z = sim_dat$z, clus_assign = sim_dat$ci - 1, 
+                         r0g = 1, r1g = 1, mu = 0, s2 = 1000, s2_MH = 0.01)
+Sys.time() - start_time
+k <- 2
+xi_mcmc <- exp(t(result$beta[k, , -c(1:5000)]))/rowSums(exp(t(result$beta[k, , -c(1:5000)])))
+plot(xi_mcmc[, 2], type = "l")
 
 
 # ------------------------------------------------------------------------------
