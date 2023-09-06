@@ -86,6 +86,8 @@ double log_marginal(arma::vec zi, arma::vec gmi, arma::vec beta_k){
 arma::uvec realloc_sm(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat, 
                       arma::mat beta_mat, arma::uvec S, arma::uvec clus_sm){
   
+  /* Reallocation algorithm for the split merge */
+  
   arma::uvec new_assign(clus_assign); 
   arma::vec nk(2, arma::fill::zeros);
   unsigned int K_sm = clus_sm.size();
@@ -129,6 +131,50 @@ arma::uvec realloc_sm(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat,
   return new_assign;
   
 }
+
+// [[Rcpp::export]]
+double log_proposal(arma::uvec clus_after, arma::uvec clus_before, 
+                    arma::mat z, arma::mat gamma_mat, arma::mat beta_mat, 
+                    arma::uvec S, arma::uvec clus_sm){
+  
+  /* Calculate the proposal probability, p(after|before), in a log scale */
+  
+  double log_val = 0.0;
+  
+  arma::vec nk(2, arma::fill::zeros);
+  
+  for(int ss = 0; ss < S.size(); ++ss){
+    int s = S[ss];
+    arma::uvec n_index = arma::find(clus_sm == clus_before[s]);
+    nk[n_index[0]] += 1;
+  }
+  
+  
+  for(int ss = 0; ss < S.size(); ++ss){
+    int s = S[ss];
+    arma::uvec old_index = arma::find(clus_sm == clus_before[s]);
+    nk[old_index[0]] -= 1;
+    
+    // Calculate the reallocation probability
+    arma::vec zs = z.row(s).t();
+    arma::vec gms = gamma_mat.row(s).t();
+    arma::vec log_prob(2, arma::fill::zeros);
+    
+    for(int kk = 0; kk <= 1; ++kk){
+      int k = clus_sm[kk];
+      log_prob[kk] += log_marginal(zs, gms, beta_mat.row(k).t());
+      log_prob[kk] += std::log(nk[kk]);
+    }
+    
+    arma::vec prob = log_sum_exp(log_prob);
+    arma::uvec new_index = arma::find(clus_sm == clus_after[s]);
+    log_val += std::log(prob[new_index[0]]);
+    nk[new_index[0]] += 1;
+  }
+  
+  return log_val;
+  
+} 
 
 // *****************************************************************************
 // [[Rcpp::export]]
@@ -315,7 +361,7 @@ Rcpp::List sm(unsigned int K_max, arma::mat z, arma::uvec clus_assign,
     int new_ck = inactive_clus[arma::randperm(inactive_clus.size(), 1)[0]];
     launch_assign.row(samp_ind[0]).fill(new_ck);
     samp_clus.row(0).fill(new_ck);
-    launch_tau.row(new_ck).fill(R::rgamma(tau_vec[new_ck], 1.0));
+    launch_tau.row(new_ck) = R::rgamma(theta_vec[new_ck], 1.0);
     launch_beta.row(new_ck) = arma::randn(z.n_cols, arma::distr_param(mu, std::sqrt(s2))).t(); 
   } else { // Merge
     expand_ind = 0;
@@ -329,17 +375,41 @@ Rcpp::List sm(unsigned int K_max, arma::mat z, arma::uvec clus_assign,
   }
   
   // Perform last SM
-  arma::vec x;
+  arma::uvec proposed_assign(launch_assign);
   if(expand_ind == 1){
-    
+    proposed_assign = realloc_sm(z, launch_assign, gamma_mat, launch_beta, S, samp_clus);
+  } else {
+    proposed_assign.rows(S).fill(samp_clus[1]);
+    proposed_assign.rows(samp_ind).fill(samp_clus[1]);
   }
+  
+  Rcpp::List proposed_tb =  adjust_tau_beta(launch_beta, launch_tau, proposed_assign);
+  arma::mat proposed_beta = proposed_tb["beta"];
+  arma::vec proposed_tau = proposed_tb["tau"];
+  
+  // MH
+  double logA = 0.0;
+  for(int i = 0; i < z.n_rows; ++i){
+    arma::vec zi = z.row(i).t();
+    arma::vec gmi = gamma_mat.row(i).t();
+    logA += log_marginal(zi, gmi, proposed_beta.row(proposed_assign[i]).t());
+    logA -= log_marginal(zi, gmi, beta_mat.row(clus_assign[i]).t());
+  }
+  
+  logA += log_proposal(launch_assign, proposed_assign, z, gamma_mat, 
+                       launch_beta, S, samp_clus);
+  
+  std::cout << logA << std::endl;
   
   Rcpp::List result;
   result["samp_ind"] = samp_ind;
   result["samp_clus"] = samp_clus;
   result["launch_assign"] = launch_assign;
+  result["proposed_assign"] = proposed_assign;
   result["launch_tau"] = launch_tau;
   result["launch_beta"] = launch_beta;
+  result["proposed_tau"] = proposed_tau;
+  result["proposed_beta"] = proposed_beta;
   result["expand_ind"] = expand_ind;
   result["S"] = S;
   return result;
