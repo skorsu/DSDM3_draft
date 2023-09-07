@@ -1,3 +1,5 @@
+library(salso)
+
 ### Import the function
 im_path <- "/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/data/"
 mb_path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/data/"
@@ -11,11 +13,10 @@ if(dir.exists(mb_path)){
 source(paste0(path, "data_sim_DM.R"))
 
 ### Data Simulation
-pat_mat1 <- diag(50)[1:5, ]
-pat_mat1[1, ] <- c(rep(0, 40), rep(1, 10))
+pat_mat1 <- diag(20)[1:5, ]
 set.seed(72)
 sim_dat <- simDM(n = 200, pattern = pat_mat1, xi_conc = 10, pi_gm = c(0.75), 
-                 pi_c = c(1, 1, 1, 1, 1), z_sum_L = 50, z_sum_U = 100, 
+                 pi_c = c(1, 1, 1, 1, 1), z_sum_L = 500, z_sum_U = 1000, 
                  theta = 0.01)
 summa <- simDM_sum(sim_dat)
 sim_dat$z
@@ -33,6 +34,22 @@ tt <- sm(K_max = 5, z = sim_dat$z, clus_assign = rep(0, 200),
 rr[i] <- tt$logA
 }
 
+tt <- cluster_full(iter = 10000, K_max = 10, z = sim_dat$z, theta_vec = rep(1, 10), 
+                   launch_iter = 1, MH_var = 1, mu = 0, s2 = 2.5, r0g = 1, r1g = 1, 
+                   r0c = 1, r1c = 1, print_iter = 1000)
+
+salso(tt$assign[-(1:5000), ])
+
+
+tt$beta[, , 10000]
+
+rr <- exp(t(tt$beta[1, , ]))/rowSums(exp(t(tt$beta[1, , ])))
+plot(rr[, 45], type = "l")
+
+tt$beta[, , 1000]
+
+colMeans(sim_dat$z/rowSums(sim_dat$z))
+
 mean(log(runif(10000)) <= rr)
 hist(rr)
 
@@ -47,16 +64,17 @@ plot(rr[, 50], type = "l")
 dd <- sim_dat$z[sim_dat$ci == 1, ]/rowSums(sim_dat$z[sim_dat$ci == 1, ])
 colMeans(dd)
 
-qq <- beta_ar_update(K = 5, iter = 1000, z = sim_dat$z, clus_assign = sim_dat$ci - 1, 
+qq <- beta_ar_update(K = 5, iter = 5000, z = sim_dat$z, clus_assign = sim_dat$ci - 1, 
                      r0g = 1, r1g = 1, mu = 0, s2 = 2.5, s2_MH = 1e-5)
 rr <- exp(t(qq$beta[1, , ]))/rowSums(exp(t(qq$beta[1, , ])))
-plot(rr[, 1], type = "l")
+plot(rr[, 41], type = "l")
 
-colMeans(sim_dat$z[sim_dat$ci == 1, ]/rowSums(sim_dat$z[sim_dat$ci == 1, ]))
+colMeans(rr[-(1:1000), ])
+colMeans(sim_dat$z[sim_dat$ci == 2, ]/rowSums(sim_dat$z[sim_dat$ci == 2, ]))
 
 colMeans(sim_dat$z/rowSums(sim_dat$z))
 
-update_tau(clus_assign = sim_dat$ci - 1, tau_vec = rgamma(5, 1, 1), 
+update_tau(clus_assign = rep(1:4, 50), tau_vec = c(0, rgamma(4, 1, 1)), 
            theta_vec = rep(1, 5), U = 0.05)
 
 plot(as.numeric(tt[2, 5, ]), type = "l")
