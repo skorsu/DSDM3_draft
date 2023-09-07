@@ -11,7 +11,7 @@ if(dir.exists(mb_path)){
 source(paste0(path, "data_sim_DM.R"))
 
 ### Data Simulation
-pat_mat1 <- diag(10)[1:5, ]
+pat_mat1 <- diag(50)[1:5, ]
 set.seed(72)
 sim_dat <- simDM(n = 200, pattern = pat_mat1, xi_conc = 10, pi_gm = c(0.75), 
                  pi_c = c(1, 1, 1, 1, 1), z_sum_L = 50, z_sum_U = 100, 
@@ -19,15 +19,66 @@ sim_dat <- simDM(n = 200, pattern = pat_mat1, xi_conc = 10, pi_gm = c(0.75),
 summa <- simDM_sum(sim_dat)
 
 xx <- sample(c(2, 3), 200, replace = TRUE)
-bb <- matrix(0, nrow = 5, ncol = 10)
-bb[2:3, ] <- rnorm(20, 0, sqrt(0.01))
+bb <- matrix(0, nrow = 5, ncol = 20)
+bb[1, ] <- bb[1, ] + rnorm(10, sd = sqrt(2.5))
 
-tt <- sm(K_max = 5, z = sim_dat$z, xx - 1,
+rr <- rep(NA, 10000)
+for(i in 1:10000){
+tt <- sm(K_max = 5, z = sim_dat$z, clus_assign = rep(0, 200),
          gamma_mat = sim_dat$gamma, beta_mat = bb,
-         tau_vec = c(0, 1, 1, 0, 0), theta_vec = rep(1, 5), launch_iter = 10, 
-         mu = 0, s2 = 0.01, r0c = 1, r1c = 1)
+         tau_vec = c(1, 0, 0, 0, 0), theta_vec = rep(1, 5), launch_iter = 10, 
+         mu = 0, s2 = 2.5, r0c = 1, r1c = 1)
+rr[i] <- tt$logA
+}
+
+mean(log(runif(10000)) <= rr)
+
+hist(rr)
+
+colMeans((sim_dat$z[sim_dat$ci == 1, ]/rowSums(sim_dat$z[sim_dat$ci == 1, ])))
+
+tt <- beta_mat_update(K = 5, iter = 1000, z = sim_dat$z, 
+                      clus_assign = sim_dat$ci - 1, mu = 0, s2 = 2.5, s2_MH = 1e-5)
+
+rr <- t(exp(tt[1, , ]))/rowSums(t(exp(tt[1, , ])))
+plot(rr[, 1], type = "l")
+
+dd <- sim_dat$z[sim_dat$ci == 2, ]/rowSums(sim_dat$z[sim_dat$ci == 2, ])
+colMeans(dd)
+
+qq <- beta_ar_update(K = 5, iter = 1000, z = sim_dat$z, clus_assign = sim_dat$ci - 1, 
+                     r0g = 1, r1g = 1, mu = 0, s2 = 2.5, s2_MH = 1e-5)
+rr <- exp(t(qq$beta[1, , ]))/rowSums(exp(t(qq$beta[1, , ])))
+plot(rr[, 1], type = "l")
+
+colMeans(sim_dat$z[sim_dat$ci == 1, ]/rowSums(sim_dat$z[sim_dat$ci == 1, ]))
+
+colMeans(sim_dat$z/rowSums(sim_dat$z))
+
+plot(as.numeric(tt[2, 5, ]), type = "l")
+
+rr <- exp(tt[2, , ] %>% t())/rowSums(exp(tt[2, , ] %>% t()))
+plot(rr[, 3], type = "l")
+
+colMeans(sim_dat$z/rowSums(sim_dat$z))
+
+
+ee <- sim_dat$z[sim_dat$ci == 1, 1]/rowSums(sim_dat$z[sim_dat$ci == 1, ])
+quantile(ee, probs = c(0.025, 0.975))
+table(tt$proposed_assign)
+
+x <- rnorm(10000, mean = 125, sd = sqrt(0.01))
+var(x)
+var(exp(x))
+hist(exp(x))
+
+exp(1) * (exp(1) - 1)
+
+apply(data.frame(seq(1, 3, 0.01)), 1, 
+      function(mu, s2){exp((2*mu) + s2) * (exp(s2) - 1)}, mu = 0) %>% plot()
 
 tt$expand_ind
+table(tt$proposed_assign, sim_dat$ci)
 
 log_proposal(clus_after = tt$proposed_assign, clus_before = rep(1, 200), 
              z = sim_dat$z, gamma_mat = sim_dat$gamma, 
@@ -50,6 +101,7 @@ cbind(tt$launch_tau, tt$proposed_tau)
 tt$launch_beta
 tt$proposed_beta
 
+log((1 + sqrt(401))/2)
 
 table(proposed = tt$proposed_assign)
 
@@ -60,7 +112,7 @@ table(sim_dat$ci - 1, tt$launch_assign)
 tt$samp_ind
 tt$samp_clus
 
-
+exp(2.352564) * (exp(2.352564) - 1)
 
 (sim_dat$ci - 1)[which((sim_dat$ci - 1) %in% c(4, 2))]
 
@@ -77,7 +129,6 @@ Sys.time() - start_time
 k <- 2
 xi_mcmc <- exp(t(result$beta[k, , -c(1:5000)]))/rowSums(exp(t(result$beta[k, , -c(1:5000)])))
 plot(xi_mcmc[, 2], type = "l")
-
 
 # ------------------------------------------------------------------------------
 

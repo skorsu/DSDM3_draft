@@ -389,17 +389,43 @@ Rcpp::List sm(unsigned int K_max, arma::mat z, arma::uvec clus_assign,
   
   // MH
   double logA = 0.0;
+  arma::vec nk_old(K_max, arma::fill::zeros);
+  arma::vec nk_proposed(K_max, arma::fill::zeros);
+  
   for(int i = 0; i < z.n_rows; ++i){
     arma::vec zi = z.row(i).t();
     arma::vec gmi = gamma_mat.row(i).t();
     logA += log_marginal(zi, gmi, proposed_beta.row(proposed_assign[i]).t());
     logA -= log_marginal(zi, gmi, beta_mat.row(clus_assign[i]).t());
+    
+    nk_old[clus_assign[i]] += 1;
+    nk_proposed[proposed_assign[i]] += 1;
+    
   }
+  
+  arma::uvec proposed_active = arma::find(nk_proposed > 0); 
+  logA += std::lgamma(arma::accu(theta_vec.rows(proposed_active)));
+  logA -= arma::accu(arma::lgamma(theta_vec.rows(proposed_active)));
+  logA += arma::accu(arma::lgamma(nk_proposed.rows(proposed_active) + theta_vec.rows(proposed_active)));
+  logA -= std::lgamma(arma::accu(nk_proposed.rows(proposed_active) + theta_vec.rows(proposed_active)));
+  
+  logA -= std::lgamma(arma::accu(theta_vec.rows(active_clus)));
+  logA += arma::accu(arma::lgamma(theta_vec.rows(active_clus)));
+  logA -= arma::accu(arma::lgamma(nk_old.rows(active_clus) + theta_vec.rows(active_clus)));
+  logA += std::lgamma(arma::accu(nk_old.rows(active_clus) + theta_vec.rows(active_clus)));
+  
+  logA += arma::accu(arma::log_normpdf(proposed_beta, mu, std::sqrt(s2)));
+  logA -= arma::accu(arma::log_normpdf(beta_mat, mu, std::sqrt(s2)));
   
   logA += log_proposal(launch_assign, proposed_assign, z, gamma_mat, 
                        launch_beta, S, samp_clus);
+  if(expand_ind == 1){
+    logA -= log_proposal(proposed_assign, launch_assign, z, gamma_mat, 
+                         launch_beta, S, samp_clus);
+  }
   
   std::cout << logA << std::endl;
+  std::cout << std::log(R::runif(0.0, 1.0)) << std::endl;
   
   Rcpp::List result;
   result["samp_ind"] = samp_ind;
@@ -412,6 +438,7 @@ Rcpp::List sm(unsigned int K_max, arma::mat z, arma::uvec clus_assign,
   result["proposed_beta"] = proposed_beta;
   result["expand_ind"] = expand_ind;
   result["S"] = S;
+  result["logA"] = logA;
   return result;
   
 }
@@ -429,7 +456,7 @@ arma::cube beta_mat_update(unsigned int K, unsigned int iter, arma::mat z,
   arma::mat gm(z.n_rows, z.n_cols, arma::fill::ones);
   
   // Initialize the beta matrix
-  arma::mat b_init(K, z.n_cols, arma::fill::zeros);
+  arma::mat b_init(K, z.n_cols, arma::fill::ones);
   arma::mat b_mcmc(b_init);
   
   for(int t = 0; t < iter; ++t){
@@ -455,7 +482,7 @@ Rcpp::List beta_ar_update(unsigned int K, unsigned int iter, arma::mat z,
   // Initialize
   arma::mat gm_init(z.n_rows, z.n_cols, arma::fill::ones);
   arma::mat gm_mcmc(gm_init);
-  arma::mat b_init(K, z.n_cols, arma::fill::zeros);
+  arma::mat b_init(K, z.n_cols, arma::fill::ones);
   arma::mat b_mcmc(b_init);
   
   for(int t = 0; t < iter; ++t){
