@@ -424,23 +424,48 @@ Rcpp::List sm(unsigned int K_max, arma::mat z, arma::uvec clus_assign,
                          launch_beta, S, samp_clus);
   }
   
-  std::cout << logA << std::endl;
-  std::cout << std::log(R::runif(0.0, 1.0)) << std::endl;
+  // MH
+  double logU = std::log(R::runif(0.0, 1.0));
+  int sm_accept = 0;
+  arma::uvec new_assign(clus_assign);
+  arma::vec new_tau(tau_vec);
+  arma::mat new_beta(beta_mat);
+  if(logU <= logA){
+    sm_accept += 1;
+    new_assign = proposed_assign;
+    new_beta = proposed_beta;
+    new_tau = proposed_tau;
+  }
   
   Rcpp::List result;
-  result["samp_ind"] = samp_ind;
-  result["samp_clus"] = samp_clus;
-  result["launch_assign"] = launch_assign;
-  result["proposed_assign"] = proposed_assign;
-  result["launch_tau"] = launch_tau;
-  result["launch_beta"] = launch_beta;
-  result["proposed_tau"] = proposed_tau;
-  result["proposed_beta"] = proposed_beta;
-  result["expand_ind"] = expand_ind;
   result["S"] = S;
   result["logA"] = logA;
+  result["expand_ind"] = expand_ind;
+  result["sm_accept"] = sm_accept;
+  result["assign"] = new_assign;
+  result["tau"] = new_tau;
+  result["assign"] = new_beta;
   return result;
   
+}
+
+// [[Rcpp::export]]
+Rcpp::List update_tau(arma::uvec clus_assign, arma::vec tau_vec, 
+                      arma::vec theta_vec, double U){
+  
+  arma::vec new_tau(tau_vec);
+  arma::uvec active_clus = arma::unique(clus_assign);
+  double scale_U = 1/(1 + U);
+  
+  for(int kk = 0; kk < active_clus.size(); ++kk){
+    int k = active_clus[kk];
+    arma::uvec nk = arma::find(clus_assign == k);
+    new_tau.row(k).fill(R::rgamma(nk.size() + theta_vec[k], scale_U)); 
+  }
+  
+  Rcpp::List result;
+  result["tau"] = new_tau;
+  return result;
 }
 
 
@@ -504,6 +529,3 @@ Rcpp::List beta_ar_update(unsigned int K, unsigned int iter, arma::mat z,
 }
 
 // *****************************************************************************
-
-
-

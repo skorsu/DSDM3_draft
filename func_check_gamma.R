@@ -12,15 +12,17 @@ source(paste0(path, "data_sim_DM.R"))
 
 ### Data Simulation
 pat_mat1 <- diag(50)[1:5, ]
+pat_mat1[1, ] <- c(rep(0, 40), rep(1, 10))
 set.seed(72)
 sim_dat <- simDM(n = 200, pattern = pat_mat1, xi_conc = 10, pi_gm = c(0.75), 
                  pi_c = c(1, 1, 1, 1, 1), z_sum_L = 50, z_sum_U = 100, 
                  theta = 0.01)
 summa <- simDM_sum(sim_dat)
+sim_dat$z
 
 xx <- sample(c(2, 3), 200, replace = TRUE)
-bb <- matrix(0, nrow = 5, ncol = 20)
-bb[1, ] <- bb[1, ] + rnorm(10, sd = sqrt(2.5))
+bb <- matrix(0, nrow = 5, ncol = 50)
+bb[1, ] <- bb[1, ] + rnorm(50, sd = sqrt(2.5))
 
 rr <- rep(NA, 10000)
 for(i in 1:10000){
@@ -32,7 +34,6 @@ rr[i] <- tt$logA
 }
 
 mean(log(runif(10000)) <= rr)
-
 hist(rr)
 
 colMeans((sim_dat$z[sim_dat$ci == 1, ]/rowSums(sim_dat$z[sim_dat$ci == 1, ])))
@@ -41,9 +42,9 @@ tt <- beta_mat_update(K = 5, iter = 1000, z = sim_dat$z,
                       clus_assign = sim_dat$ci - 1, mu = 0, s2 = 2.5, s2_MH = 1e-5)
 
 rr <- t(exp(tt[1, , ]))/rowSums(t(exp(tt[1, , ])))
-plot(rr[, 1], type = "l")
+plot(rr[, 50], type = "l")
 
-dd <- sim_dat$z[sim_dat$ci == 2, ]/rowSums(sim_dat$z[sim_dat$ci == 2, ])
+dd <- sim_dat$z[sim_dat$ci == 1, ]/rowSums(sim_dat$z[sim_dat$ci == 1, ])
 colMeans(dd)
 
 qq <- beta_ar_update(K = 5, iter = 1000, z = sim_dat$z, clus_assign = sim_dat$ci - 1, 
@@ -54,6 +55,9 @@ plot(rr[, 1], type = "l")
 colMeans(sim_dat$z[sim_dat$ci == 1, ]/rowSums(sim_dat$z[sim_dat$ci == 1, ]))
 
 colMeans(sim_dat$z/rowSums(sim_dat$z))
+
+update_tau(clus_assign = sim_dat$ci - 1, tau_vec = rgamma(5, 1, 1), 
+           theta_vec = rep(1, 5), U = 0.05)
 
 plot(as.numeric(tt[2, 5, ]), type = "l")
 
