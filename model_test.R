@@ -15,7 +15,7 @@ if(dir.exists(mb_path)){
 source(paste0(path, "data_sim_DM.R"))
 
 ### Data Simulation
-pat_mat1 <- diag(20)[1:5, ]
+pat_mat1 <- diag(20)[c(2, 6, 10, 1, 3), ]
 set.seed(72)
 sim_dat <- simDM(n = 200, pattern = pat_mat1, xi_conc = 10, pi_gm = c(0.75), 
                  pi_c = c(1, 1, 1, 1, 1), z_sum_L = 500, z_sum_U = 1000, 
@@ -24,36 +24,18 @@ summa <- simDM_sum(sim_dat)
 grid.arrange(grobs = summa$plot)
 
 ### Run the model
-set.seed(2500)
+set.seed(754)
 start_time <- Sys.time()
-tt <- ZIDM_ZIDM(iter = 10000, K_max = 10, z = sim_dat$z, theta_vec = rep(1, 10), 
+tt <- ZIDM_ZIDM(iter = 15000, K_max = 10, z = sim_dat$z, theta_vec = rep(1, 10), 
                 launch_iter = 5, MH_var = 1, mu = 0, s2 = 1, r0g = 1, r1g = 1, 
                 r0c = 1, r1c = 1, print_iter = 1000)
 Sys.time() - start_time
-
-start_time <- Sys.time()
-tt <- DM_ZIDM(iter = 10000, K_max = 10, z = sim_dat$z, theta_vec = rep(1, 10), 
-              launch_iter = 5, MH_var = 1, mu = 0, s2 = 1, r0c = 1, r1c = 1, 
-              print_iter = 1000)
-Sys.time() - start_time
-
-table(sim_dat$ci, as.numeric(salso(tt$assign[-c(1:5000), ], maxNClusters = 10)))
-
-minbinder(comp.psm(tt$assign + 1))$cl
-
-as.factor(tt$assign[1, ] + 1)
-
-ttt <- matrix(NA, ncol = 200, nrow = 10000)
-for(i in 1:10000){
-  ttt[i, ] <- as.factor(tt$assign[i, ] + 1)
-}
-
-minbinder(comp.psm(ttt))
-
+table(sim_dat$ci, as.numeric(salso(tt$assign[-c(1:10000), ], maxNClusters = 10)))
+plot(apply(tt$assign, 1, function(x){length(unique(x))}), type = "l")
 rm(pat_mat1, sim_dat, summa, tt)
 
 ### Data Simulation
-pat_mat1 <- diag(20)[1:5, ]
+pat_mat1 <- diag(20)[c(2, 4, 6, 10, 15), ]
 set.seed(72)
 sim_dat <- simDM(n = 200, pattern = pat_mat1, xi_conc = 100, pi_gm = c(0.85), 
                  pi_c = c(1, 1, 1, 1, 1), z_sum_L = 500, z_sum_U = 1000, 
@@ -62,12 +44,14 @@ summa <- simDM_sum(sim_dat)
 grid.arrange(grobs = summa$plot)
 
 ### Run the model
-set.seed(2500)
+set.seed(61)
 start_time <- Sys.time()
-tt <- ZIDM_ZIDM(iter = 10000, K_max = 10, z = sim_dat$z, theta_vec = rep(1, 10), 
-                launch_iter = 5, MH_var = 1, mu = 0, s2 = 1, r0g = 1, r1g = 1, 
+tt <- ZIDM_ZIDM(iter = 15000, K_max = 10, z = sim_dat$z, theta_vec = rep(1, 10), 
+                launch_iter = 5, MH_var = 10, mu = 0, s2 = 1, r0g = 1, r1g = 1, 
                 r0c = 1, r1c = 1, print_iter = 1000)
 Sys.time() - start_time
+
+
 
 table(sim_dat$ci, as.numeric(salso(tt$assign[-c(1:5000), ], maxNClusters = 10)))
 
@@ -88,8 +72,8 @@ grid.arrange(grobs = summa$plot)
 ### Run the model
 set.seed(2500)
 start_time <- Sys.time()
-tt <- ZIDM_ZIDM(iter = 10000, K_max = 10, z = sim_dat$z, theta_vec = rep(1, 10), 
-                launch_iter = 5, MH_var = 1, mu = 0, s2 = 1, r0g = 1, r1g = 1, 
+tt <- ZIDM_ZIDM(iter = 15000, K_max = 10, z = sim_dat$z, theta_vec = rep(1, 10), 
+                launch_iter = 5, MH_var = 10, mu = 0, s2 = 1, r0g = 1, r1g = 1, 
                 r0c = 1, r1c = 1, print_iter = 1000)
 Sys.time() - start_time
 
@@ -112,8 +96,8 @@ grid.arrange(grobs = summa$plot)
 ### Run the model
 set.seed(2500)
 start_time <- Sys.time()
-tt <- ZIDM_ZIDM(iter = 10000, K_max = 10, z = sim_dat$z, theta_vec = rep(1, 10), 
-                launch_iter = 5, MH_var = 1, mu = 0, s2 = 1, r0g = 1, r1g = 1, 
+tt <- ZIDM_ZIDM(iter = 15000, K_max = 10, z = sim_dat$z, theta_vec = rep(1, 10), 
+                launch_iter = 5, MH_var = 10, mu = 0, s2 = 1, r0g = 1, r1g = 1, 
                 r0c = 1, r1c = 1, print_iter = 1000)
 Sys.time() - start_time
 
@@ -140,8 +124,8 @@ grid.arrange(grobs = summa$plot)
 ### Run the model
 set.seed(2500)
 start_time <- Sys.time()
-tt <- ZIDM_ZIDM(iter = 10000, K_max = 10, z = sim_dat$z, theta_vec = rep(1, 10), 
-                launch_iter = 5, MH_var = 1, mu = 0, s2 = 1, r0g = 1, r1g = 1, 
+tt <- ZIDM_ZIDM(iter = 15000, K_max = 10, z = sim_dat$z, theta_vec = rep(1, 10), 
+                launch_iter = 5, MH_var = 10, mu = 0, s2 = 1, r0g = 1, r1g = 1, 
                 r0c = 1, r1c = 1, print_iter = 1000)
 Sys.time() - start_time
 
@@ -168,8 +152,8 @@ grid.arrange(grobs = summa$plot)
 ### Run the model
 set.seed(2500)
 start_time <- Sys.time()
-tt <- ZIDM_ZIDM(iter = 10000, K_max = 10, z = sim_dat$z, theta_vec = rep(1, 10), 
-                launch_iter = 5, MH_var = 1, mu = 0, s2 = 1, r0g = 1, r1g = 1, 
+tt <- ZIDM_ZIDM(iter = 15000, K_max = 10, z = sim_dat$z, theta_vec = rep(1, 10), 
+                launch_iter = 5, MH_var = 10, mu = 0, s2 = 1, r0g = 1, r1g = 1, 
                 r0c = 1, r1c = 1, print_iter = 1000)
 Sys.time() - start_time
 
@@ -190,12 +174,12 @@ grid.arrange(grobs = summa$plot)
 ### Run the model
 set.seed(2500)
 start_time <- Sys.time()
-tt <- ZIDM_ZIDM(iter = 10000, K_max = 10, z = sim_dat$z, theta_vec = rep(1, 10), 
-                launch_iter = 5, MH_var = 1, mu = 0, s2 = 1, r0g = 1, r1g = 1, 
+tt <- ZIDM_ZIDM(iter = 15000, K_max = 10, z = sim_dat$z, theta_vec = rep(1, 10), 
+                launch_iter = 5, MH_var = 10, mu = 0, s2 = 1, r0g = 1, r1g = 1, 
                 r0c = 1, r1c = 1, print_iter = 1000)
 Sys.time() - start_time
 
-table(sim_dat$ci, as.numeric(salso(tt$assign[-c(1:2500), ], maxNClusters = 10)))
+table(sim_dat$ci, as.numeric(salso(tt$assign[-c(1:5000), ], maxNClusters = 10)))
 
 plot(apply(tt$assign, 1, function(x){length(unique(x))}), type = "l")
 

@@ -43,10 +43,7 @@ simDM_sum <- function(simDM_list){
   
   ### Proportion of the zero
   ind_zero <- which(simDM_list$z == 0, arr.ind = TRUE)
-  print(paste0("Number of zero: ", nrow(ind_zero)))
-  print(paste0("Number of at-risk zero: ", sum(simDM_list$gamma[ind_zero] == 1)))
-  print(paste0("Number of structure zero: ", sum(simDM_list$gamma[ind_zero] == 0)))
-  
+
   sum_list <- c(nrow(ind_zero)/prod(dim(simDM_list$z)), 
                 sum(simDM_list$gamma[ind_zero] == 1)/nrow(ind_zero),
                 sum(simDM_list$gamma[ind_zero] == 0)/nrow(ind_zero))

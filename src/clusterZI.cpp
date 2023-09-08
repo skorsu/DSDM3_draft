@@ -478,19 +478,79 @@ Rcpp::List update_tau(arma::uvec clus_assign, arma::vec tau_vec,
 // *****************************************************************************
 // [[Rcpp::export]]
 arma::mat DM_DM(unsigned int iter, unsigned int K_max, arma::mat z,
-                arma::vec theta_vec, int print_iter){
+                arma::vec theta_vec, double MH_var, double mu, double s2,
+                int print_iter){
   
   /* This is one of our competitive model. We have to specify the number of 
   clusters, and we did not update the at-risk indicator. */
   
-  arma::mat result(iter, z.n_rows, arma::fill::value(-1));
+  arma::mat clus_iter(iter, z.n_rows, arma::fill::value(-1));
   
   // Initial the cluster assignment and beta matrix
   arma::uvec ci_init(z.n_rows, arma::fill::zeros);
   arma::mat beta_init(K_max, z.n_cols, arma::fill::ones);
   
+  arma::mat gamma_mat(z.n_rows, z.n_cols, arma::fill::ones);
   
-  return result;
+  // MCMC object
+  arma::mat beta_mcmc(beta_init);
+  
+  for(int t = 0; t < iter; ++t){
+    
+    // Update beta
+    beta_mcmc = update_beta(z, ci_init, gamma_mat, beta_init, mu, s2, MH_var);
+    
+    // Reallocate
+    arma::uvec ci_mcmc(ci_init);
+    arma::vec nk(K_max, arma::fill::zeros);
+    
+    // Count the number of element in each cluster
+    for(int i = 0; i < z.n_rows; ++i){
+      nk[ci_init[i]] += 1;
+    }
+    
+    for(int i = 0; i < z.n_rows; ++i){
+      
+      nk[ci_init[i]] -= 1;
+      
+      arma::vec zi = z.row(i).t();
+      arma::vec gmi = gamma_mat.row(i).t();
+      arma::vec log_prob(K_max, arma::fill::zeros);
+      
+      for(int k = 0; k < K_max; ++k){
+        log_prob[k] += log_marginal(zi, gmi, beta_mcmc.row(k).t());
+        log_prob[k] += std::log(theta_vec[k] + nk[k]);
+      }
+      
+      arma::vec realloc_prob = log_sum_exp(log_prob);
+      Rcpp::NumericVector realloc_rcpp = Rcpp::NumericVector(realloc_prob.begin(), 
+                                                             realloc_prob.end());
+      Rcpp::IntegerVector realloc_rcpp_index = rmultinom_1(realloc_rcpp, K_max);
+      arma::vec realloc_index = Rcpp::as<arma::vec>(Rcpp::wrap(realloc_rcpp_index));
+      
+      // New assign
+      arma::uvec new_ck = arma::find(realloc_index == 1);
+      ci_mcmc.row(i).fill(new_ck[0]);
+      
+      nk[ci_mcmc[i]] += 1;
+      
+    }
+    
+    for(int i = 0; i < z.n_rows; ++i){
+      clus_iter.row(t).col(i).fill(ci_mcmc[i]);
+    }
+    
+    ci_init = ci_mcmc;
+    beta_init = beta_mcmc;
+    
+    // Print the result
+    if(((t + 1) - (floor((t + 1)/print_iter) * print_iter)) == 0){
+      std::cout << "Iter: " << (t+1) << " - Done!" << std::endl;
+    }
+    
+  }
+  
+  return clus_iter;
   
 }
 
