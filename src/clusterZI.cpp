@@ -477,10 +477,120 @@ Rcpp::List update_tau(arma::uvec clus_assign, arma::vec tau_vec,
 
 // *****************************************************************************
 // [[Rcpp::export]]
-Rcpp::List cluster_full(unsigned int iter, unsigned int K_max, arma::mat z,
-                        arma::vec theta_vec, unsigned int launch_iter,
-                        double MH_var, double mu, double s2, double r0g, double r1g, 
-                        double r0c, double r1c, int print_iter){
+arma::mat DM_DM(unsigned int iter, unsigned int K_max, arma::mat z,
+                arma::vec theta_vec, int print_iter){
+  
+  /* This is one of our competitive model. We have to specify the number of 
+  clusters, and we did not update the at-risk indicator. */
+  
+  arma::mat result(iter, z.n_rows, arma::fill::value(-1));
+  
+  // Initial the cluster assignment and beta matrix
+  arma::uvec ci_init(z.n_rows, arma::fill::zeros);
+  arma::mat beta_init(K_max, z.n_cols, arma::fill::ones);
+  
+  
+  return result;
+  
+}
+
+
+// [[Rcpp::export]]
+Rcpp::List DM_ZIDM(unsigned int iter, unsigned int K_max, arma::mat z,
+                   arma::vec theta_vec, unsigned int launch_iter,
+                   double MH_var, double mu, double s2, 
+                   double r0c, double r1c, int print_iter){
+  
+  /* This is one of our competitive model. We include the SM for the cluster
+     space, but we did not update the at-risk indicator. */
+  
+  // Store the result
+  arma::mat clus_iter(iter, z.n_rows, arma::fill::value(-1));
+  arma::cube beta_iter(K_max, z.n_cols, iter);
+  arma::vec sm_iter(iter, arma::fill::zeros); 
+  arma::vec accept_iter(iter, arma::fill::zeros);
+  arma::vec logA_sm_iter(iter, arma::fill::zeros);
+  
+  arma::mat gamma_mat(z.n_rows, z.n_cols, arma::fill::ones);
+  
+  // Initialize
+  arma::uvec ci_init(z.n_rows, arma::fill::zeros);
+  arma::mat beta_init(K_max, z.n_cols, arma::fill::ones);
+  arma::vec tau_init(K_max, arma::fill::zeros);
+  tau_init.row(0).fill(R::rgamma(theta_vec[0], 1.0));
+  double U_init = R::rgamma(z.n_rows, 1/(arma::accu(tau_init)));
+  
+  // MCMC object
+  arma::mat beta_mcmc(beta_init);
+  Rcpp::List realloc_List;
+  Rcpp::List sm_List;
+  Rcpp::List tau_List;
+  
+  // Begin
+  for(int t = 0; t < iter; ++t){
+    
+    // Update beta
+    beta_mcmc = update_beta(z, ci_init, gamma_mat, beta_init, mu, s2, MH_var);
+    
+    // Reallocate
+    realloc_List = realloc(z, ci_init, gamma_mat, beta_mcmc, tau_init, theta_vec);
+    arma::uvec ci_realloc = realloc_List["assign"];
+    arma::vec tau_realloc = realloc_List["tau"];
+    arma::mat beta_realloc = realloc_List["beta"];
+    
+    // Split-Merge
+    sm_List = sm(K_max, z, ci_realloc, gamma_mat, beta_mcmc, tau_realloc, 
+                 theta_vec, launch_iter, mu, s2, r0c, r1c);
+    
+    logA_sm_iter.row(t).fill(sm_List["logA"]);
+    sm_iter.row(t).fill(sm_List["expand_ind"]);
+    accept_iter.row(t).fill(sm_List["sm_accept"]);
+    arma::uvec ci_sm = sm_List["assign"];
+    arma::vec tau_sm = sm_List["tau"];
+    arma::mat beta_sm = sm_List["beta"];
+    
+    // Update tau and U
+    tau_List = update_tau(ci_sm, tau_sm, theta_vec, U_init);
+    arma::vec tau_U = tau_List["tau"];
+    double U_U = tau_List["U"];
+    
+    // Record the result
+    beta_iter.slice(t) = beta_sm;
+    
+    for(int i = 0; i < z.n_rows; ++i){
+      clus_iter.row(t).col(i).fill(ci_sm[i]);
+    }
+    
+    // Update the initial value for the next iteration
+    ci_init = ci_sm;
+    beta_init = beta_sm;
+    tau_init = tau_U;
+    U_init = U_U;
+    
+    // Print the result
+    if(((t + 1) - (floor((t + 1)/print_iter) * print_iter)) == 0){
+      std::cout << "Iter: " << (t+1) << " - Done!" << std::endl;
+    }
+    
+  }
+  
+  // Result
+  Rcpp::List result;
+  result["assign"] = clus_iter;
+  result["sm"] = sm_iter;
+  result["accept_iter"] = accept_iter;
+  return result;
+  
+}
+
+// [[Rcpp::export]]
+Rcpp::List ZIDM_ZIDM(unsigned int iter, unsigned int K_max, arma::mat z,
+                     arma::vec theta_vec, unsigned int launch_iter,
+                     double MH_var, double mu, double s2, double r0g, double r1g, 
+                     double r0c, double r1c, int print_iter){
+  
+  /* This is our model. Update at-risk indicator and include the SM for 
+     the cluster space. */
   
   // Store the result
   arma::mat clus_iter(iter, z.n_rows, arma::fill::value(-1));
@@ -560,11 +670,11 @@ Rcpp::List cluster_full(unsigned int iter, unsigned int K_max, arma::mat z,
   
   // Result
   Rcpp::List result;
-  result["gamma"] = gamma_iter;
-  result["beta"] = beta_iter;
+  // result["gamma"] = gamma_iter;
+  // result["beta"] = beta_iter;
   result["assign"] = clus_iter;
   result["sm"] = sm_iter;
-  result["logA"] = logA_sm_iter;
+  // result["logA"] = logA_sm_iter;
   result["accept_iter"] = accept_iter;
   return result;
   
