@@ -4,10 +4,6 @@
 
 #define pi 3.141592653589793238462643383280
 
-// Note: -----------------------------------------------------------------------
-// * Debugging (Dimension of the matrix/vector)
-// -----------------------------------------------------------------------------
-
 Rcpp::IntegerVector rmultinom_1(Rcpp::NumericVector &probs, unsigned int &N){
   
   /* Description: sample from the multinomial(N, probs).

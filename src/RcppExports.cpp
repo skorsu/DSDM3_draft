@@ -11,6 +11,248 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// adjust_tau_beta
+Rcpp::List adjust_tau_beta(arma::mat beta_mat, arma::vec tau_vec, arma::uvec clus_assign);
+RcppExport SEXP _ClusterZI_adjust_tau_beta(SEXP beta_matSEXP, SEXP tau_vecSEXP, SEXP clus_assignSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::mat >::type beta_mat(beta_matSEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type tau_vec(tau_vecSEXP);
+    Rcpp::traits::input_parameter< arma::uvec >::type clus_assign(clus_assignSEXP);
+    rcpp_result_gen = Rcpp::wrap(adjust_tau_beta(beta_mat, tau_vec, clus_assign));
+    return rcpp_result_gen;
+END_RCPP
+}
+// log_marginal
+double log_marginal(arma::vec zi, arma::vec gmi, arma::vec beta_k);
+RcppExport SEXP _ClusterZI_log_marginal(SEXP ziSEXP, SEXP gmiSEXP, SEXP beta_kSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::vec >::type zi(ziSEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type gmi(gmiSEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type beta_k(beta_kSEXP);
+    rcpp_result_gen = Rcpp::wrap(log_marginal(zi, gmi, beta_k));
+    return rcpp_result_gen;
+END_RCPP
+}
+// realloc_sm
+arma::uvec realloc_sm(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat, arma::mat beta_mat, arma::uvec S, arma::uvec clus_sm);
+RcppExport SEXP _ClusterZI_realloc_sm(SEXP zSEXP, SEXP clus_assignSEXP, SEXP gamma_matSEXP, SEXP beta_matSEXP, SEXP SSEXP, SEXP clus_smSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::mat >::type z(zSEXP);
+    Rcpp::traits::input_parameter< arma::uvec >::type clus_assign(clus_assignSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type gamma_mat(gamma_matSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type beta_mat(beta_matSEXP);
+    Rcpp::traits::input_parameter< arma::uvec >::type S(SSEXP);
+    Rcpp::traits::input_parameter< arma::uvec >::type clus_sm(clus_smSEXP);
+    rcpp_result_gen = Rcpp::wrap(realloc_sm(z, clus_assign, gamma_mat, beta_mat, S, clus_sm));
+    return rcpp_result_gen;
+END_RCPP
+}
+// log_proposal
+double log_proposal(arma::uvec clus_after, arma::uvec clus_before, arma::mat z, arma::mat gamma_mat, arma::mat beta_mat, arma::uvec S, arma::uvec clus_sm);
+RcppExport SEXP _ClusterZI_log_proposal(SEXP clus_afterSEXP, SEXP clus_beforeSEXP, SEXP zSEXP, SEXP gamma_matSEXP, SEXP beta_matSEXP, SEXP SSEXP, SEXP clus_smSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::uvec >::type clus_after(clus_afterSEXP);
+    Rcpp::traits::input_parameter< arma::uvec >::type clus_before(clus_beforeSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type z(zSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type gamma_mat(gamma_matSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type beta_mat(beta_matSEXP);
+    Rcpp::traits::input_parameter< arma::uvec >::type S(SSEXP);
+    Rcpp::traits::input_parameter< arma::uvec >::type clus_sm(clus_smSEXP);
+    rcpp_result_gen = Rcpp::wrap(log_proposal(clus_after, clus_before, z, gamma_mat, beta_mat, S, clus_sm));
+    return rcpp_result_gen;
+END_RCPP
+}
+// update_at_risk
+arma::mat update_at_risk(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat, arma::mat beta_mat, double r0g, double r1g);
+RcppExport SEXP _ClusterZI_update_at_risk(SEXP zSEXP, SEXP clus_assignSEXP, SEXP gamma_matSEXP, SEXP beta_matSEXP, SEXP r0gSEXP, SEXP r1gSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::mat >::type z(zSEXP);
+    Rcpp::traits::input_parameter< arma::uvec >::type clus_assign(clus_assignSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type gamma_mat(gamma_matSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type beta_mat(beta_matSEXP);
+    Rcpp::traits::input_parameter< double >::type r0g(r0gSEXP);
+    Rcpp::traits::input_parameter< double >::type r1g(r1gSEXP);
+    rcpp_result_gen = Rcpp::wrap(update_at_risk(z, clus_assign, gamma_mat, beta_mat, r0g, r1g));
+    return rcpp_result_gen;
+END_RCPP
+}
+// update_beta
+arma::mat update_beta(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat, arma::mat beta_mat, double mu, double s2, double s2_MH);
+RcppExport SEXP _ClusterZI_update_beta(SEXP zSEXP, SEXP clus_assignSEXP, SEXP gamma_matSEXP, SEXP beta_matSEXP, SEXP muSEXP, SEXP s2SEXP, SEXP s2_MHSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::mat >::type z(zSEXP);
+    Rcpp::traits::input_parameter< arma::uvec >::type clus_assign(clus_assignSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type gamma_mat(gamma_matSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type beta_mat(beta_matSEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type s2(s2SEXP);
+    Rcpp::traits::input_parameter< double >::type s2_MH(s2_MHSEXP);
+    rcpp_result_gen = Rcpp::wrap(update_beta(z, clus_assign, gamma_mat, beta_mat, mu, s2, s2_MH));
+    return rcpp_result_gen;
+END_RCPP
+}
+// realloc
+Rcpp::List realloc(arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat, arma::mat beta_mat, arma::vec tau_vec, arma::vec theta_vec);
+RcppExport SEXP _ClusterZI_realloc(SEXP zSEXP, SEXP clus_assignSEXP, SEXP gamma_matSEXP, SEXP beta_matSEXP, SEXP tau_vecSEXP, SEXP theta_vecSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::mat >::type z(zSEXP);
+    Rcpp::traits::input_parameter< arma::uvec >::type clus_assign(clus_assignSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type gamma_mat(gamma_matSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type beta_mat(beta_matSEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type tau_vec(tau_vecSEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type theta_vec(theta_vecSEXP);
+    rcpp_result_gen = Rcpp::wrap(realloc(z, clus_assign, gamma_mat, beta_mat, tau_vec, theta_vec));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sm
+Rcpp::List sm(unsigned int K_max, arma::mat z, arma::uvec clus_assign, arma::mat gamma_mat, arma::mat beta_mat, arma::vec tau_vec, arma::vec theta_vec, unsigned int launch_iter, double mu, double s2, double r0c, double r1c);
+RcppExport SEXP _ClusterZI_sm(SEXP K_maxSEXP, SEXP zSEXP, SEXP clus_assignSEXP, SEXP gamma_matSEXP, SEXP beta_matSEXP, SEXP tau_vecSEXP, SEXP theta_vecSEXP, SEXP launch_iterSEXP, SEXP muSEXP, SEXP s2SEXP, SEXP r0cSEXP, SEXP r1cSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< unsigned int >::type K_max(K_maxSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type z(zSEXP);
+    Rcpp::traits::input_parameter< arma::uvec >::type clus_assign(clus_assignSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type gamma_mat(gamma_matSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type beta_mat(beta_matSEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type tau_vec(tau_vecSEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type theta_vec(theta_vecSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type launch_iter(launch_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type s2(s2SEXP);
+    Rcpp::traits::input_parameter< double >::type r0c(r0cSEXP);
+    Rcpp::traits::input_parameter< double >::type r1c(r1cSEXP);
+    rcpp_result_gen = Rcpp::wrap(sm(K_max, z, clus_assign, gamma_mat, beta_mat, tau_vec, theta_vec, launch_iter, mu, s2, r0c, r1c));
+    return rcpp_result_gen;
+END_RCPP
+}
+// update_tau
+Rcpp::List update_tau(arma::uvec clus_assign, arma::vec tau_vec, arma::vec theta_vec, double U);
+RcppExport SEXP _ClusterZI_update_tau(SEXP clus_assignSEXP, SEXP tau_vecSEXP, SEXP theta_vecSEXP, SEXP USEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::uvec >::type clus_assign(clus_assignSEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type tau_vec(tau_vecSEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type theta_vec(theta_vecSEXP);
+    Rcpp::traits::input_parameter< double >::type U(USEXP);
+    rcpp_result_gen = Rcpp::wrap(update_tau(clus_assign, tau_vec, theta_vec, U));
+    return rcpp_result_gen;
+END_RCPP
+}
+// DM_DM
+arma::mat DM_DM(unsigned int iter, unsigned int K_max, arma::mat z, arma::vec theta_vec, double MH_var, double mu, double s2, int print_iter);
+RcppExport SEXP _ClusterZI_DM_DM(SEXP iterSEXP, SEXP K_maxSEXP, SEXP zSEXP, SEXP theta_vecSEXP, SEXP MH_varSEXP, SEXP muSEXP, SEXP s2SEXP, SEXP print_iterSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< unsigned int >::type iter(iterSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type K_max(K_maxSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type z(zSEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type theta_vec(theta_vecSEXP);
+    Rcpp::traits::input_parameter< double >::type MH_var(MH_varSEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type s2(s2SEXP);
+    Rcpp::traits::input_parameter< int >::type print_iter(print_iterSEXP);
+    rcpp_result_gen = Rcpp::wrap(DM_DM(iter, K_max, z, theta_vec, MH_var, mu, s2, print_iter));
+    return rcpp_result_gen;
+END_RCPP
+}
+// DM_ZIDM
+Rcpp::List DM_ZIDM(unsigned int iter, unsigned int K_max, arma::mat z, arma::vec theta_vec, unsigned int launch_iter, double MH_var, double mu, double s2, double r0c, double r1c, int print_iter);
+RcppExport SEXP _ClusterZI_DM_ZIDM(SEXP iterSEXP, SEXP K_maxSEXP, SEXP zSEXP, SEXP theta_vecSEXP, SEXP launch_iterSEXP, SEXP MH_varSEXP, SEXP muSEXP, SEXP s2SEXP, SEXP r0cSEXP, SEXP r1cSEXP, SEXP print_iterSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< unsigned int >::type iter(iterSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type K_max(K_maxSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type z(zSEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type theta_vec(theta_vecSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type launch_iter(launch_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type MH_var(MH_varSEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type s2(s2SEXP);
+    Rcpp::traits::input_parameter< double >::type r0c(r0cSEXP);
+    Rcpp::traits::input_parameter< double >::type r1c(r1cSEXP);
+    Rcpp::traits::input_parameter< int >::type print_iter(print_iterSEXP);
+    rcpp_result_gen = Rcpp::wrap(DM_ZIDM(iter, K_max, z, theta_vec, launch_iter, MH_var, mu, s2, r0c, r1c, print_iter));
+    return rcpp_result_gen;
+END_RCPP
+}
+// ZIDM_ZIDM
+Rcpp::List ZIDM_ZIDM(unsigned int iter, unsigned int K_max, arma::mat z, arma::vec theta_vec, unsigned int launch_iter, double MH_var, double mu, double s2, double r0g, double r1g, double r0c, double r1c, int print_iter);
+RcppExport SEXP _ClusterZI_ZIDM_ZIDM(SEXP iterSEXP, SEXP K_maxSEXP, SEXP zSEXP, SEXP theta_vecSEXP, SEXP launch_iterSEXP, SEXP MH_varSEXP, SEXP muSEXP, SEXP s2SEXP, SEXP r0gSEXP, SEXP r1gSEXP, SEXP r0cSEXP, SEXP r1cSEXP, SEXP print_iterSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< unsigned int >::type iter(iterSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type K_max(K_maxSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type z(zSEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type theta_vec(theta_vecSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type launch_iter(launch_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type MH_var(MH_varSEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type s2(s2SEXP);
+    Rcpp::traits::input_parameter< double >::type r0g(r0gSEXP);
+    Rcpp::traits::input_parameter< double >::type r1g(r1gSEXP);
+    Rcpp::traits::input_parameter< double >::type r0c(r0cSEXP);
+    Rcpp::traits::input_parameter< double >::type r1c(r1cSEXP);
+    Rcpp::traits::input_parameter< int >::type print_iter(print_iterSEXP);
+    rcpp_result_gen = Rcpp::wrap(ZIDM_ZIDM(iter, K_max, z, theta_vec, launch_iter, MH_var, mu, s2, r0g, r1g, r0c, r1c, print_iter));
+    return rcpp_result_gen;
+END_RCPP
+}
+// beta_mat_update
+arma::cube beta_mat_update(unsigned int K, unsigned int iter, arma::mat z, arma::uvec clus_assign, double mu, double s2, double s2_MH);
+RcppExport SEXP _ClusterZI_beta_mat_update(SEXP KSEXP, SEXP iterSEXP, SEXP zSEXP, SEXP clus_assignSEXP, SEXP muSEXP, SEXP s2SEXP, SEXP s2_MHSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< unsigned int >::type K(KSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type iter(iterSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type z(zSEXP);
+    Rcpp::traits::input_parameter< arma::uvec >::type clus_assign(clus_assignSEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type s2(s2SEXP);
+    Rcpp::traits::input_parameter< double >::type s2_MH(s2_MHSEXP);
+    rcpp_result_gen = Rcpp::wrap(beta_mat_update(K, iter, z, clus_assign, mu, s2, s2_MH));
+    return rcpp_result_gen;
+END_RCPP
+}
+// beta_ar_update
+Rcpp::List beta_ar_update(unsigned int K, unsigned int iter, arma::mat z, arma::uvec clus_assign, double r0g, double r1g, double mu, double s2, double s2_MH);
+RcppExport SEXP _ClusterZI_beta_ar_update(SEXP KSEXP, SEXP iterSEXP, SEXP zSEXP, SEXP clus_assignSEXP, SEXP r0gSEXP, SEXP r1gSEXP, SEXP muSEXP, SEXP s2SEXP, SEXP s2_MHSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< unsigned int >::type K(KSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type iter(iterSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type z(zSEXP);
+    Rcpp::traits::input_parameter< arma::uvec >::type clus_assign(clus_assignSEXP);
+    Rcpp::traits::input_parameter< double >::type r0g(r0gSEXP);
+    Rcpp::traits::input_parameter< double >::type r1g(r1gSEXP);
+    Rcpp::traits::input_parameter< double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< double >::type s2(s2SEXP);
+    Rcpp::traits::input_parameter< double >::type s2_MH(s2_MHSEXP);
+    rcpp_result_gen = Rcpp::wrap(beta_ar_update(K, iter, z, clus_assign, r0g, r1g, mu, s2, s2_MH));
+    return rcpp_result_gen;
+END_RCPP
+}
 // rcpparma_hello_world
 arma::mat rcpparma_hello_world();
 RcppExport SEXP _ClusterZI_rcpparma_hello_world() {
@@ -56,6 +298,20 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_ClusterZI_adjust_tau_beta", (DL_FUNC) &_ClusterZI_adjust_tau_beta, 3},
+    {"_ClusterZI_log_marginal", (DL_FUNC) &_ClusterZI_log_marginal, 3},
+    {"_ClusterZI_realloc_sm", (DL_FUNC) &_ClusterZI_realloc_sm, 6},
+    {"_ClusterZI_log_proposal", (DL_FUNC) &_ClusterZI_log_proposal, 7},
+    {"_ClusterZI_update_at_risk", (DL_FUNC) &_ClusterZI_update_at_risk, 6},
+    {"_ClusterZI_update_beta", (DL_FUNC) &_ClusterZI_update_beta, 7},
+    {"_ClusterZI_realloc", (DL_FUNC) &_ClusterZI_realloc, 6},
+    {"_ClusterZI_sm", (DL_FUNC) &_ClusterZI_sm, 12},
+    {"_ClusterZI_update_tau", (DL_FUNC) &_ClusterZI_update_tau, 4},
+    {"_ClusterZI_DM_DM", (DL_FUNC) &_ClusterZI_DM_DM, 8},
+    {"_ClusterZI_DM_ZIDM", (DL_FUNC) &_ClusterZI_DM_ZIDM, 11},
+    {"_ClusterZI_ZIDM_ZIDM", (DL_FUNC) &_ClusterZI_ZIDM_ZIDM, 13},
+    {"_ClusterZI_beta_mat_update", (DL_FUNC) &_ClusterZI_beta_mat_update, 7},
+    {"_ClusterZI_beta_ar_update", (DL_FUNC) &_ClusterZI_beta_ar_update, 9},
     {"_ClusterZI_rcpparma_hello_world", (DL_FUNC) &_ClusterZI_rcpparma_hello_world, 0},
     {"_ClusterZI_rcpparma_outerproduct", (DL_FUNC) &_ClusterZI_rcpparma_outerproduct, 1},
     {"_ClusterZI_rcpparma_innerproduct", (DL_FUNC) &_ClusterZI_rcpparma_innerproduct, 1},

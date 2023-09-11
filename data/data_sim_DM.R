@@ -39,7 +39,7 @@ simDM <- function(n, pattern, xi_conc, pi_gm, pi_c, z_sum_L, z_sum_U, theta){
 }
 
 ### Function: Summarize the simulated dataset
-simDM_sum <- function(simDM_list){
+simDM_sum <- function(simDM_list, col_plot = "mediumaquamarine"){
   
   ### Proportion of the zero
   ind_zero <- which(simDM_list$z == 0, arr.ind = TRUE)
@@ -48,10 +48,8 @@ simDM_sum <- function(simDM_list){
                 sum(simDM_list$gamma[ind_zero] == 1)/nrow(ind_zero),
                 sum(simDM_list$gamma[ind_zero] == 0)/nrow(ind_zero))
   names(sum_list) <- c("P(zero)", "P(at risk|zero)", "P(structure|zero)")
-  print(round(sum_list, 5))
   
   ### Plot
-  
   ylim_u <- data.frame(z = simDM_list$z, ci = simDM_list$ci) %>%
     group_by(ci) %>%
     summarise_all("mean") %>% 
@@ -65,7 +63,7 @@ simDM_sum <- function(simDM_list){
     list_plot[[k]] <- data.frame(x = paste0("V", str_pad(1:simDM_list$J, ceiling(log10(simDM_list$J)) + 1, pad = "0")),
                                  y = colMeans(dat_k)) %>%
       ggplot(aes(x = x, y = y)) +
-      geom_bar(stat = "identity", fill = "mediumaquamarine") +
+      geom_bar(stat = "identity", fill = col_plot) +
       scale_x_discrete(guide = guide_axis(angle = 90))  + 
       theme_bw() +
       ylim(0, ylim_u) +
