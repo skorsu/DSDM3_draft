@@ -7,8 +7,8 @@ library(foreach)
 library(doParallel)
 
 ### Import the data
-path <- "/Users/kevinkvp/Desktop/result_local/"
-case_name <- "strong_sig_no_overlap_zi"
+path <- "/Users/kevin-imac/Desktop/result_local/"
+case_name <- "strong_sig_with_overlap_zi"
 dat <- readRDS(paste0(path, "data_", case_name, ".RData"))
 result <- readRDS(paste0(path, "result_", case_name, ".RData"))
 
@@ -24,7 +24,8 @@ dmsdm <- foreach(t = 1:30) %dopar% {
 }
 stopImplicitCluster()
 
-dmsdm[[1]]$time
+saveRDS(list(result_sDM = dmsdm),
+        paste0(path, "result_sparseDM_", case_name, "R.Data"))
 
 ### DM-DM: Calculate the measure quantity (Jaccard, AdjRand, and VI)
 dd_quan <- matrix(NA, ncol = 4, nrow = 30)
@@ -37,12 +38,17 @@ for(i in 1:30){
                                                 maxNClusters = 10)))[c(5, 1, 22), 2])
   dsd_quan[i, ] <- c(dmsdm[[i]]$time, 
                      mclustcomp(dat$dat[[i]]$data$ci, 
-                                as.numeric(salso(dmsdm[[1]]$assign)))[c(5, 1, 22), 22])
-  
+                                as.numeric(salso(dmsdm[[i]]$assign[-c(1:5000), ],
+                                                 maxNClusters = 10)))[c(5, 1, 22), 2])
   
 }
 
 colMeans(dd_quan)
 apply(dd_quan, 2, sd)
 
+colMeans(dsd_quan)
+apply(dsd_quan, 2, sd)
 
+### Avg Number of Cluster
+
+apply(result$zz_result[[30]]$zz_mod$assign[, ], 1, function(x){length(unique(x))})
