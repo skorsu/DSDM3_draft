@@ -8,8 +8,8 @@ library(salso)
 library(mclustcomp)
 
 ### Setting: -------------------------------------------------------------------
-## path <- "/Users/kevin-imac/Desktop/simu_study/" ### path for saving the data and result
-path <- "/Users/kevinkvp/Desktop/simulation study/"
+path <- "/Users/kevin-imac/Desktop/simu_study/" ### path for saving the data and result
+## path <- "/Users/kevinkvp/Desktop/simulation study/"
 case_name <- "z_1_pi_90_J_100" ### the path that use for differentiating each case
 
 ### Read the RData file: -------------------------------------------------------
@@ -66,6 +66,9 @@ nclus <- function(dat_list, burn_in){
     cbind(apply(dat_list$result_DZ[-c(1:burn_in), ], 1, function(x){length(unique(x))}))
 }
 
+### Function: Proportion of Zero
+pzero <- function(){}
+
 ### Plot the data: -------------------------------------------------------------
 plot_list <- summarise_dat(dat)
 plot_list[[5]]
@@ -78,7 +81,6 @@ lapply(result, function(x){x$runtime}) |>
   t() |>
   apply(2, ms_format, r = 4)
 
-
 ### Cluster Analysis (using VI() loss): ----------------------------------------
 set.seed(1)
 clus_assign_VI <- lapply(result, clus_list, burn_in = 10000, loss_type = "VI")
@@ -86,24 +88,35 @@ mclust_VI <- lapply(clus_assign_VI, mclustcomp_across)
 lapply(1:8, function(x){simplify2array(mclust_VI)[x, , ] |> t()}) |>
   lapply(function(x){apply(x, 2, ms_format)})
 
-### Active Clusters for the semiparametric
-
-nclus(result[[1]], burn_in = 10000)
-active_VI <- lapply(1:2, function(x){simplify2array(lapply(result, nclus, burn_in = 10000))[, x, ]})
-active_VI |>
-  lapply(colMeans) |>
+lapply(clus_assign_VI, `[`, , 1:2) |>
+  lapply(function(x){apply(x, 2, function(y){length(unique(y))})}) |>
   unlist() |>
-  matrix(nrow = 30) |>
+  matrix(ncol = 30) |>
+  t() |>
   apply(2, ms_format)
 
-cbind(as.data.frame(active_VI[[1]]), iter = paste0("iter#", 10001:25000)) |>
-  pivot_longer(cols = -iter) |>
-  mutate() |>
-  ggplot(aes(x = name, y = value, group = name))
+### Cluster Analysis (using binder() loss): ----------------------------------------
+set.seed(1)
+clus_assign_BD <- lapply(result, clus_list, burn_in = 10000, loss_type = "binder")
+mclust_BD <- lapply(clus_assign_BD, mclustcomp_across)
+lapply(1:8, function(x){simplify2array(mclust_BD)[x, , ] |> t()}) |>
+  lapply(function(x){apply(x, 2, ms_format)})
 
-clus_assign_VI |>
-  lapply(`[`, , 5:8) |>
-  lapply(function(dat){apply(dat, 2, function(x){length(unique(x))})}) |>
-  simplify2array() |>
+lapply(clus_assign_BD, `[`, , 1:2) |>
+  lapply(function(x){apply(x, 2, function(y){length(unique(y))})}) |>
+  unlist() |>
+  matrix(ncol = 30) |>
   t() |>
-  apply(2, ms_format, r = 4)
+  apply(2, ms_format)
+
+### Number of clusters for the non-parametric: ---------------------------------
+lapply(clus_assign_BD, "[", , 5:8) |>
+  lapply(function(x){apply(x, 2, function(y){length(unique(y))})}) |>
+  unlist() |>
+  matrix(ncol = 30) |>
+  t() |>
+  apply(2, ms_format)
+
+
+
+
