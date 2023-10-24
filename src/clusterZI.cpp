@@ -40,6 +40,25 @@ double log_atrisk(arma::vec zi, arma::vec gamma_ik, arma::vec beta_k,
   
 }
 
+// [[Rcpp::export]]
+double log_betak(int k, arma::mat z, arma::mat gamma_mat, arma::vec beta_k,
+                 arma::uvec ci, double mu_beta, double s2_beta){
+  
+  double log_prob = 0.0;
+  
+  arma::mat zk = z.rows(arma::find(ci == k));
+  arma::mat gk = gamma_mat.rows(arma::find(ci == k));
+  
+  for(int i = 0; i < zk.n_rows; ++i){
+    log_prob += log_marginal(zk.row(i).t(), gk.row(i).t(), beta_k);
+  }
+  
+  log_prob += arma::accu(arma::log_normpdf(beta_k, mu_beta, std::sqrt(s2_beta)));
+  
+  return log_prob;
+  
+}
+
 // Updating Parameters: --------------------------------------------------------
 // [[Rcpp::export]]
 arma::cube update_atrisk(arma::uvec ci, arma::mat z, arma::cube gamma_old, 
@@ -81,6 +100,35 @@ arma::cube update_atrisk(arma::uvec ci, arma::mat z, arma::cube gamma_old,
   }
   
   return gamma_new;
+  
+}
+
+// [[Rcpp::export]]
+arma::mat update_beta(arma::uvec ci, arma::mat z, arma::cube gamma_cube, 
+                      arma::mat beta_old, double mu_beta, double s2_beta,
+                      double s2_MH){
+  
+  arma::mat beta_new(beta_old);
+  arma::uvec active_clus = arma::unique(ci);
+  arma::mat s2_MH_mat = std::sqrt(s2_MH) * arma::eye(beta_old.n_cols, beta_old.n_cols); 
+  
+  for(int kk = 0; kk < active_clus.size(); ++kk){
+    // Proposed a new beta
+    arma::vec betak_old = beta_old.row(active_clus[kk]).t();
+    arma::vec betak_proposed = arma::mvnrnd(betak_old, s2_MH_mat);
+    // Calculate the log A
+    double logA = log_betak(active_clus[kk], z, gamma_cube.slice(active_clus[kk]), 
+                            betak_proposed, ci, mu_beta, s2_beta) - 
+                  log_betak(active_clus[kk], z, gamma_cube.slice(active_clus[kk]), 
+                            betak_old, ci, mu_beta, s2_beta);
+    // Decide to accept?
+    double logU = std::log(R::runif(0.0, 1.0));
+    if(logU <= logA){
+      beta_new.row(active_clus[kk]) = betak_proposed.t();
+    }
+  }
+  
+  return beta_new;
   
 }
 
