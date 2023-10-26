@@ -740,16 +740,15 @@ Rcpp::List ZIDM_ZIDM(unsigned int iter, unsigned int K_max, arma::mat z,
 // *****************************************************************************
 // [[Rcpp::export]]
 arma::cube beta_mat_update(unsigned int K, unsigned int iter, arma::mat z, 
-                           arma::uvec clus_assign, double mu, double s2, 
-                           double s2_MH){
+                           arma::uvec clus_assign, arma::mat gm, double mu, 
+                           double s2, double s2_MH){
   
   /* Try: only beta */
   
   arma::cube result(K, z.n_cols, iter);
-  arma::mat gm(z.n_rows, z.n_cols, arma::fill::ones);
   
   // Initialize the beta matrix
-  arma::mat b_init(K, z.n_cols, arma::fill::ones);
+  arma::mat b_init(K, z.n_cols, arma::fill::zeros);
   arma::mat b_mcmc(b_init);
   
   for(int t = 0; t < iter; ++t){

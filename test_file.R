@@ -4,8 +4,12 @@ library(salso)
 library(foreach)
 library(doParallel)
 library(mclustcomp)
+library(cluster)
+library(ecodist)
+library(ggplot2)
 
-sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Simulate the data (Easiest Pattern)
 data_sim <- function(n, pat_mat, pi_gamma, xi_conc, xi_non_conc, sum_z){
@@ -38,7 +42,20 @@ data_sim <- foreach(t = 1:15) %dopar% {
 }
 stopImplicitCluster()
 
-### First
+### Try pam with BrayCurtis
+pamBC <- matrix(NA, nrow = 50, ncol = 15)
+pamBC_adjR <- rep(NA, 15)
+for(i in 1:15){
+  pam_bc <- lapply(2:10, 
+                   function(x, dat_mat){pam(bcdist(dat_mat), x)$silinfo$avg.width}, 
+                   dat_mat = data_sim[[i]]$z) |>
+    unlist() |>
+    which.max() + 1
+  pamBC[, i] <- pam(bcdist(data_sim[[i]]$z), pam_bc)$clustering
+  pamBC_adjR[i] <- mclustcomp(pamBC[, i], data_sim[[i]]$ci)[1, 2]
+}
+
+### Our Model
 registerDoParallel(5)
 result_clus <- foreach(t = 1:15) %dopar% {
   set.seed(t)
@@ -54,8 +71,66 @@ stopImplicitCluster()
 
 adj_rand <- rep(NA, 15)
 for(i in 1:15){
-  adj_rand[i] <- mclustcomp(as.numeric(salso(result_clus[[i]]$result)), 
+  adj_rand[i] <- mclustcomp(as.numeric(salso(result_clus[[i]]$result[-(1:5000), ])), 
                             data_sim[[i]]$ci)[1, 2]
 }
 
+nactive <- lapply(1:15,
+       function(x){apply(result_clus[[x]]$result, 1, function(y){length(unique(y))})}) |>
+  unlist() |>
+  matrix(ncol = 15, byrow = FALSE)
 
+par(mfrow = c(2, 2))
+matplot(nactive[, which(adj_rand == 1)], type = "l", lty = 1, 
+        ylim = c(1, 10), main = "Perfect Case", ylab = "# Active Cluster")
+matplot(nactive[, which(adj_rand == 0)], type = "l", lty = 1,
+        ylim = c(1, 10), main = "Worst Case", ylab = "# Active Cluster")
+matplot(nactive[, which(0 < adj_rand & adj_rand < 1)], type = "l", lty = 1,
+        ylim = c(1, 10), main = "Not-Good Case", ylab = "# Active Cluster")
+
+### Update only beta
+for(t in 1:15){
+  set.seed(t)
+  tt <- beta_mat_update(K = 3, iter = 10000, z = data_sim[[t]]$z, 
+                        clus_assign = data_sim[[t]]$ci - 1, 
+                        gm = data_sim[[t]]$at_risk_mat, 
+                        mu = 0, s2 = 1, s2_MH = 1)
+  
+  path_pic <- "/Users/kevin-imac/Desktop/pic/"
+  jpeg(paste0(path_pic, 'beta_rep', t, '.jpg'), width = 1532, height = 931,
+       quality = 90)
+  par(mfrow = c(1, 3))
+  for(i in 1:3){
+    plot_main <- paste0("Rep: ", t, " - Cluster: ", i)
+    est_relative <- exp(t(tt[i, , ]))/rowSums(exp(t(tt[i, , ])))
+    matplot(est_relative, type = "l", lty = 1, lwd = 1.25, ylab = "Relative Count", 
+            main = plot_main)
+    abline(h = colMeans(data_sim[[t]]$z[which(data_sim[[t]]$ci == i), ]/2500),
+           lty = "dashed")
+  }
+  dev.off()
+  
+}
+
+
+### Our Model (with 20,000 iterations)
+registerDoParallel(5)
+result_clus1 <- foreach(t = 1:15) %dopar% {
+  set.seed(t)
+  start_time <- Sys.time()
+  test_result <- ZIDM_ZIDM(iter = 20000, K_max = 10, z = data_sim[[t]]$z,
+                           theta_vec = rep(1, 10), launch_iter = 5,
+                           MH_var = 1, mu = 0, s2 = 1, r0g = 1, r1g = 1, 
+                           r0c = 1, r1c = 1, print_iter = 2000)
+  time_diff <- difftime(Sys.time(), start_time)
+  return(list(result = test_result$assign, time_diff = time_diff))
+}
+stopImplicitCluster()
+
+adj_rand1 <- rep(NA, 15)
+for(i in 1:15){
+  adj_rand1[i] <- mclustcomp(as.numeric(salso(result_clus1[[i]]$result[-(1:5000), ])), 
+                             data_sim[[i]]$ci)[1, 2]
+}
+
+      
