@@ -739,6 +739,29 @@ Rcpp::List ZIDM_ZIDM(unsigned int iter, unsigned int K_max, arma::mat z,
 
 // *****************************************************************************
 // [[Rcpp::export]]
+arma::cube atrisk_update(unsigned int K, unsigned int iter, arma::mat z, 
+                         arma::uvec clus_assign, arma::mat beta_mat, 
+                         double r0g, double r1g){
+  
+  /* Try: only at-risk */
+  
+  arma::cube result(z.n_rows, z.n_cols, iter);
+  
+  // Initialize the gamma matrix
+  arma::mat gm_init(z.n_rows, z.n_cols, arma::fill::ones);
+  arma::mat gm_mcmc(gm_init);
+  
+  for(int t = 0; t < iter; ++t){
+    gm_mcmc = update_at_risk(z, clus_assign, gm_init, beta_mat, r0g, r1g);
+    result.slice(t) = gm_mcmc;
+    gm_init = gm_mcmc;
+  }
+  
+  return result;
+  
+}
+
+// [[Rcpp::export]]
 arma::cube beta_mat_update(unsigned int K, unsigned int iter, arma::mat z, 
                            arma::uvec clus_assign, arma::mat gm, double mu, 
                            double s2, double s2_MH){
@@ -774,7 +797,7 @@ Rcpp::List beta_ar_update(unsigned int K, unsigned int iter, arma::mat z,
   // Initialize
   arma::mat gm_init(z.n_rows, z.n_cols, arma::fill::ones);
   arma::mat gm_mcmc(gm_init);
-  arma::mat b_init(K, z.n_cols, arma::fill::ones);
+  arma::mat b_init(K, z.n_cols, arma::fill::zeros);
   arma::mat b_mcmc(b_init);
   
   for(int t = 0; t < iter; ++t){
