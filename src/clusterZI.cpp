@@ -818,4 +818,73 @@ Rcpp::List beta_ar_update(unsigned int K, unsigned int iter, arma::mat z,
   
 }
 
+// [[Rcpp::export]]
+Rcpp::List realloc_test(unsigned int Kmax, unsigned int iter, arma::mat z, 
+                        arma::uvec init_assign, arma::mat gamma_mat, 
+                        arma::mat beta_mat, arma::vec tau_vec, 
+                        arma::vec theta_vec){
+  
+  arma::umat assign_result(z.n_rows, iter, arma::fill::value(-1));
+  arma::vec nk(Kmax, arma::fill::zeros);
+  
+  // Count the number of element in each cluster
+  for(int k = 0; k < Kmax; ++k){
+    arma::uvec nk_index = arma::find(init_assign == k);
+    nk[k] += nk_index.size();
+  }
+  
+  // Reallocate
+  for(int t = 0; t < iter; ++t){
+    
+    for(int i = 0; i < z.n_rows; ++i){
+      
+      nk[init_assign[i]] -= 1;
+      arma::vec zi = z.row(i).t();
+      arma::vec gmi = gamma_mat.row(i).t();
+      arma::vec log_prob(Kmax, arma::fill::zeros);
+      
+      for(int k = 0; k < Kmax; ++k){
+        log_prob[k] += log_marginal(zi, gmi, beta_mat.row(k).t());
+        log_prob[k] += std::log(theta_vec[k] + nk[k]);
+      }
+      
+      arma::vec realloc_prob = log_sum_exp(log_prob);
+      Rcpp::NumericVector realloc_rcpp = Rcpp::NumericVector(realloc_prob.begin(), 
+                                                             realloc_prob.end());
+      Rcpp::IntegerVector realloc_rcpp_index = rmultinom_1(realloc_rcpp, Kmax);
+      arma::vec realloc_index = Rcpp::as<arma::vec>(Rcpp::wrap(realloc_rcpp_index));
+      
+      arma::uvec new_ck = arma::find(realloc_index == 1);
+      init_assign.row(i).fill(new_ck[0]);
+      nk[new_ck[0]] += 1;
+      
+    }
+    
+    assign_result.col(t) = init_assign;
+    
+  }
+  
+  Rcpp::List result;
+  result["nk"] = nk;
+  result["assign_result"] = assign_result;
+  return result;
+  
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // *****************************************************************************
