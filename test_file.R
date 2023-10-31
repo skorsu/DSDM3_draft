@@ -10,8 +10,8 @@ library(ggplot2)
 library(plotrix)
 library(latex2exp)
 
-# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Simulate the data (Easiest Pattern)
 data_sim <- function(n, pat_mat, pi_gamma, xi_conc, xi_non_conc, sum_z){
@@ -44,7 +44,7 @@ data_sim <- foreach(t = 1:15) %dopar% {
 }
 stopImplicitCluster()
 
-### Try: Fix beta to some constant, same cluster
+### Try: Fix beta to some constant, same cluster -------------------------------
 
 registerDoParallel(5)
 result <- foreach(t = 1:15) %dopar% {
@@ -82,7 +82,7 @@ sapply(1:15, function(x){result_salso[[x]]$adj_rand})
 table(result[[1]]$assign$assign_result[, 5001],
       result[[1]]$assign$assign_result[, 9001])
 
-### Try: Fix beta to some constant, singleton
+### Try: Fix beta to some constant, singleton ----------------------------------
 registerDoParallel(5)
 result <- foreach(t = 1:15) %dopar% {
   set.seed(t)
@@ -124,12 +124,114 @@ apply(sapply(1:15, function(x){result_salso[[x]]$assign}), 2,
 table(sapply(1:15, function(x){result_salso[[x]]$assign})[, 1],
       data_sim[[1]]$ci)
 
-### Try: beta is a pattern matrix, same cluster
+### Try: beta = relative count, same cluster -----------------------------------
+registerDoParallel(5)
+result <- foreach(t = 1:15) %dopar% {
+  set.seed(t)
+  start <- Sys.time()
+  assign <- realloc_test(Kmax = 50, iter = 10000, z = data_sim[[t]]$z, 
+                         init_assign = rep(0, 50), gamma_mat = matrix(1, ncol = 20, nrow = 50), 
+                         beta_mat = data_sim[[t]]$z/2500, 
+                         tau_vec = rep(1, 50), theta_vec = rep(1, 50))
+  runtime <- difftime(Sys.time(), start)
+  return(list(assign = assign, runtime = runtime))
+}
+stopImplicitCluster()
 
-conct <- 1
+### Active Clusters
+aclus_mat <- sapply(1:15, function(x){apply(result[[x]]$assign$assign_result, 2, 
+                                            function(y){length(unique(y))})})
+matplot(aclus_mat, type = "l", lty = 1, lwd = 0.5, xlab = "Iteration",
+        ylab = "Active Clusters", col = 1:10,
+        main = TeX("$\\beta_{jk} = relative, c_{i} = 0 \\forall i$"),
+        ylim = c(1, 50))
+
+ci1 <- as.numeric(salso(t(result[[1]]$assign$assign_result[, -(1:5000)])))
+data_sim[[1]]$z[data_sim[[1]]$ci == 1 & ci1 == 1, ]/2500
+data_sim[[1]]$z[data_sim[[1]]$ci == 1 & ci1 == 3, ]/2500
+table(ci1, data_sim[[1]]$ci)
+
+### Thought: Group by the relative count (strong signal) and the location of zero.
+### Need to be exactly the same in terms of the location of zero.
+
+### Cluster Assignment Performance
+registerDoParallel(5)
+result_salso <- foreach(t = 1:15) %dopar% {
+  set.seed(t)
+  assign <- as.numeric(salso(t(result[[t]]$assign$assign_result)[-(1:5000), ]))
+  adj_rand <- mclustcomp(assign, data_sim[[t]]$ci)[1, 2]
+  return(list(assign = assign, adj_rand = adj_rand))
+}
+stopImplicitCluster()
+
+sapply(1:15, function(x){result_salso[[x]]$assign})
+mean(sapply(1:15, function(x){result_salso[[x]]$adj_rand}))
+sd(sapply(1:15, function(x){result_salso[[x]]$adj_rand}))
+
+### Try: beta = relative count, singleton --------------------------------------
+registerDoParallel(5)
+result <- foreach(t = 1:15) %dopar% {
+  set.seed(t)
+  start <- Sys.time()
+  assign <- realloc_test(Kmax = 50, iter = 10000, z = data_sim[[t]]$z, 
+                         init_assign = 0:49, gamma_mat = matrix(1, ncol = 20, nrow = 50), 
+                         beta_mat = data_sim[[t]]$z/2500, 
+                         tau_vec = rep(1, 50), theta_vec = rep(1, 50))
+  runtime <- difftime(Sys.time(), start)
+  return(list(assign = assign, runtime = runtime))
+}
+stopImplicitCluster()
+
+### Active Clusters
+aclus_mat <- sapply(1:15, function(x){apply(result[[x]]$assign$assign_result, 2, 
+                                            function(y){length(unique(y))})})
+matplot(aclus_mat, type = "l", lty = 1, lwd = 0.5, xlab = "Iteration",
+        ylab = "Active Clusters", col = 1:10,
+        main = TeX("$\\beta_{jk} = relative, c_{i} = singleton$"),
+        ylim = c(1, 50))
+
+ci1 <- as.numeric(salso(t(result[[1]]$assign$assign_result[, -(1:5000)])))
+data_sim[[1]]$z[data_sim[[1]]$ci == 1 & ci1 == 1, ]/2500
+data_sim[[1]]$z[data_sim[[1]]$ci == 1 & ci1 == 3, ]/2500
+table(ci1, data_sim[[1]]$ci)
+
+### Cluster Assignment Performance
+registerDoParallel(5)
+result_salso <- foreach(t = 1:15) %dopar% {
+  set.seed(t)
+  assign <- as.numeric(salso(t(result[[t]]$assign$assign_result)[-(1:5000), ]))
+  adj_rand <- mclustcomp(assign, data_sim[[t]]$ci)[1, 2]
+  return(list(assign = assign, adj_rand = adj_rand))
+}
+stopImplicitCluster()
+
+sapply(1:15, function(x){result_salso[[x]]$assign})
+mean(sapply(1:15, function(x){result_salso[[x]]$adj_rand}))
+sd(sapply(1:15, function(x){result_salso[[x]]$adj_rand}))
+
+### Investigate
+set.seed(12)
+c1 <- as.numeric(salso(t(result[[1]]$assign$assign_result[, -(1:5000)])))
+table(actual = data_sim[[1]]$ci, model = c1)
+z1 <- data_sim[[1]]$z[data_sim[[1]]$ci == 1, ]
+c1 <- c1[data_sim[[1]]$ci == 1]
+
+z1[order(c1), ]
+
+rownames(z1) <- paste0("index: ", which(data_sim[[1]]$ci == 1), " | clus: ", c1)
+loc_zero <- ifelse(z1 == 0, 1, 0)
+heatmap(loc_zero[order(c1), ], Rowv = NA, Colv = NA) 
+
+
+### Try: beta is a pattern matrix, same cluster --------------------------------
+
+conct <- 0.75
 sigmat <- diag(20)[1:10, ] * conct
-exp(sigmat[1, ])/sum(exp(sigmat[1, ]))
+rel <- exp(sigmat[1, ])/sum(exp(sigmat[1, ]))
+rel
+rel[1]/rel[2]
 plot(exp(sigmat[1, ])/sum(exp(sigmat[1, ])), ylim = c(0, 1))
+abline(h = rel[2], col = "red")
 
 registerDoParallel(5)
 result <- foreach(t = 1:15) %dopar% {
@@ -165,12 +267,52 @@ stopImplicitCluster()
 sapply(1:15, function(x){result_salso[[x]]$assign})
 sapply(1:15, function(x){result_salso[[x]]$adj_rand})
 
+### Try: random betas, same cluster --------------------------------------------
+mattest <- cbind(expand.grid(c(0, 1), c(0, 1), c(0, 1)),
+                 matrix(0, nrow = 8, ncol = 17))
+set.seed(1)
+Kmax <- 10
+muB <- 0
+s2B <- 10000
+betmat <- matrix(rnorm(20 * Kmax, muB, sqrt(s2B)), ncol = 20, nrow = Kmax)
+new_rr <- exp(betmat)/rowSums(exp(betmat))
+matplot(t(new_rr), type = "p", lty = 1, lwd = 0.5)
 
-log(1)
+assign <- realloc_test(Kmax = 8, iter = 10000, z = data_sim[[1]]$z, 
+                       init_assign = rep(0, 50), gamma_mat = matrix(1, ncol = 20, nrow = 50), 
+                       beta_mat = as.matrix(mattest), 
+                       tau_vec = rep(1, 8), theta_vec = rep(1, 8))
+table(data_sim[[1]]$ci, as.numeric(salso(t(assign$assign_result[, -(1:5000)]))))
+
 
 b0 <- 0
 b1 <- rnorm(20, sd = sqrt(10))
 plot(exp(b0 + b1)/sum(exp(b0 + b1)))
+
+
+
+
+data_sim[[1]]$z/2500
+assign <- realloc_test(Kmax = 50, iter = 10000, z = data_sim[[1]]$z, 
+                       init_assign = rep(0, 50), gamma_mat = matrix(1, ncol = 20, nrow = 50), 
+                       beta_mat = data_sim[[1]]$z/2500, 
+                       tau_vec = rep(1, 50), theta_vec = rep(1, 50))
+plot(apply(assign$assign_result, 2, function(x){length(unique(x))}), type = "l")
+as.numeric(salso(t(assign$assign_result[, -(1:5000)]))) |>
+  table(data_sim[[1]]$ci)
+
+matmat <- diag(50)[rep(1:5, 2), ]
+matmat[1:5, ] <- matmat[1:5, ]*1.1
+matmat[6:10, ] <- matmat[6:10, ]*0.9
+
+assign <- realloc_test(Kmax = 10, iter = 10000, z = data_sim[[1]]$z, 
+                       init_assign = rep(0, 50), gamma_mat = matrix(1, ncol = 20, nrow = 50), 
+                       beta_mat = matmat, 
+                       tau_vec = rep(1, 10), theta_vec = rep(1, 10))
+plot(apply(assign$assign_result, 2, function(x){length(unique(x))}), 
+     type = "l", ylim = c(1, 10))
+as.numeric(salso(t(assign$assign_result[, -(1:5000)]))) |>
+  table(data_sim[[1]]$ci)
 
 
 
