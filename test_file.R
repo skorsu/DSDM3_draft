@@ -224,23 +224,32 @@ heatmap(loc_zero[order(c1), ], Rowv = NA, Colv = NA)
 
 
 ### Try: beta is a pattern matrix, same cluster --------------------------------
+par(mfrow = c(2, 2))
+for(x in c(0.1, 0.25, 0.5, 1)){
+  sigmat <- x * cbind(expand.grid(c(0, 1), c(0, 1), c(0, 1)), 
+                          matrix(0, nrow = 8, ncol = 17))
+  rel <- exp(sigmat)/rowSums(exp(sigmat))
+  matplot(t(rel[c(2, 4, 8), ]), type = "b", ylim = c(0, 0.15), 
+          xlab = "Variable", ylab = "Relative exp(beta)",
+          main = paste0("s = ", x))
+}
 
-conct <- 0.75
-sigmat <- diag(20)[1:10, ] * conct
-rel <- exp(sigmat[1, ])/sum(exp(sigmat[1, ]))
-rel
-rel[1]/rel[2]
-plot(exp(sigmat[1, ])/sum(exp(sigmat[1, ])), ylim = c(0, 1))
+conct <- 0.1
+sigmat <- conct * cbind(expand.grid(c(0, 1), c(0, 1), c(0, 1)), 
+                        matrix(0, nrow = 8, ncol = 17))
+rel <- exp(sigmat[2, ])/sum(exp(sigmat[2, ]))
+plot(as.numeric(rel), ylim = c(0, 1), xlab = "Variable", 
+     ylab = "Relative exp(beta)")
 abline(h = rel[2], col = "red")
 
 registerDoParallel(5)
 result <- foreach(t = 1:15) %dopar% {
   set.seed(t)
   start <- Sys.time()
-  assign <- realloc_test(Kmax = 10, iter = 10000, z = data_sim[[t]]$z, 
+  assign <- realloc_test(Kmax = 8, iter = 10000, z = data_sim[[t]]$z, 
                          init_assign = rep(0, 50), gamma_mat = matrix(1, ncol = 20, nrow = 50), 
-                         beta_mat = sigmat, 
-                         tau_vec = rep(1, 10), theta_vec = rep(1, 10))
+                         beta_mat = as.matrix(sigmat), 
+                         tau_vec = rep(1, 8), theta_vec = rep(1, 8))
   runtime <- difftime(Sys.time(), start)
   return(list(assign = assign, runtime = runtime))
 }
@@ -267,99 +276,38 @@ stopImplicitCluster()
 sapply(1:15, function(x){result_salso[[x]]$assign})
 sapply(1:15, function(x){result_salso[[x]]$adj_rand})
 
-### Try: random betas, same cluster --------------------------------------------
-mattest <- cbind(expand.grid(c(0, 1), c(0, 1), c(0, 1)),
-                 matrix(0, nrow = 8, ncol = 17))
-set.seed(1)
-Kmax <- 10
-muB <- 0
-s2B <- 10000
-betmat <- matrix(rnorm(20 * Kmax, muB, sqrt(s2B)), ncol = 20, nrow = Kmax)
-new_rr <- exp(betmat)/rowSums(exp(betmat))
-matplot(t(new_rr), type = "p", lty = 1, lwd = 0.5)
+### Include Split-Merge: -------------------------------------------------------
+bmat <- matrix(0, ncol = 20, nrow = 10)
+bmat <- diag(20)[1:10, ]
+test <- realloc_sm_nobeta(Kmax = 10, iter = 10000, z = data_sim[[1]]$z, 
+                          init_assign = rep(0, 50), gamma_mat = matrix(1, ncol = 20, nrow = 50), 
+                          beta_mat = bmat, tau_vec = rep(1, 10), theta_vec = rep(1, 10),
+                          launch_iter = 10)
+test$logA
+table(test$realloc_clus)
+table(data_sim[[1]]$ci, test$realloc_clus)
+table(test$launch_assign)
+table(data_sim[[1]]$ci, test$launch_assign)
+table(test$proposed_assign)
+table(data_sim[[1]]$ci, test$proposed_assign)
+table(rep(1:5, 10), mod = test$realloc_clus)
+test$realloc_clus[test$samp_ind + 1]
+test$samp_ind
+test$expand_ind
+table(test$realloc_clus, test$launch_assign)
 
-assign <- realloc_test(Kmax = 8, iter = 10000, z = data_sim[[1]]$z, 
-                       init_assign = rep(0, 50), gamma_mat = matrix(1, ncol = 20, nrow = 50), 
-                       beta_mat = as.matrix(mattest), 
-                       tau_vec = rep(1, 8), theta_vec = rep(1, 8))
-table(data_sim[[1]]$ci, as.numeric(salso(t(assign$assign_result[, -(1:5000)]))))
-
-
-b0 <- 0
-b1 <- rnorm(20, sd = sqrt(10))
-plot(exp(b0 + b1)/sum(exp(b0 + b1)))
-
-
-
-
-data_sim[[1]]$z/2500
-assign <- realloc_test(Kmax = 50, iter = 10000, z = data_sim[[1]]$z, 
-                       init_assign = rep(0, 50), gamma_mat = matrix(1, ncol = 20, nrow = 50), 
-                       beta_mat = data_sim[[1]]$z/2500, 
-                       tau_vec = rep(1, 50), theta_vec = rep(1, 50))
-plot(apply(assign$assign_result, 2, function(x){length(unique(x))}), type = "l")
-as.numeric(salso(t(assign$assign_result[, -(1:5000)]))) |>
-  table(data_sim[[1]]$ci)
-
-matmat <- diag(50)[rep(1:5, 2), ]
-matmat[1:5, ] <- matmat[1:5, ]*1.1
-matmat[6:10, ] <- matmat[6:10, ]*0.9
-
-assign <- realloc_test(Kmax = 10, iter = 10000, z = data_sim[[1]]$z, 
-                       init_assign = rep(0, 50), gamma_mat = matrix(1, ncol = 20, nrow = 50), 
-                       beta_mat = matmat, 
-                       tau_vec = rep(1, 10), theta_vec = rep(1, 10))
-plot(apply(assign$assign_result, 2, function(x){length(unique(x))}), 
-     type = "l", ylim = c(1, 10))
-as.numeric(salso(t(assign$assign_result[, -(1:5000)]))) |>
-  table(data_sim[[1]]$ci)
-
-
-
-test <- realloc_test(Kmax = 10, iter = 10000, z = data_sim[[1]]$z, 
-                     init_assign = rep(0, 50), gamma_mat = matrix(1, ncol = 20, nrow = 50), 
-                     beta_mat = matrix(20, ncol = 20, nrow = 10), 
-                     tau_vec = rep(1, 10), theta_vec = rep(1, 10))
-
-plot(exp(rep(100, 20))/sum(exp(rep(100, 20))))
-
-apply(test$assign_result, 2, function(x){length(unique(x))}) |>
-  plot(type = "l")
-salso(t(test$assign_result)[-(1:5000), ])
-table(salso(t(test$assign_result)[-(1:5000), ]), data_sim[[1]]$ci)
-
-table(test$assign_result[, 5001], test$assign_result[, 5002])
-
-test_mat <- matrix(NA, nrow = 50, ncol = 2500)
-for(i in 1:2500){
-  test_mat[, i] <- as.numeric(salso(t(test$assign_result[, (5000 + i):(5004 + i)])))
+bmat <- data_sim[[1]]$z/2500
+loga_vec <- rep(NA, 1000)
+for(i in 1:1000){
+  test <- realloc_sm_nobeta(Kmax = 50, iter = 10000, z = data_sim[[1]]$z, 
+                            init_assign = 0:49, gamma_mat = matrix(1, ncol = 20, nrow = 50), 
+                            beta_mat = bmat, tau_vec = rep(1, 50), theta_vec = rep(1, 50),
+                            launch_iter = 10)
+  loga_vec[i] <- test$logA
 }
+hist(loga_vec)
 
-plot(apply(test_mat, 2, function(x){length(unique(x))}), type = "l")
-
-test_mat[, 1]
-
-test <- realloc_test(Kmax = 50, iter = 10000, z = data_sim[[1]]$z, 
-                     init_assign = 0:49, gamma_mat = matrix(1, ncol = 20, nrow = 50), 
-                     beta_mat = diag(50)[, 1:20], 
-                     tau_vec = rep(1, 50), theta_vec = rep(1, 50))
-
-test <- realloc_test(Kmax = 50, iter = 10000, z = data_sim[[1]]$z, 
-                     init_assign = 0:49, gamma_mat = matrix(1, ncol = 20, nrow = 50), 
-                     beta_mat = data_sim[[1]]$z/2500, 
-                     tau_vec = rep(1, 50), theta_vec = rep(1, 50))
-
-test <- realloc_test(Kmax = 50, iter = 10000, z = data_sim[[1]]$z, 
-                     init_assign = rep(0, 50), gamma_mat = matrix(1, ncol = 20, nrow = 50), 
-                     beta_mat = diag(50)[, 1:20], 
-                     tau_vec = rep(1, 50), theta_vec = rep(1, 50))
-
-apply(test$assign_result, 2, function(x){length(unique(x))}) |>
-  plot(type = "l")
-salso(t(test$assign_result)[-(1:5000), ], loss = binder()) |>
-  table(data_sim[[1]]$ci)
-table(salso(t(test$assign_result)[-(1:5000), ]), data_sim[[1]]$ci)
-
+mean(loga_vec > log(runif(1000)))
 
 ### Before 10/26: --------------------------------------------------------------
 ### Try pam with BrayCurtis
