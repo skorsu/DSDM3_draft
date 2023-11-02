@@ -10,8 +10,8 @@ library(ggplot2)
 library(plotrix)
 library(latex2exp)
 
-sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Simulate the data (Easiest Pattern)
 data_sim <- function(n, pat_mat, pi_gamma, xi_conc, xi_non_conc, sum_z){
@@ -43,6 +43,11 @@ data_sim <- foreach(t = 1:15) %dopar% {
            xi_conc = 10, xi_non_conc = 0.01, sum_z = 2500)
 }
 stopImplicitCluster()
+
+### Label Switching: -----------------------------------------------------------
+test <- labswitch(data_sim[[1]]$z, rep(1:10, 5))
+table(data_sim[[1]]$ci, test)
+
 
 ### Try: Fix beta to some constant, same cluster -------------------------------
 
@@ -278,17 +283,15 @@ sapply(1:15, function(x){result_salso[[x]]$adj_rand})
 
 ### Include Split-Merge: -------------------------------------------------------
 #### Extension to (Try: beta = relative count)
-set.seed(1)
-betmat <- matrix(runif(50 * 20, 0, 1), ncol = 20)
-
 registerDoParallel(5)
 result <- foreach(t = 1:15) %dopar% {
   set.seed(t)
   start <- Sys.time()
+  betmat <- matrix(runif(1000, 1, 3), ncol = 20, nrow = 50)
   assign <- realloc_sm_nobeta(Kmax = 50, iter = 10000, z = data_sim[[t]]$z, 
                               init_assign = 0:49, gamma_mat = matrix(1, ncol = 20, nrow = 50), 
                               beta_mat = betmat, tau_vec = rep(1, 50), 
-                              theta_vec = rep(1, 50), r0c = 1, r1c = 1, launch_iter = 10)
+                              theta_vec = rep(1, 50), r0c = 1, r1c = 1, launch_iter = 5)
   runtime <- difftime(Sys.time(), start)
   return(list(assign = assign, runtime = runtime))
 }

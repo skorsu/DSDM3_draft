@@ -471,6 +471,32 @@ Rcpp::List update_tau(arma::uvec clus_assign, arma::vec tau_vec,
   return result;
 }
 
+// [[Rcpp::export]]
+arma::uvec labswitch(arma::mat z, arma::uvec ci){
+  
+  arma::uvec active_clus = arma::unique(ci);
+  unsigned int Kpos = active_clus.size();
+  arma::vec val(Kpos, arma::fill::zeros);
+  
+  for(int kk = 0; kk < Kpos; ++kk){
+    int k = active_clus[kk];
+    arma::mat zk = z.rows(arma::find(ci == k));
+    val[kk] += arma::norm(arma::mean(zk), 2);
+  }
+  
+  arma::uvec new_index = arma::sort_index(val);
+  arma::uvec new_ci(z.n_rows, arma::fill::value(-1));
+  
+  // Reorder
+  for(int kk = 0; kk < Kpos; ++kk){
+    int k_old = active_clus[kk];
+    new_ci.rows(arma::find(ci == k_old)).fill(new_index[kk]);
+  }
+  
+  return new_ci;
+  
+}
+
 // *****************************************************************************
 // [[Rcpp::export]]
 arma::mat DM_DM(unsigned int iter, unsigned int K_max, arma::mat z,
@@ -927,6 +953,7 @@ Rcpp::List realloc_sm_nobeta(unsigned int Kmax, unsigned int iter, arma::mat z,
     }
     
     // Split-Merge
+    // arma::uvec sm_init = labswitch(z, realloc_clus);
     arma::uvec sm_init(realloc_clus);
     arma::uvec active_sm = arma::unique(sm_init);
     unsigned int Kpos_sm = active_sm.size();
