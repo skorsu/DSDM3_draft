@@ -277,37 +277,51 @@ sapply(1:15, function(x){result_salso[[x]]$assign})
 sapply(1:15, function(x){result_salso[[x]]$adj_rand})
 
 ### Include Split-Merge: -------------------------------------------------------
-bmat <- matrix(0, ncol = 20, nrow = 10)
-bmat <- diag(20)[1:10, ]
-test <- realloc_sm_nobeta(Kmax = 10, iter = 10000, z = data_sim[[1]]$z, 
-                          init_assign = rep(0, 50), gamma_mat = matrix(1, ncol = 20, nrow = 50), 
-                          beta_mat = bmat, tau_vec = rep(1, 10), theta_vec = rep(1, 10),
-                          launch_iter = 10)
-test$logA
-table(test$realloc_clus)
-table(data_sim[[1]]$ci, test$realloc_clus)
-table(test$launch_assign)
-table(data_sim[[1]]$ci, test$launch_assign)
-table(test$proposed_assign)
-table(data_sim[[1]]$ci, test$proposed_assign)
-table(rep(1:5, 10), mod = test$realloc_clus)
-test$realloc_clus[test$samp_ind + 1]
-test$samp_ind
-test$expand_ind
-table(test$realloc_clus, test$launch_assign)
+#### Extension to (Try: beta = relative count)
+set.seed(1)
+betmat <- matrix(runif(50 * 20, 0, 1), ncol = 20)
 
-bmat <- data_sim[[1]]$z/2500
-loga_vec <- rep(NA, 1000)
-for(i in 1:1000){
-  test <- realloc_sm_nobeta(Kmax = 50, iter = 10000, z = data_sim[[1]]$z, 
-                            init_assign = 0:49, gamma_mat = matrix(1, ncol = 20, nrow = 50), 
-                            beta_mat = bmat, tau_vec = rep(1, 50), theta_vec = rep(1, 50),
-                            launch_iter = 10)
-  loga_vec[i] <- test$logA
+registerDoParallel(5)
+result <- foreach(t = 1:15) %dopar% {
+  set.seed(t)
+  start <- Sys.time()
+  assign <- realloc_sm_nobeta(Kmax = 50, iter = 10000, z = data_sim[[t]]$z, 
+                              init_assign = 0:49, gamma_mat = matrix(1, ncol = 20, nrow = 50), 
+                              beta_mat = betmat, tau_vec = rep(1, 50), 
+                              theta_vec = rep(1, 50), r0c = 1, r1c = 1, launch_iter = 10)
+  runtime <- difftime(Sys.time(), start)
+  return(list(assign = assign, runtime = runtime))
 }
-hist(loga_vec)
+stopImplicitCluster()
 
-mean(loga_vec > log(runif(1000)))
+### Measure Time
+comp_time <- sapply(1:15, function(x){as.numeric(result[[x]]$runtime)})
+mean(comp_time)
+sd(comp_time)
+
+### Active Clusters
+aclus_mat <- sapply(1:15, function(x){apply(result[[x]]$assign$assign_result, 2, 
+                                            function(y){length(unique(y))})})
+matplot(aclus_mat, type = "l", lty = 1, lwd = 0.5, xlab = "Iteration",
+        ylab = "Active Clusters", col = 1:10,
+        main = "SM",
+        ylim = c(1, 50))
+abline(h = 3, lty = "dotted")
+
+### Cluster Assignment Performance
+registerDoParallel(5)
+result_salso <- foreach(t = 1:15) %dopar% {
+  set.seed(t)
+  assign <- as.numeric(salso(t(result[[t]]$assign$assign_result)[-(1:5000), ]))
+  adj_rand <- mclustcomp(assign, data_sim[[t]]$ci)[1, 2]
+  return(list(assign = assign, adj_rand = adj_rand))
+}
+stopImplicitCluster()
+sapply(1:15, function(x){result_salso[[x]]$adj_rand})
+
+### Try: relabel the stuff (sum of j = 1 for all observations in each clusters)
+### ()
+### If it not, find the reason why noise help.
 
 ### Before 10/26: --------------------------------------------------------------
 ### Try pam with BrayCurtis
