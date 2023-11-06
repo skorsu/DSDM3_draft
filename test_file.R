@@ -10,8 +10,8 @@ library(ggplot2)
 library(plotrix)
 library(latex2exp)
 
-# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Simulate the data (Easiest Pattern)
 data_sim <- function(n, pat_mat, pi_gamma, xi_conc, xi_non_conc, sum_z){
@@ -35,21 +35,133 @@ data_sim <- function(n, pat_mat, pi_gamma, xi_conc, xi_non_conc, sum_z){
   
 }
 
+patmat <- matrix(0, ncol = 4, nrow = 3)
+patmat[1, 1] <- 1
+patmat[2, c(1, 2)] <- 1
+patmat[3, c(1, 2, 3)] <- 1
+
 ### Simulate the data
 registerDoParallel(5)
 data_sim <- foreach(t = 1:15) %dopar% {
   set.seed(t)
-  data_sim(n = 50, pat_mat = (diag(20)[1:3, ]), pi_gamma = 1,
+  data_sim(n = 50, pat_mat = patmat, pi_gamma = 1,
            xi_conc = 10, xi_non_conc = 0.01, sum_z = 2500)
 }
 stopImplicitCluster()
 
-### Label Switching: -----------------------------------------------------------
-test <- labswitch(data_sim[[1]]$z, rep(1:10, 5))
-table(data_sim[[1]]$ci, test)
+### The way that we simulate the data, pretty same for all clusters. Try make it more different.
+
+colSums(data_sim[[1]]$z[data_sim[[1]]$ci == 1, ])/sum(data_sim[[1]]$z[data_sim[[1]]$ci == 1, ])
+colSums(data_sim[[1]]$z[data_sim[[1]]$ci == 2, ])/sum(data_sim[[1]]$z[data_sim[[1]]$ci == 2, ])
+colSums(data_sim[[1]]$z[data_sim[[1]]$ci == 3, ])/sum(data_sim[[1]]$z[data_sim[[1]]$ci == 3, ])
+
+### Label switching should fix it. If it does not, find the explanation why adding random noise work.
+### Choose the column with the higest vvariance with the raw data
+### Check why adding noise is work?
+### Why using same prior does not work? -- Likelihood?
+### Check the likelihood
+### Try with Shi model (Priority)
+
+### 11/02: ---------------------------------------------------------------------
+#### Try beta: -----------------------------------------------------------------
+set.seed(1)
+betmat <- matrix(0, ncol = 4, nrow = 50)
+assign <- realloc_sm_nobeta(Kmax = 50, iter = 10000, z = data_sim[[1]]$z, 
+                            init_assign = 0:49, gamma_mat = matrix(1, ncol = 4, nrow = 50), 
+                            beta_mat = betmat, tau_vec = rep(1, 50), 
+                            theta_vec = rep(15, 50), r0c = 1, r1c = 1, launch_iter = 10)
+
+table(data_sim[[1]]$ci, as.numeric(salso(t(assign$assign_result[, -(1:5000)]))))
+
+### Cluster 37
+cc <- 6
+n0 <- rep(NA, 10000)
+pp <- matrix(NA, ncol = 20, nrow = 10000)
+for(i in 1:10000){
+  l0 <- which(assign$assign_result[, i] == cc)
+  if(length(l0) == 1){
+    pp[i, ] <- data_sim[[1]]$z[l0, ]/2500
+  } else if(length(l0) > 1) {
+    z0 <- data_sim[[1]]$z[(which(assign$assign_result[, i] == cc)), ]
+    n0[i] <- dim(z0)[1]
+    pp[i, ] <- colSums(z0)/sum(z0)
+  } else {
+    pp[i, ] <- rep(0, 20)
+  }
+}
+
+matplot(pp, lty = 1, type = "l")
+
+n44 <- rep(NA, 10000)
+pp <- matrix(NA, ncol = 20, nrow = 10000)
+for(i in 1:10000){
+  l44 <- which(assign$assign_result[, i] == 44)
+  if(length(l44) == 1){
+    pp[i, ] <- data_sim[[1]]$z[l44, ]/2500
+  } else if(length(l44) > 1) {
+    z44 <- data_sim[[1]]$z[(which(assign$assign_result[, i] == 44)), ]
+    n44[i] <- dim(z44)[1]
+    pp[i, ] <- colSums(z44)/sum(z44)
+  } else {
+    pp[i, ] <- rep(0, 20)
+  }
+}
+
+matplot(pp, lty = 1, type = "l")
 
 
-### Try: Fix beta to some constant, same cluster -------------------------------
+plot(apply(assign$assign_result, 2, function(x){length(unique(x))}), type = "l")
+table(data_sim[[1]]$ci, as.numeric(salso(t(assign$assign_result[, -(1:5000)]))))
+
+#### During the meeting, I set the betamat to be the same for all dataset. "set.seed(1)" outside foreach
+### Maybe we are lucky about the betmat, as when I try different randomization. It is not good.
+set.seed(1)
+betmat <- matrix(runif(1000), ncol = 20, nrow = 50)
+
+registerDoParallel(5)
+result <- foreach(t = 1:15) %dopar% {
+  set.seed(t)
+  start <- Sys.time()
+  assign <- realloc_sm_nobeta(Kmax = 50, iter = 10000, z = data_sim[[t]]$z, 
+                                 init_assign = 0:49, gamma_mat = matrix(1, ncol = 20, nrow = 50), 
+                                 beta_mat = matrix(runif(1000), ncol = 20, nrow = 50), tau_vec = rep(1, 50), 
+                                 theta_vec = rep(1, 50), r0c = 1, r1c = 1, launch_iter = 5)
+  runtime <- difftime(Sys.time(), start)
+  return(list(assign = assign, runtime = runtime))
+}
+stopImplicitCluster()
+
+### Measure Time
+comp_time <- sapply(1:15, function(x){as.numeric(result[[x]]$runtime)})
+mean(comp_time)
+sd(comp_time)
+
+### Active Clusters
+aclus_mat <- sapply(1:15, function(x){apply(result[[x]]$assign$assign_result, 2, 
+                                            function(y){length(unique(y))})})
+matplot(aclus_mat, type = "l", lty = 1, lwd = 0.5, xlab = "Iteration",
+        ylab = "Active Clusters", col = 1:10,
+        main = "SM",
+        ylim = c(1, 50))
+abline(h = 3, lty = "dotted")
+
+### Cluster Assignment Performance
+registerDoParallel(5)
+result_salso <- foreach(t = 1:15) %dopar% {
+  set.seed(t)
+  assign <- as.numeric(salso(t(result[[t]]$assign$assign_result)[-(1:5000), ]))
+  adj_rand <- mclustcomp(assign, data_sim[[t]]$ci)[1, 2]
+  return(list(assign = assign, adj_rand = adj_rand))
+}
+stopImplicitCluster()
+sapply(1:15, function(x){result_salso[[x]]$adj_rand})
+
+set.seed(3)
+bb <- matrix(runif(1000), ncol = 20, nrow = 50)
+matplot(t(bb), lty = 1, lwd = 0.5, type = "l")
+
+### Before 10/31: --------------------------------------------------------------
+#### Try: Fix beta to some constant, same cluster ------------------------------
 
 registerDoParallel(5)
 result <- foreach(t = 1:15) %dopar% {
@@ -87,7 +199,7 @@ sapply(1:15, function(x){result_salso[[x]]$adj_rand})
 table(result[[1]]$assign$assign_result[, 5001],
       result[[1]]$assign$assign_result[, 9001])
 
-### Try: Fix beta to some constant, singleton ----------------------------------
+#### Try: Fix beta to some constant, singleton ---------------------------------
 registerDoParallel(5)
 result <- foreach(t = 1:15) %dopar% {
   set.seed(t)
@@ -129,7 +241,7 @@ apply(sapply(1:15, function(x){result_salso[[x]]$assign}), 2,
 table(sapply(1:15, function(x){result_salso[[x]]$assign})[, 1],
       data_sim[[1]]$ci)
 
-### Try: beta = relative count, same cluster -----------------------------------
+#### Try: beta = relative count, same cluster ----------------------------------
 registerDoParallel(5)
 result <- foreach(t = 1:15) %dopar% {
   set.seed(t)
@@ -173,7 +285,7 @@ sapply(1:15, function(x){result_salso[[x]]$assign})
 mean(sapply(1:15, function(x){result_salso[[x]]$adj_rand}))
 sd(sapply(1:15, function(x){result_salso[[x]]$adj_rand}))
 
-### Try: beta = relative count, singleton --------------------------------------
+#### Try: beta = relative count, singleton -------------------------------------
 registerDoParallel(5)
 result <- foreach(t = 1:15) %dopar% {
   set.seed(t)
@@ -228,7 +340,7 @@ loc_zero <- ifelse(z1 == 0, 1, 0)
 heatmap(loc_zero[order(c1), ], Rowv = NA, Colv = NA) 
 
 
-### Try: beta is a pattern matrix, same cluster --------------------------------
+#### Try: beta is a pattern matrix, same cluster -------------------------------
 par(mfrow = c(2, 2))
 for(x in c(0.1, 0.25, 0.5, 1)){
   sigmat <- x * cbind(expand.grid(c(0, 1), c(0, 1), c(0, 1)), 
@@ -281,7 +393,7 @@ stopImplicitCluster()
 sapply(1:15, function(x){result_salso[[x]]$assign})
 sapply(1:15, function(x){result_salso[[x]]$adj_rand})
 
-### Include Split-Merge: -------------------------------------------------------
+#### Include Split-Merge: ------------------------------------------------------
 #### Extension to (Try: beta = relative count)
 registerDoParallel(5)
 result <- foreach(t = 1:15) %dopar% {

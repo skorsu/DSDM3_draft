@@ -476,21 +476,24 @@ arma::uvec labswitch(arma::mat z, arma::uvec ci){
   
   arma::uvec active_clus = arma::unique(ci);
   unsigned int Kpos = active_clus.size();
-  arma::vec val(Kpos, arma::fill::zeros);
+  arma::vec norm2(Kpos, arma::fill::zeros);
   
   for(int kk = 0; kk < Kpos; ++kk){
     int k = active_clus[kk];
-    arma::mat zk = z.rows(arma::find(ci == k));
-    val[kk] += arma::norm(arma::mean(zk), 2);
+    arma::uvec k_loc = arma::find(ci == k);
+    arma::mat zk = z.rows(k_loc);
+    double sum_zk = arma::accu(zk);
+    arma::rowvec zk_prop = arma::sum(zk)/sum_zk;
+    norm2[kk] += arma::norm(zk_prop);
   }
   
-  arma::uvec new_index = arma::sort_index(val);
+  arma::uvec new_index = arma::sort_index(norm2);
   arma::uvec new_ci(z.n_rows, arma::fill::value(-1));
-  
+                     
   // Reorder
   for(int kk = 0; kk < Kpos; ++kk){
-    int k_old = active_clus[kk];
-    new_ci.rows(arma::find(ci == k_old)).fill(new_index[kk]);
+    int k_new_index = new_index[kk];
+    new_ci.rows(arma::find(ci == active_clus[k_new_index])).fill(kk);
   }
   
   return new_ci;
@@ -1067,18 +1070,175 @@ Rcpp::List realloc_sm_nobeta(unsigned int Kmax, unsigned int iter, arma::mat z,
   
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+// [[Rcpp::export]]
+Rcpp::List realloc_sm_nobeta_lb(unsigned int Kmax, unsigned int iter, arma::mat z, 
+                                arma::uvec init_assign, arma::mat gamma_mat, 
+                                arma::mat beta_mat, arma::vec tau_vec, 
+                                arma::vec theta_vec, double r0c, double r1c, 
+                                int launch_iter){
+  
+  arma::umat assign_result(z.n_rows, iter, arma::fill::value(-1));
+  arma::vec sm_status(iter);
+  arma::vec sm_ac(iter);
+  
+  for(int t = 0; t < iter; ++t){
+    
+    // Reallocate
+    arma::uvec realloc_clus(init_assign);
+    arma::uvec active_realloc = arma::unique(realloc_clus);
+    unsigned int Kpos = active_realloc.size();
+    
+    arma::vec nk_realloc(Kpos, arma::fill::zeros);
+    for(int kk = 0; kk < Kpos; ++kk){
+      int k = active_realloc[kk];
+      arma::uvec nk_index = arma::find(realloc_clus == k);
+      nk_realloc[kk] += nk_index.size();
+    }
+    
+    for(int i = 0; i < z.n_rows; ++i){
+      
+      // Remove ci from the nk_realloc
+      arma::uvec kk_vec = arma::find(active_realloc == realloc_clus[i]);
+      int kk = kk_vec[0];
+      nk_realloc[kk] -= 1;
+      
+      arma::vec zi = z.row(i).t();
+      arma::vec gmi = gamma_mat.row(i).t();
+      arma::vec log_prob(Kpos, arma::fill::zeros);
+      
+      for(int kk = 0; kk < Kpos; ++kk){
+        int k = active_realloc[kk];
+        log_prob[kk] += log_marginal(zi, gmi, beta_mat.row(k).t());
+        log_prob[kk] += std::log(theta_vec[k] + nk_realloc[kk]);
+      }
+      
+      arma::vec realloc_prob = log_sum_exp(log_prob);
+      Rcpp::NumericVector realloc_rcpp = Rcpp::NumericVector(realloc_prob.begin(),
+                                                             realloc_prob.end());
+      Rcpp::IntegerVector realloc_rcpp_index = rmultinom_1(realloc_rcpp, Kpos);
+      arma::vec realloc_index = Rcpp::as<arma::vec>(Rcpp::wrap(realloc_rcpp_index));
+      
+      arma::uvec new_kk_vec = arma::find(realloc_index == 1);
+      int new_kk = new_kk_vec[0];
+      int new_k = active_realloc[new_kk];
+      realloc_clus.row(i).fill(new_k);
+      nk_realloc[new_kk] += 1;
+    }
+    
+    // Split-Merge
+    // arma::uvec sm_init = labswitch(z, realloc_clus);
+    arma::uvec sm_init = labswitch(z, realloc_clus);
+    arma::uvec active_sm = arma::unique(sm_init);
+    unsigned int Kpos_sm = active_sm.size();
+    int expand_ind = -1;
+    
+    // Decide to expand (split) or collapse (merge)
+    arma::uvec samp_ind = arma::randperm(z.n_rows, 2);
+    while((Kpos_sm == Kmax) and
+            (sm_init[samp_ind[0]] == sm_init[samp_ind[1]])){
+      samp_ind = arma::randperm(z.n_rows, 2);
+    }
+    
+    // Create a set S
+    arma::uvec samp_clus = sm_init.rows(samp_ind);
+    arma::uvec S = arma::find(sm_init == samp_clus[0] or sm_init == samp_clus[1]);
+    arma::uvec notS = arma::find(S != samp_ind[0] and S != samp_ind[1]);
+    S = S.rows(notS);
+    
+    arma::uvec launch_assign(sm_init);
+    arma::vec launch_tau(tau_vec);
+    
+    arma::vec nkk(Kmax, arma::fill::zeros);
+    for(int k = 0; k < Kmax; ++k){
+      arma::uvec nk_index = arma::find(launch_assign == k);
+      nkk[k] += nk_index.size();
+    }
+    
+    if(samp_clus[0] == samp_clus[1]){ // Split
+      expand_ind = 1;
+      arma::uvec inactive_clus = arma::find(nkk == 0);
+      int new_ck = inactive_clus[arma::randperm(inactive_clus.size(), 1)[0]];
+      launch_assign.row(samp_ind[0]).fill(new_ck);
+      samp_clus.row(0).fill(new_ck);
+    } else { // Merge
+      expand_ind = 0;
+    }
+    
+    // Perform a launch step
+    arma::vec rand_index = arma::randu(S.size());
+    launch_assign.rows(S) = samp_clus.rows((rand_index >= 0.5));
+    for(int t = 0; t <= launch_iter; ++t){
+      launch_assign = realloc_sm(z, launch_assign, gamma_mat, beta_mat, S, samp_clus);
+    }
+    
+    // Perform last SM
+    arma::uvec proposed_assign(launch_assign);
+    if(expand_ind == 1){
+      proposed_assign = realloc_sm(z, launch_assign, gamma_mat, beta_mat, S, samp_clus);
+    } else {
+      proposed_assign.rows(S).fill(samp_clus[1]);
+      proposed_assign.rows(samp_ind).fill(samp_clus[1]);
+    }
+    
+    // MH
+    double logA = 0.0;
+    arma::vec nk_old(Kmax, arma::fill::zeros);
+    arma::vec nk_proposed(Kmax, arma::fill::zeros);
+    
+    for(int i = 0; i < z.n_rows; ++i){
+      arma::vec zi = z.row(i).t();
+      arma::vec gmi = gamma_mat.row(i).t();
+      logA += log_marginal(zi, gmi, beta_mat.row(proposed_assign[i]).t());
+      logA -= log_marginal(zi, gmi, beta_mat.row(sm_init[i]).t());
+      
+      nk_old[sm_init[i]] += 1;
+      nk_proposed[proposed_assign[i]] += 1;
+      
+    }
+    
+    arma::uvec proposed_active = arma::find(nk_proposed > 0); 
+    logA += std::lgamma(arma::accu(theta_vec.rows(proposed_active)));
+    logA -= arma::accu(arma::lgamma(theta_vec.rows(proposed_active)));
+    logA += arma::accu(arma::lgamma(nk_proposed.rows(proposed_active) + theta_vec.rows(proposed_active)));
+    logA -= std::lgamma(arma::accu(nk_proposed.rows(proposed_active) + theta_vec.rows(proposed_active)));
+    
+    logA -= std::lgamma(arma::accu(theta_vec.rows(active_sm)));
+    logA += arma::accu(arma::lgamma(theta_vec.rows(active_sm)));
+    logA -= arma::accu(arma::lgamma(nk_old.rows(active_sm) + theta_vec.rows(active_sm)));
+    logA += std::lgamma(arma::accu(nk_old.rows(active_sm) + theta_vec.rows(active_sm)));
+    
+    logA += log_proposal(launch_assign, proposed_assign, z, gamma_mat, 
+                         beta_mat, S, samp_clus);
+    if(expand_ind == 1){
+      logA -= log_proposal(proposed_assign, launch_assign, z, gamma_mat, 
+                           beta_mat, S, samp_clus);
+    }
+    
+    logA += (((2 * expand_ind) - 1) * log(r0c/r1c));
+    
+    // MH
+    double logU = std::log(R::runif(0.0, 1.0));
+    int sm_accept = 0;
+    arma::uvec new_assign(sm_init);
+    if(logU <= logA){
+      sm_accept += 1;
+      new_assign = proposed_assign;
+    }
+    
+    sm_status.row(t).fill(expand_ind);
+    sm_ac.row(t).fill(sm_accept);
+    arma::uvec new_assign_lb = labswitch(z, new_assign);
+    assign_result.col(t) = new_assign_lb;
+    init_assign = new_assign_lb;
+    
+  }
+  
+  Rcpp::List result;
+  result["sm_status"] = sm_status;
+  result["sm_ac"] = sm_ac;
+  result["assign_result"] = assign_result;
+  return result;
+  
+}
 
 // *****************************************************************************
