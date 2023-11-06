@@ -54,4 +54,14 @@ result_shi <- foreach(t = 1:15) %dopar% {
 }
 stopImplicitCluster()
 
+sapply(1:15, function(x){apply(result_shi[[x]]$crec, 1, 
+                               function(y){length(unique(y))})}) |>
+  matplot(type = "l", lty = 1, lwd = 0.5, 
+          main = "Active Cluster (Shi's model)", ylab = "# Active Cluster",
+          xlab = "Iteration")
+
+
+sapply(1:15, 
+       function(x){as.numeric(salso(result_shi[[x]]$crec[-(1:5000), ]))})
+
       
