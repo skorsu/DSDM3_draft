@@ -11,8 +11,8 @@ library(plotrix)
 library(latex2exp)
 library(sparseMbClust)
 
-# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Simulate the data (Easiest Pattern)
 data_sim <- function(n, pat_mat, pi_gamma, xi_conc, xi_non_conc, sum_z){
@@ -60,8 +60,23 @@ sapply(1:15, function(x){apply(result_shi[[x]]$crec, 1,
           main = "Active Cluster (Shi's model)", ylab = "# Active Cluster",
           xlab = "Iteration")
 
-
-sapply(1:15, 
+salso_result <- sapply(1:15, 
        function(x){as.numeric(salso(result_shi[[x]]$crec[-(1:5000), ]))})
 
-      
+adj_rand <- sapply(1:15,
+                   function(x){mclustcomp(salso_result[, x], data_sim[[x]]$ci)[1, 2]})
+mean(adj_rand)
+sd(adj_rand)
+
+### Our model ==================================================================
+#### Assume that we initialize the cluster assignment to be a singleton
+#### beta = 0 all i,j,k
+
+margi_i <- log_marginal(zi = data_sim[[1]]$z[1, ], gmi = rep(1, 20), beta_k = rep(1, 20))
+assign_prob <- log_sum_exp(log(c(1, rep(1 + 1, 49))) + margi_i)
+sample(1:50, size = 1, prob = assign_prob)
+
+rep()
+
+
+

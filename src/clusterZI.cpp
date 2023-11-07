@@ -15,6 +15,7 @@ Rcpp::IntegerVector rmultinom_1(Rcpp::NumericVector &probs, unsigned int &N){
   return outcome;
 }
 
+// [[Rcpp::export]]
 arma::vec log_sum_exp(arma::vec log_unnorm_prob){
   
   /* Description: This function will calculate the normalized probability 
