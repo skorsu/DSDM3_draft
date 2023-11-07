@@ -475,20 +475,17 @@ Rcpp::List update_tau(arma::uvec clus_assign, arma::vec tau_vec,
 // [[Rcpp::export]]
 arma::uvec labswitch(arma::mat z, arma::uvec ci){
   
+  // Data: Find the column with the largest variance
+  arma::vec zj = z.col(arma::index_max(arma::var(z)));
   arma::uvec active_clus = arma::unique(ci);
   unsigned int Kpos = active_clus.size();
-  arma::vec norm2(Kpos, arma::fill::zeros);
+  arma::vec sum_zj(Kpos, arma::fill::zeros);
   
   for(int kk = 0; kk < Kpos; ++kk){
-    int k = active_clus[kk];
-    arma::uvec k_loc = arma::find(ci == k);
-    arma::mat zk = z.rows(k_loc);
-    double sum_zk = arma::accu(zk);
-    arma::rowvec zk_prop = arma::sum(zk)/sum_zk;
-    norm2[kk] += arma::norm(zk_prop);
+    sum_zj[kk] += arma::accu(z.rows(arma::find(ci == active_clus[kk])));
   }
   
-  arma::uvec new_index = arma::sort_index(norm2);
+  arma::uvec new_index = arma::stable_sort_index(sum_zj);
   arma::uvec new_ci(z.n_rows, arma::fill::value(-1));
                      
   // Reorder
