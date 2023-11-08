@@ -19,8 +19,8 @@ library(sparseMbClust)
 ### Collapse the cluster
 
 
-sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Simulate the data (Easiest Pattern)
 data_sim <- function(n, pat_mat, pi_gamma, xi_conc, xi_non_conc, sum_z){
@@ -43,6 +43,60 @@ data_sim <- function(n, pat_mat, pi_gamma, xi_conc, xi_non_conc, sum_z){
               z = z))
   
 }
+
+### Update 11/07 ===============================================================
+#### Try Reallocate without SM and Marginal ====================================
+
+### Easy Case
+registerDoParallel(5)
+datsim <- foreach(t = 1:15) %dopar% {
+  set.seed(t)
+  data_sim(n = 50, pat_mat = (diag(20)[1:3, ]), pi_gamma = 1,
+           xi_conc = 10, xi_non_conc = 0.01, sum_z = 2500)
+}
+stopImplicitCluster()
+
+registerDoParallel(5)
+result <- foreach(t = 1:15) %dopar% {
+  set.seed(t)
+  test <- realloc_n(Kmax = 50, iter = 10000, z = datsim[[t]]$z, 
+                    init_assign = 0:49, theta_vec = rep(1, 50))
+}
+stopImplicitCluster() 
+
+sapply(1:15, function(x){apply(result[[x]]$assign_result, 2, 
+                               function(y){length(unique(y))})}) |>
+  matplot(type = "l", lty = 1, main = "Active Cluster: Easiest Case", 
+          xlab = "Iteration", ylab = "# Active Cluster")
+
+### More Difficult Case
+patmat <- matrix(0, nrow = 3, ncol = 20)
+patmat[1, 1] <- 1
+patmat[2, c(1, 2)] <- 1
+patmat[3, 1:3] <- 1
+
+registerDoParallel(5)
+datsim <- foreach(t = 1:15) %dopar% {
+  set.seed(t)
+  data_sim(n = 50, pat_mat = patmat, pi_gamma = 1,
+           xi_conc = 10, xi_non_conc = 0.01, sum_z = 2500)
+}
+stopImplicitCluster()
+
+registerDoParallel(5)
+result <- foreach(t = 1:15) %dopar% {
+  set.seed(t)
+  test <- realloc_n(Kmax = 50, iter = 10000, z = datsim[[t]]$z, 
+                    init_assign = 0:49, theta_vec = rep(1, 50))
+}
+stopImplicitCluster() 
+
+sapply(1:15, function(x){apply(result[[x]]$assign_result, 2, 
+                               function(y){length(unique(y))})}) |>
+  matplot(type = "l", lty = 1, main = "Active Cluster: More Difficult Case", 
+          xlab = "Iteration", ylab = "# Active Cluster")
+
+result[[1]]$process
 
 ### Shi's Result ===============================================================
 

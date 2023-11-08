@@ -1239,4 +1239,49 @@ Rcpp::List realloc_sm_nobeta_lb(unsigned int Kmax, unsigned int iter, arma::mat 
   
 }
 
+// Debugging: ------------------------------------------------------------------
+// [[Rcpp::export]]
+Rcpp::List realloc_n(unsigned int Kmax, unsigned int iter, arma::mat z, 
+                     arma::uvec init_assign, arma::vec theta_vec){
+  
+  // Try: Reallocation Step without marginal 
+  
+  arma::umat assign_result(z.n_rows, iter, arma::fill::value(-1));
+  arma::cube process(z.n_rows, Kmax, iter, arma::fill::value(-1));
+  
+  arma::vec nk(Kmax, arma::fill::zeros);
+  
+  // Count the number of element in each cluster
+  for(int k = 0; k < Kmax; ++k){
+    arma::uvec nk_index = arma::find(init_assign == k);
+    nk[k] += nk_index.size();
+  }
+  
+  // Reallocate
+  for(int t = 0; t < iter; ++t){
+    for(int i = 0; i < z.n_rows; ++i){
+      nk[init_assign[i]] -= 1;
+      process.slice(t).row(i) = nk.t();
+      arma::vec realloc_prob = log_sum_exp(nk + theta_vec);
+      Rcpp::NumericVector realloc_rcpp = Rcpp::NumericVector(realloc_prob.begin(), 
+                                                             realloc_prob.end());
+      Rcpp::IntegerVector realloc_rcpp_index = rmultinom_1(realloc_rcpp, Kmax);
+      arma::vec realloc_index = Rcpp::as<arma::vec>(Rcpp::wrap(realloc_rcpp_index));
+      
+      arma::uvec new_ck = arma::find(realloc_index == 1);
+      init_assign.row(i).fill(new_ck[0]);
+      nk[new_ck[0]] += 1;
+    } 
+    
+    assign_result.col(t) = init_assign;
+    
+  } 
+  
+  Rcpp::List result;
+  result["process"] = process;
+  result["assign_result"] = assign_result;
+  return result;
+  
+} 
+
 // *****************************************************************************
