@@ -18,11 +18,10 @@ library(sparseMbClust)
 ### Try taking out the marginal out
 ### Collapse the cluster
 
+sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
-# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
-
-### Simulate the data (Easiest Pattern)
+### Function: Simulating the data
 data_sim <- function(n, pat_mat, pi_gamma, xi_conc, xi_non_conc, sum_z){
   K <- nrow(pat_mat)
   ci <- sample(1:K, n, replace = TRUE)
@@ -44,7 +43,7 @@ data_sim <- function(n, pat_mat, pi_gamma, xi_conc, xi_non_conc, sum_z){
   
 }
 
-### Update 11/07 ===============================================================
+### Update 11/14 ===============================================================
 #### Try Reallocate without SM and Marginal ====================================
 
 ### Easy Case
@@ -66,8 +65,8 @@ stopImplicitCluster()
 
 sapply(1:15, function(x){apply(result[[x]]$assign_result, 2, 
                                function(y){length(unique(y))})}) |>
-  matplot(type = "l", lty = 1, main = "Active Cluster: Easiest Case", 
-          xlab = "Iteration", ylab = "# Active Cluster")
+  matplot(type = "l", lty = 1, main = "Active Cluster: Easy Case", 
+          xlab = "Iteration", ylab = "# Active Cluster", lwd = 3)
 
 ### More Difficult Case
 patmat <- matrix(0, nrow = 3, ncol = 20)
@@ -85,7 +84,7 @@ stopImplicitCluster()
 
 registerDoParallel(5)
 result <- foreach(t = 1:15) %dopar% {
-  set.seed(t)
+  set.seed(t + 10)
   test <- realloc_n(Kmax = 50, iter = 10000, z = datsim[[t]]$z, 
                     init_assign = 0:49, theta_vec = rep(1, 50))
 }
@@ -93,10 +92,34 @@ stopImplicitCluster()
 
 sapply(1:15, function(x){apply(result[[x]]$assign_result, 2, 
                                function(y){length(unique(y))})}) |>
-  matplot(type = "l", lty = 1, main = "Active Cluster: More Difficult Case", 
-          xlab = "Iteration", ylab = "# Active Cluster")
+  matplot(type = "l", lty = 1, main = "Active Cluster: Difficult Case", 
+          xlab = "Iteration", ylab = "# Active Cluster", lwd = 3)
 
-result[[1]]$process
+result[[1]]$process[, ,50]
+
+#### Log Marginal ==============================================================
+
+### Data Simulation: Easy Case
+registerDoParallel(5)
+datsim <- foreach(t = 1:15) %dopar% {
+  set.seed(t)
+  data_sim(n = 50, pat_mat = (diag(20)[1:3, ]), pi_gamma = 1,
+           xi_conc = 10, xi_non_conc = 0.01, sum_z = 2500)
+}
+stopImplicitCluster()
+
+test <- logmar(z = datsim[[1]]$z, atrisk = matrix(1, ncol = 20, nrow = 50), 
+               beta_mat = matrix(1, ncol = 20, nrow = 3)) ### Kmax = 3 with J = 20
+
+rowSums(lgamma(datsim[[1]]$z + 1))
+
+set.seed(1)
+dattest <- matrix(round(runif(100)), ncol = 20, nrow = 5)
+
+test <- logmar(z = dattest, atrisk = matrix(1, ncol = 20, nrow = 5), 
+               beta_mat = matrix(1, ncol = 20, nrow = 7))
+test
+dim(test)
 
 ### Shi's Result ===============================================================
 

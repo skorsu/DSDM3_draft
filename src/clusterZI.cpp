@@ -1284,4 +1284,33 @@ Rcpp::List realloc_n(unsigned int Kmax, unsigned int iter, arma::mat z,
   
 } 
 
+// [[Rcpp::export]]
+arma::mat logmar(arma::mat z, arma::mat atrisk, arma::mat beta_mat){
+  
+  /* Calculate the log marginal for all observations in all possible clusters */
+  unsigned int Kmax = beta_mat.n_rows;
+  arma::mat logmar_mat(z.n_rows, Kmax, arma::fill::zeros);
+  
+  // At-risk indicator always equal 1 for non-zero z_ijk. It can be 0 if z_ijk = 0 only.
+  // Data (z)
+  arma::vec sum_zi = arma::sum(z, 1); 
+  logmar_mat += arma::repelem(arma::lgamma(sum_zi + 1), 1, Kmax);
+  logmar_mat -= arma::repelem(arma::sum(arma::lgamma(z + 1), 1), 1, Kmax);
+  
+  // Cluster (Beta) -- Loop through every cluster for changing the beta
+  for(int k = 0; k < Kmax; ++k){
+    arma::rowvec e_beta_k = arma::exp(beta_mat.row(k));
+    arma::vec marginal_part(z.n_rows, arma::fill::zeros);
+    for(int i = 0; i < z.n_rows; ++i){
+      arma::uvec atrisk_loc = arma::find(atrisk.row(i) == 1);
+      
+    }
+    
+    
+  }
+  
+  return logmar_mat;
+    
+}
+
 // *****************************************************************************
