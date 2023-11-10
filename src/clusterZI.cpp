@@ -1301,16 +1301,75 @@ arma::mat logmar(arma::mat z, arma::mat atrisk, arma::mat beta_mat){
   for(int k = 0; k < Kmax; ++k){
     arma::rowvec e_beta_k = arma::exp(beta_mat.row(k));
     arma::vec marginal_part(z.n_rows, arma::fill::zeros);
+    
     for(int i = 0; i < z.n_rows; ++i){
       arma::uvec atrisk_loc = arma::find(atrisk.row(i) == 1);
-      
+      arma::rowvec e_beta_k_zi = z.row(i) + e_beta_k;
+      marginal_part[i] += arma::accu(arma::lgamma(e_beta_k_zi.cols(atrisk_loc)));
+      marginal_part[i] -= std::lgamma(arma::accu(e_beta_k_zi.cols(atrisk_loc))); 
     }
     
+    logmar_mat.col(k) += marginal_part;
     
   }
   
   return logmar_mat;
     
+}
+
+// [[Rcpp::export]]
+Rcpp::List realloc_lmar(unsigned int iter, unsigned int Kmax, arma::mat z, 
+                        arma::mat atrisk, arma::mat beta_mat, arma::uvec init_ci,
+                        double theta){
+  
+  /* This function will run the reallocation step while fixing the at-risk 
+  indicator and beta */
+  
+  // Since we fix the beta, I will calculate the log marginal beforehand.
+  arma::mat log_marginal = logmar(z, atrisk, beta_mat);
+  
+  arma::umat assign_result(z.n_rows, iter, arma::fill::value(-1));
+  arma::cube n_cluster(z.n_rows, Kmax, iter, arma::fill::value(-1));
+  
+  // Calculate the number of the observation in each cluster
+  arma::vec nk(Kmax, arma::fill::zeros);
+  for(int k = 0; k < Kmax; ++k){
+    arma::uvec zk_index = arma::find(init_ci == k);
+    nk[k] += zk_index.size();
+  }
+  
+  // Reallocation step
+  for(int t = 0; t < iter; ++t){
+    
+    for(int i = 0; i < z.n_rows; ++i){
+      unsigned int old_ci = init_ci[i];
+      nk[old_ci] -= 1;
+      
+      n_cluster.slice(t).row(i) = nk.t();
+      
+      arma::rowvec log_prob = arma::log(nk.t() + theta) + log_marginal.row(i);
+      arma::vec realloc_prob = log_sum_exp(log_prob.t());
+      Rcpp::NumericVector realloc_rcpp = Rcpp::NumericVector(realloc_prob.begin(), 
+                                                             realloc_prob.end());
+      Rcpp::IntegerVector realloc_rcpp_index = rmultinom_1(realloc_rcpp, Kmax);
+      arma::vec realloc_index = Rcpp::as<arma::vec>(Rcpp::wrap(realloc_rcpp_index));
+      
+      arma::uvec new_ck = arma::find(realloc_index == 1);
+      init_ci.row(i).fill(new_ck[0]);
+      nk[new_ck[0]] += 1;
+      
+    }
+    
+    assign_result.col(t) = init_ci;
+    
+  }
+
+  Rcpp::List result;
+  result["log_marginal"] = log_marginal;
+  result["n_cluster"] = n_cluster;
+  result["assign_result"] = assign_result.t();
+  return result;
+  
 }
 
 // *****************************************************************************

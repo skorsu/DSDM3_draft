@@ -18,8 +18,8 @@ library(sparseMbClust)
 ### Try taking out the marginal out
 ### Collapse the cluster
 
-sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Function: Simulating the data
 data_sim <- function(n, pat_mat, pi_gamma, xi_conc, xi_non_conc, sum_z){
@@ -97,7 +97,7 @@ sapply(1:15, function(x){apply(result[[x]]$assign_result, 2,
 
 result[[1]]$process[, ,50]
 
-#### Log Marginal ==============================================================
+#### Try Reallocate without SM (include the marginal) ==========================
 
 ### Data Simulation: Easy Case
 registerDoParallel(5)
@@ -108,18 +108,67 @@ datsim <- foreach(t = 1:15) %dopar% {
 }
 stopImplicitCluster()
 
-test <- logmar(z = datsim[[1]]$z, atrisk = matrix(1, ncol = 20, nrow = 50), 
-               beta_mat = matrix(1, ncol = 20, nrow = 3)) ### Kmax = 3 with J = 20
+### Test: all beta are same
+test_realloc <- realloc_lmar(iter = 10000, Kmax = 50, z = datsim[[1]]$z, 
+                             atrisk = datsim[[1]]$at_risk_mat, 
+                             beta_mat = matrix(1, ncol = 20, nrow = 50), 
+                             init_ci = rep(0, 50), theta = 1)
+salso(test_realloc$assign_result)
+apply(test_realloc$assign_result, 1, function(x){length(unique(x))}) |>
+  plot(type = "l")
 
-rowSums(lgamma(datsim[[1]]$z + 1))
+test_realloc <- realloc_lmar(iter = 10000, Kmax = 50, z = datsim[[1]]$z, 
+                             atrisk = datsim[[1]]$at_risk_mat, 
+                             beta_mat = matrix(1, ncol = 20, nrow = 50), 
+                             init_ci = 0:49, theta = 1)
+salso(test_realloc$assign_result)
+apply(test_realloc$assign_result, 1, function(x){length(unique(x))}) |>
+  plot(type = "l")
 
-set.seed(1)
-dattest <- matrix(round(runif(100)), ncol = 20, nrow = 5)
 
-test <- logmar(z = dattest, atrisk = matrix(1, ncol = 20, nrow = 5), 
-               beta_mat = matrix(1, ncol = 20, nrow = 7))
-test
-dim(test)
+### Test: different beta
+set.seed(1); betmat1 <- matrix(runif(1000), ncol = 20, nrow = 50)
+
+
+test_realloc <- realloc_lmar(iter = 10000, Kmax = 50, z = datsim[[1]]$z, 
+                             atrisk = datsim[[1]]$at_risk_mat, 
+                             beta_mat = betmat1, init_ci = 0:49, theta = 1)
+table(datsim[[1]]$ci, as.numeric(salso(test_realloc$assign_result)))
+apply(test_realloc$assign_result, 1, function(x){length(unique(x))}) |>
+  plot(type = "l", xlim = c(0, 500))
+matplot(t(exp(betmat)/rowSums(exp(betmat))), type = "l")
+
+### Cluster 7, 12, 44
+
+### Cluster 7 is the first cluster
+which(test_realloc$assign_result[10000, ] + 1 == 7)
+which(datsim[[1]]$ci == 1)
+test_realloc$n_cluster[, , 1]
+max(test_realloc$log_marginal[1, ])
+which.max(test_realloc$log_marginal[1, ])
+
+
+log_sum_exp(c(0, rep(log(2), 49)) + test_realloc$log_marginal[1, ])
+
+which(test_realloc$assign_result[10000, ] + 1 == 12)
+which(datsim[[1]]$ci == 3)
+which.max(test_realloc$log_marginal[2, ])
+
+apply(test_realloc$log_marginal, 1, which.max) |>
+  table(datsim[[1]]$ci)
+
+### We have 50 clusters
+
+for(k in 1:20){
+  print(which(apply(betmat1, 1, which.max) == k))
+}
+
+set.seed(2)
+betmat1_sf <- betmat1[, sample(1:20)]
+test_realloc_sf <- realloc_lmar(iter = 10000, Kmax = 50, z = datsim[[1]]$z, 
+                               atrisk = datsim[[1]]$at_risk_mat, 
+                               beta_mat = betmat1_sf, init_ci = 0:49, theta = 1)
+table(datsim[[1]]$ci, as.numeric(salso(test_realloc_sf$assign_result)))
 
 ### Shi's Result ===============================================================
 
