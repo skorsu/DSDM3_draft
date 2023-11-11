@@ -12,14 +12,13 @@ library(latex2exp)
 library(sparseMbClust)
 
 ### OK: When sampling the beta, the beta should be cluster specific.
-### Take out the SM, and look at the log(observation) only.
 ### Need to: Sampling the beta
 ### Number along the way
 ### Try taking out the marginal out
 ### Collapse the cluster
 
-# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Function: Simulating the data
 data_sim <- function(n, pat_mat, pi_gamma, xi_conc, xi_non_conc, sum_z){
@@ -112,10 +111,26 @@ stopImplicitCluster()
 test_realloc <- realloc_lmar(iter = 10000, Kmax = 50, z = datsim[[1]]$z, 
                              atrisk = datsim[[1]]$at_risk_mat, 
                              beta_mat = matrix(1, ncol = 20, nrow = 50), 
-                             init_ci = rep(0, 50), theta = 1)
-salso(test_realloc$assign_result)
+                             init_ci = 0:49, theta = 1)
+salso_result <- as.numeric(salso(test_realloc$assign_result[-(1:5000), ]))
 apply(test_realloc$assign_result, 1, function(x){length(unique(x))}) |>
   plot(type = "l")
+table(datsim[[1]]$ci, salso_result)
+
+### Theta: control the number of clusters. (Higher Theta = more clusters)
+test_realloc$log_marginal
+test_realloc$n_cluster[1, , 1]
+test_realloc$n_cluster[2, , 1]
+
+log_sum_exp(lgamma(1:5) - 3)
+lgamma()
+
+log_sum_exp(test_realloc$n_cluster[3, , 1000] + 50)
+log_sum_exp(lgamma(rep(1, 50)) + 4)
+log_sum_exp(lgamma(c(1, rep(2, 49))) + 50)
+
+
+lgamma(0)
 
 test_realloc <- realloc_lmar(iter = 10000, Kmax = 50, z = datsim[[1]]$z, 
                              atrisk = datsim[[1]]$at_risk_mat, 
