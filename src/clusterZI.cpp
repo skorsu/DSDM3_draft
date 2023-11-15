@@ -1372,4 +1372,112 @@ Rcpp::List realloc_lmar(unsigned int iter, unsigned int Kmax, arma::mat z,
   
 }
 
+// [[Rcpp::export]]
+arma::mat update_beta_lmar(arma::mat z, arma::mat atrisk, arma::mat beta_mat,
+                           arma::uvec ci, double mu, double s2, double s2_MH){
+  
+  /* This function will update the beta vector for all active cluster via
+     MH. */
+  
+  arma::uvec active_clus = arma::unique(ci);
+  unsigned int Kpos = active_clus.size();
+  
+  // Calculate the required component: log marginal of the original beta.
+  arma::mat log_marginal_old = logmar(z, atrisk, beta_mat);
+  
+  // Proposed a new beta vector for each active cluster and recalculate the 
+  // new log marginal.
+  arma::mat proposed_beta(beta_mat);
+  for(int kk = 0; kk < Kpos; ++kk){
+    int k = active_clus[kk];
+    arma::vec pro_beta_k = arma::mvnrnd(beta_mat.row(k).t(), 
+                                        s2_MH * arma::eye(beta_mat.n_cols, beta_mat.n_cols));
+    proposed_beta.row(k) = pro_beta_k.t();
+  }
+  
+  arma::mat log_marginal_proposed = logmar(z, atrisk, proposed_beta);
+  
+  // Perform MH algorithm for the active cluster only.
+  for(int kk = 0; kk < Kpos; ++kk){
+    double logA = 0.0;
+    int k = active_clus[kk];
+    arma::uvec ck = arma::find(ci == k);
+    arma::vec lmar_k_old = log_marginal_old.col(k);
+    arma::vec lmar_k_proposed = log_marginal_proposed.col(k);
+    logA += arma::accu(lmar_k_proposed.rows(ck));
+    logA += arma::accu(arma::log_normpdf(proposed_beta.row(k), mu, std::sqrt(s2)));
+    logA -= arma::accu(lmar_k_old.rows(ck));
+    logA -= arma::accu(arma::log_normpdf(beta_mat.row(k), mu, std::sqrt(s2)));
+    
+    double logU = std::log(R::runif(0.0, 1.0));
+    
+    if(logA <= logU){
+      proposed_beta.row(k) = beta_mat.row(k);
+    }
+    
+  }
+  
+  return proposed_beta;
+  
+}
+
+// [[Rcpp::export]]
+Rcpp::List realloc_beta(unsigned int iter, unsigned int Kmax, arma::mat z, 
+                        arma::mat atrisk, arma::mat init_beta, arma::uvec init_ci,
+                        double theta, double mu, double s2, double s2_MH){
+  
+  arma::umat ci_rec(z.n_rows, iter, arma::fill::value(-1));
+  arma::cube beta_rec(init_beta.n_rows, init_beta.n_cols, iter, arma::fill::value(-10));
+  // arma::cube n_cluster(z.n_rows, Kmax, iter, arma::fill::value(-1));
+  arma::mat mcmc_beta(init_beta);
+  
+  // Calculate the number of the observation in each cluster
+  arma::vec nk(Kmax, arma::fill::zeros);
+  for(int k = 0; k < Kmax; ++k){
+    arma::uvec zk_index = arma::find(init_ci == k);
+    nk[k] += zk_index.size();
+  }
+  
+  // Perform the algorithm
+  for(int t = 0; t < iter; ++t){
+    
+    // Update beta
+    mcmc_beta = update_beta_lmar(z, atrisk, init_beta, init_ci, mu, s2, s2_MH);
+    init_beta = mcmc_beta;
+    beta_rec.slice(t) = init_beta;
+    
+    // Update the cluster assignment: Reallocation step
+    arma::mat log_marginal = logmar(z, atrisk, mcmc_beta);
+    
+    for(int i = 0; i < z.n_rows; ++i){
+      unsigned int old_ci = init_ci[i];
+      nk[old_ci] -= 1;
+      
+      arma::rowvec log_prob = arma::log(nk.t() + theta) + log_marginal.row(i);
+      arma::vec realloc_prob = log_sum_exp(log_prob.t());
+      Rcpp::NumericVector realloc_rcpp = Rcpp::NumericVector(realloc_prob.begin(), 
+                                                             realloc_prob.end());
+      Rcpp::IntegerVector realloc_rcpp_index = rmultinom_1(realloc_rcpp, Kmax);
+      arma::vec realloc_index = Rcpp::as<arma::vec>(Rcpp::wrap(realloc_rcpp_index));
+      
+      arma::uvec new_ck = arma::find(realloc_index == 1);
+      init_ci.row(i).fill(new_ck[0]);
+      nk[new_ck[0]] += 1;
+      
+    }
+    
+    ci_rec.col(t) = init_ci;
+
+  }
+  
+  
+  Rcpp::List result;
+  result["beta_rec"] = beta_rec;
+  result["ci_rec"] = ci_rec.t();
+  return result;
+  
+}
+
+
+
 // *****************************************************************************
