@@ -17,8 +17,8 @@ library(sparseMbClust)
 ### Try taking out the marginal out
 ### Collapse the cluster
 
-sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Function: Simulating the data
 data_sim <- function(n, pat_mat, pi_gamma, xi_conc, xi_non_conc, sum_z){
@@ -54,18 +54,43 @@ datsim <- foreach(t = 1:15) %dopar% {
 }
 stopImplicitCluster()
 
+### Max Cluster = 50
 registerDoParallel(5)
 result <- foreach(t = 1:15) %dopar% {
-  set.seed(t)
+  set.seed(3 * (t + 10) - 1)
   test <- realloc_n(Kmax = 50, iter = 10000, z = datsim[[t]]$z, 
-                    init_assign = 0:49, theta_vec = rep(1, 50))
+                    init_assign = rep(0, 50), theta_vec = rep(1, 50))
 }
 stopImplicitCluster() 
 
 sapply(1:15, function(x){apply(result[[x]]$assign_result, 2, 
                                function(y){length(unique(y))})}) |>
-  matplot(type = "l", lty = 1, main = "Active Cluster: Easy Case", 
-          xlab = "Iteration", ylab = "# Active Cluster", lwd = 3)
+  matplot(type = "l", lty = 1, main = "Active Cluster: Easy Case (Kmax = 50)", 
+          xlab = "Iteration", ylab = "# Active Cluster", lwd = 3,
+          ylim = c(1, 50))
+
+salso_clus <- sapply(1:15,
+                     function(x){salso(t(result[[x]]$assign_result[, -(1:5000)]))})
+sd(apply(salso_clus, 2, function(x){length(unique(x))}))
+
+
+### Max Cluster = 10
+registerDoParallel(5)
+result <- foreach(t = 1:15) %dopar% {
+  set.seed(3 * (t + 10) - 1)
+  test <- realloc_n(Kmax = 10, iter = 10000, z = datsim[[t]]$z, 
+                    init_assign = rep(0, 50), theta_vec = rep(1, 10))
+}
+stopImplicitCluster() 
+
+sapply(1:15, function(x){apply(result[[x]]$assign_result, 2, 
+                               function(y){length(unique(y))})}) |>
+  matplot(type = "l", lty = 1, main = "Active Cluster: Easy Case (Kmax = 10)", 
+          xlab = "Iteration", ylab = "# Active Cluster", lwd = 3,
+          ylim = c(1, 50))
+
+sapply(1:15,
+       function(x){salso(t(result[[x]]$assign_result[, -(1:5000)]))})
 
 ### More Difficult Case
 patmat <- matrix(0, nrow = 3, ncol = 20)
@@ -107,83 +132,216 @@ datsim <- foreach(t = 1:15) %dopar% {
 }
 stopImplicitCluster()
 
-### Test: all beta are same
-test_realloc <- realloc_lmar(iter = 10000, Kmax = 50, z = datsim[[1]]$z, 
-                             atrisk = datsim[[1]]$at_risk_mat, 
-                             beta_mat = matrix(1, ncol = 20, nrow = 50), 
-                             init_ci = 0:49, theta = 1)
-salso_result <- as.numeric(salso(test_realloc$assign_result[-(1:5000), ]))
-apply(test_realloc$assign_result, 1, function(x){length(unique(x))}) |>
-  plot(type = "l")
-table(datsim[[1]]$ci, salso_result)
+### Test: all beta are same -- expected to see the same result as the previous case
+registerDoParallel(5)
+result <- foreach(t = 1:15) %dopar% {
+  set.seed(3 * (t + 10) - 1)
+  realloc_lmar(iter = 10000, Kmax = 50, z = datsim[[t]]$z, 
+               atrisk = datsim[[t]]$at_risk_mat, 
+               beta_mat = matrix(1, ncol = 20, nrow = 50), 
+               init_ci = 0:49, theta = 1)
+}
+stopImplicitCluster() 
 
-### Theta: control the number of clusters. (Higher Theta = more clusters)
-test_realloc$log_marginal
-test_realloc$n_cluster[1, , 1]
-test_realloc$n_cluster[2, , 1]
+nactive <- sapply(1:15,
+                  function(x){apply(result[[x]]$assign_result, 1, 
+                                    function(y){length(unique(y))})})
+matplot(nactive, type = "l", lty = 1, main = "Active Cluster: Easy Case", 
+        xlab = "Iteration", ylab = "# Active Cluster", lwd = 3,
+        ylim = c(1, 50))
+abline(h = 35, col = "red")
+abline(h = 34, col = "blue")
 
-log_sum_exp(lgamma(1:5) - 3)
-lgamma()
+salso_assign <- sapply(1:15,
+                       function(x){as.numeric(salso(result[[x]]$assign_result[-(1:5000), ]))})
+mean(apply(salso_assign, 2, function(x){length(unique(x))}))
+sd(apply(salso_assign, 2, function(x){length(unique(x))}))
 
-log_sum_exp(test_realloc$n_cluster[3, , 1000] + 50)
-log_sum_exp(lgamma(rep(1, 50)) + 4)
-log_sum_exp(lgamma(c(1, rep(2, 49))) + 50)
+### More Difficult Case
+patmat <- matrix(0, nrow = 3, ncol = 20)
+patmat[1, 1] <- 1
+patmat[2, c(1, 2)] <- 1
+patmat[3, 1:3] <- 1
+
+registerDoParallel(5)
+datsim <- foreach(t = 1:15) %dopar% {
+  set.seed(t)
+  data_sim(n = 50, pat_mat = patmat, pi_gamma = 1,
+           xi_conc = 10, xi_non_conc = 0.01, sum_z = 2500)
+}
+stopImplicitCluster()
+
+registerDoParallel(5)
+result <- foreach(t = 1:15) %dopar% {
+  set.seed(3 * (t + 10) - 1)
+  realloc_lmar(iter = 10000, Kmax = 50, z = datsim[[t]]$z, 
+               atrisk = datsim[[t]]$at_risk_mat, 
+               beta_mat = matrix(1, ncol = 20, nrow = 50), 
+               init_ci = 0:49, theta = 1)
+}
+stopImplicitCluster() 
+
+nactive <- sapply(1:15,
+                  function(x){apply(result[[x]]$assign_result, 1, 
+                                    function(y){length(unique(y))})})
+matplot(nactive, type = "l", lty = 1, main = "Active Cluster: Difficult Case", 
+        xlab = "Iteration", ylab = "# Active Cluster", lwd = 3,
+        ylim = c(1, 50))
+
+salso_assign <- sapply(1:15,
+                       function(x){as.numeric(salso(result[[x]]$assign_result[-(1:5000), ]))})
+mean(apply(salso_assign, 2, function(x){length(unique(x))}))
+sd(apply(salso_assign, 2, function(x){length(unique(x))}))
 
 
-lgamma(0)
-
-test_realloc <- realloc_lmar(iter = 10000, Kmax = 50, z = datsim[[1]]$z, 
-                             atrisk = datsim[[1]]$at_risk_mat, 
-                             beta_mat = matrix(1, ncol = 20, nrow = 50), 
-                             init_ci = 0:49, theta = 1)
-salso(test_realloc$assign_result)
-apply(test_realloc$assign_result, 1, function(x){length(unique(x))}) |>
-  plot(type = "l")
-
-
-### Test: different beta
-set.seed(1); betmat1 <- matrix(runif(1000), ncol = 20, nrow = 50)
-
-
-test_realloc <- realloc_lmar(iter = 10000, Kmax = 50, z = datsim[[1]]$z, 
-                             atrisk = datsim[[1]]$at_risk_mat, 
-                             beta_mat = betmat1, init_ci = 0:49, theta = 1)
-table(datsim[[1]]$ci, as.numeric(salso(test_realloc$assign_result)))
-apply(test_realloc$assign_result, 1, function(x){length(unique(x))}) |>
-  plot(type = "l", xlim = c(0, 500))
-matplot(t(exp(betmat)/rowSums(exp(betmat))), type = "l")
-
-### Cluster 7, 12, 44
-
-### Cluster 7 is the first cluster
-which(test_realloc$assign_result[10000, ] + 1 == 7)
-which(datsim[[1]]$ci == 1)
-test_realloc$n_cluster[, , 1]
-max(test_realloc$log_marginal[1, ])
-which.max(test_realloc$log_marginal[1, ])
-
-
-log_sum_exp(c(0, rep(log(2), 49)) + test_realloc$log_marginal[1, ])
-
-which(test_realloc$assign_result[10000, ] + 1 == 12)
-which(datsim[[1]]$ci == 3)
-which.max(test_realloc$log_marginal[2, ])
-
-apply(test_realloc$log_marginal, 1, which.max) |>
-  table(datsim[[1]]$ci)
-
-### We have 50 clusters
-
-for(k in 1:20){
-  print(which(apply(betmat1, 1, which.max) == k))
+### LogSumExp explanation
+ni <- 1:50 ## Number of count in each clusters (Let's say we have Kmax = 50)
+theta <- 1 ## theta
+LSE_mat <- matrix(NA, ncol = 1000, nrow = 50)
+for(i in 1:1000){
+  lmar <- runif(1, -100, 100) ## Random number for the log marginal
+  ## Calculate the reallocation probability by applying LogSumExp trick
+  LSE_mat[, i] <- log_sum_exp(log(ni + theta) + lmar) 
 }
 
-set.seed(2)
-betmat1_sf <- betmat1[, sample(1:20)]
-test_realloc_sf <- realloc_lmar(iter = 10000, Kmax = 50, z = datsim[[1]]$z, 
-                               atrisk = datsim[[1]]$at_risk_mat, 
-                               beta_mat = betmat1_sf, init_ci = 0:49, theta = 1)
-table(datsim[[1]]$ci, as.numeric(salso(test_realloc_sf$assign_result)))
+### Check that all rows (same number of the observation in the cluster)
+### has the same reallocation probability
+length(unique(as.list(round(LSE_mat, 13)))) == 50
+
+### Test: different beta
+### Use the same dataset, but change the beta matrix
+
+### Data Simulation: Easy Case
+registerDoParallel(5)
+datsim <- foreach(t = 1:15) %dopar% {
+  set.seed(t)
+  data_sim(n = 50, pat_mat = (diag(20)[1:3, ]), pi_gamma = 1,
+           xi_conc = 10, xi_non_conc = 0.01, sum_z = 2500)
+}
+stopImplicitCluster()
+
+registerDoParallel(5)
+result <- foreach(t = 1:30) %dopar% {
+  set.seed(t)
+  bmat <- matrix(runif(1000), ncol = 20, nrow = 50)
+  mod_result <- realloc_lmar(iter = 10000, Kmax = 50, z = datsim[[1]]$z, 
+                             atrisk = datsim[[1]]$at_risk_mat, 
+                             beta_mat = bmat, init_ci = 0:49, theta = 1)
+  return(list(bmat = bmat, mod_result = mod_result))
+}
+stopImplicitCluster()
+
+adj_rand <- sapply(1:30,
+                   function(x){mclustcomp(datsim[[1]]$ci,
+                                          as.numeric(salso(result[[x]]$mod_result$assign_result[-(1:5000), ])))[1, 2]})
+adj_rand
+
+### Why Iteration 1 works perfect?
+#### Look at the log marginal
+table(actual = datsim[[1]]$ci, 
+      highest_marginal = apply(result[[1]]$mod_result$log_marginal, 1, which.max))
+#### By using the marginal, we can also detect the cluster correctly.
+
+log_sum_exp(sort(result[[1]]$mod_result$log_marginal[1, ], decreasing = TRUE))
+
+-218.9284 + log(50)
+
+### Maximuize log marginal
+lmar_max <- function(zi, gmi, bet_k){
+  as.numeric(logmar(z = matrix(zi, ncol = 20), atrisk = matrix(gmi, ncol = 20), 
+                    beta_mat = matrix(bet_k, ncol = 20)))
+}
+lmar_max(datsim[[1]]$z[1, ], rep(1, 20), c(50, rep(0, 19)))
+
+### par maximize
+optim_result <- optim(rep(0, 20), lmar_max, z = datsim[[1]]$z[1, ], 
+                      gmi = rep(1, 20),
+                      control = list(fnscale = -1), hessian = FALSE)
+exp(optim_result$par[1:3])/sum(exp(optim_result$par[1:3]))
+exp(result[[1]]$bmat[7, 1:3])/sum(exp(result[[1]]$bmat[7, 1:3]))
+
+bb <- result[[1]]$bmat
+result[[1]]$mod_result$log_marginal[datsim[[1]]$ci == 1, ]
+bb[7, ]
+
+result[[1]]$mod_result$log_marginal[datsim[[1]]$ci == 2, ]
+bb[47, ]
+
+bb[c(12, 41), ]
+
+
+#### Consider the beta for the first three columns
+
+imp_index <- apply(exp(bb[, 1:3])/rowSums(exp(bb[, 1:3])), 1, which.max)
+
+
+
+
+lty_pattern <- rep(3, 17)
+lty_pattern[3] <- 1
+lwd_pattern <- rep(0.25, 17)
+lwd_pattern[3] <- 1
+
+matplot(t(exp(bb[imp_index == 1, ])/rowSums(exp(bb[imp_index == 1, ]))),
+        type = "l", lty = lty_pattern, lwd = lwd_pattern)
+
+which(which(imp_index == 2) == 46)
+
+lty_pattern <- rep(3, 14)
+lty_pattern[c(10, 12)] <- 1
+lwd_pattern <- rep(0.25, 14)
+lwd_pattern[10] <- 1
+
+matplot(t(exp(bb[imp_index == 2, ])/rowSums(exp(bb[imp_index == 2, ]))),
+        type = "l", lty = lty_pattern, lwd = lwd_pattern)
+
+
+table(apply(result[[1]]$mod_result$log_marginal, 1, which.max), datsim[[1]]$ci)
+table(apply(result[[2]]$mod_result$log_marginal, 1, which.max), datsim[[1]]$ci)
+
+lty_pattern <- rep(3, 50)
+lty_pattern[44] <- 1
+lwd_pattern <- rep(0.25, 50)
+lwd_pattern[44] <- 1
+
+matplot(t(exp(result[[2]]$bmat)), type = "l", lty = lty_pattern, lwd = lwd_pattern)
+
+matplot(t(exp(result[[2]]$bmat)/rowSums(exp(result[[2]]$bmat))), type = "l",
+        lty = lty_pattern, lwd = lwd_pattern)
+
+bb <- result[[2]]$bmat
+bb_ratio <- exp(bb)/rowSums(bb)
+matplot(t(bb_ratio[, 1:3]/rowSums(bb_ratio[, 1:3])), type = "l")
+apply(result[[5]]$mod_result$log_marginal, 1, which.max)
+table(apply(result[[5]]$mod_result$log_marginal, 1, which.max), datsim[[1]]$ci)
+table(salso(result[[5]]$mod_result$assign_result[-(1:5000), ]), datsim[[1]]$ci)
+
+bb <- result[[1]]$bmat
+bb_ratio <- exp(bb)/rowSums(bb)
+bb_ratio[, 1:3]/rowSums(bb_ratio[, 1:3])
+lty_control <- rep(3, 50)
+lty_control[c(7, 12, 41, 44)] <- 1
+lwd_control <- rep(0.25, 50)
+lwd_control[c(7, 12, 41, 44)] <- 1
+matplot(t(bb_ratio[, 1:3]/rowSums(bb_ratio[, 1:3])), type = "l",
+        lty = lty_control, lwd = lwd_control)
+apply(result[[1]]$mod_result$log_marginal, 1, which.max)
+## c(7, 12, 41, 44)
+sort(exp(bb)[, 3]/rowSums(bb), index.return = TRUE, decreasing = TRUE)
+
+apply((exp(bb)/rowSums(bb))[c(12, 21), ],1, which.max)
+
+apply(bb, 1, which.max)
+which(apply(exp(bb)/rowSums(bb), 1, which.max) == 1)
+bb_ratio <- apply((exp(bb)/rowSums(bb))[c(7, 18), ], 1, 
+                  function(x){sort(x, decreasing = TRUE)})
+apply(bb_ratio, 2, function(x){(x[1] - x[2])/x[2]})
+
+which(apply(exp(bb)/rowSums(bb), 1, which.max) == 12)
+bb_ratio <- apply((exp(bb)/rowSums(bb))[c(27, 46), ], 1, 
+                  function(x){sort(x, decreasing = TRUE)})
+apply(bb_ratio, 2, function(x){(x[1] - x[2])/x[2]})
+
 
 ### Shi's Result ===============================================================
 
