@@ -17,8 +17,8 @@ library(sparseMbClust)
 ### Try taking out the marginal out
 ### Collapse the cluster
 
-# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Function: Simulating the data
 data_sim <- function(n, pat_mat, pi_gamma, xi_conc, xi_non_conc, sum_z){
@@ -64,12 +64,49 @@ ub <- update_beta(z = datsim[[1]]$z, atrisk = datsim[[1]]$at_risk_mat,
                   beta_old = diag(20)[1:5, ], ci = datsim[[1]]$ci - 1, 
                   mu = 0, s2 = 1, s2_MH = 1)
 
-ci_test <- sample(c(8, 5, 6), size = 50, replace = TRUE)
+sm_index <- rep(NA, 10000)
+ac_index <- rep(NA, 10000)
 
-test <- update_ci(Kmax = 10, z = datsim[[1]]$z, atrisk = datsim[[1]]$at_risk_mat, 
-                  beta_old = diag(20)[1:10, ], ci_old = ci_test, 
-                  theta = 1, mu = 0, s2 = 1, launch_iter = 10)
-test$split_index
+for(i in 1:10000){
+  ci_test <- sample(0:9, size = 50, replace = TRUE)
+  test <- update_ci(Kmax = 10, z = datsim[[1]]$z, atrisk = datsim[[1]]$at_risk_mat, 
+                    beta_old = diag(20)[1:10, ], ci_old = ci_test - 1, 
+                    theta = 1, mu = 0, s2 = 1, launch_iter = 10, r0c = 1, r1c = 1)
+  sm_index[i] <- test$split_index
+  ac_index[i] <- test$accept_SM
+}
+
+test_b <- update_bc(iter = 10000, Kmax = 10, z = datsim[[1]]$z, 
+                    atrisk = datsim[[1]]$at_risk_mat, 
+                    beta_init = diag(20)[1:10, ], 
+                    ci_init = rep(0, 50), 
+                    theta = 1, mu = 0, s2 = 1, s2_MH = 1, 
+                    launch_iter = 10, r0c = 1, r1c = 1)
+
+test <- update_ci_fb(Kmax = 10, z = datsim[[1]]$z, atrisk = datsim[[1]]$at_risk_mat, 
+                     beta_old = diag(20)[1:10, ], 
+             ci_old = sample(0:9, size = 50, replace = TRUE), 
+             theta = 1, mu = 0, s2 = 1, 
+             launch_iter = 10, r0c = 1, r1c = 1)
+table(test$ci_result, datsim[[1]]$ci)
+
+matplot(exp(t(test_b$beta_result[2, , ]))/rowSums(exp(t(test_b$beta_result[2, , ]))),
+        type = "l")
+ttt <- exp(t(test_b$beta_result[2, , ]))/rowSums(exp(t(test_b$beta_result[2, , ])))
+ttt[10000, ]
+colMeans(datsim[[1]]$z/2500)
+
+test_b$ci_result[10000, ]
+salso(test_b$ci_result[-(1:5000), ])
+plot(apply(test_b$ci_result, 1, function(x){length(unique(x))}), type = "l")
+
+
+matplot(exp(t(test_b$beta_result[2, , ]))/rowSums(exp(t(test_b$beta_result[2, , ]))), type = "l")
+
+table(sm_index)
+table(ac_index)
+table(factor(sm_index, labels = c("Merge", "Split")), factor(ac_index, labels = c("Reject", "Accept")))
+
 length(test$S)
 sum(test$ci_launch == test$samp_clus[1])
 sum(test$ci_launch == test$samp_clus[2])
