@@ -46,6 +46,27 @@ arma::vec log_sum_exp(arma::vec log_unnorm_prob){
 }
 
 // [[Rcpp::export]]
+double logmar_ik(arma::rowvec zi, arma::rowvec atrisk_i, arma::rowvec beta_k){
+  
+  /* Calculate the log marginal for each observation in a log scale for the 
+   * observation i, given that it is in the cluster k */
+  
+  double lmar = 0.0;
+  
+  lmar += std::lgamma(arma::accu(zi) + 1);
+  lmar -= arma::accu(arma::lgamma(zi + 1));
+  
+  arma::rowvec zi_e_beta = zi + arma::exp(beta_k);
+  arma::uvec atrisk_one = arma::find(atrisk_i == 1);
+  
+  lmar += arma::accu(arma::lgamma(zi_e_beta.cols(atrisk_one)));
+  lmar -= std::lgamma(arma::accu(zi_e_beta.cols(atrisk_one)));
+  
+  return lmar;
+  
+}
+
+// [[Rcpp::export]]
 arma::vec logmar_k(arma::mat z, arma::mat atrisk, arma::rowvec beta_k){
   
   /* Calculate the log marginal for each observation in a log scale, given 
@@ -104,6 +125,91 @@ arma::mat logmar(arma::mat z, arma::mat atrisk, arma::mat beta_mat){
     
 }
 
+// [[Rcpp::export]]
+Rcpp::List launch_mcmc(arma::mat z, arma::mat atrisk, arma::mat beta_mat, 
+                       arma::uvec ci_old, unsigned int launch_iter, arma::uvec S, 
+                       arma::uvec samp_clus, arma::vec nk){
+  
+  /* This algorithm performs the launch step. */
+  
+  arma::uvec ci_result(ci_old);
+  
+  // Calculate the log marginal for the cluster of interest.
+  arma::mat lmar_sc(z.n_rows, 2, arma::fill::zeros);
+  lmar_sc.col(0) = logmar_k(z, atrisk, beta_mat.row(samp_clus[0]));
+  lmar_sc.col(1) = logmar_k(z, atrisk, beta_mat.row(samp_clus[1]));
+  
+  // Perform a restricted reallocation step
+  for(int t = 0; t < launch_iter; ++t){
+    for(int ss = 0; ss < S.size(); ++ss){
+      int s = S[ss];
+      nk[ci_result[s]] -= 1;
+      
+      // Change of index: From Kmax to the samp_clus only.
+      arma::vec nk_sc = nk.rows(samp_clus);
+      arma::vec log_realloc_prob = arma::log(nk_sc) + lmar_sc.row(s).t();
+      arma::vec realloc_prob = log_sum_exp(log_realloc_prob);
+      arma::vec ck_new_kk_vec = rmultinom_1(realloc_prob);
+      arma::uvec kk_new_vec = arma::find(ck_new_kk_vec == 1);
+      int kk_new = kk_new_vec[0];
+      
+      // Need to check the index back: From active to Kmax.
+      int new_ci = samp_clus[kk_new];
+      nk[new_ci] += 1;
+      ci_result[s] = new_ci;
+      
+    }
+  }
+  
+  Rcpp::List result;
+  result["ci_result"] = ci_result;
+  result["nk"] = nk;
+  return result;
+  
+}
+
+// [[Rcpp::export]]
+double log_proposal(arma::mat z, arma::mat atrisk, arma::mat beta_mat, 
+                    arma::uvec ci_A, arma::uvec ci_B, arma::uvec S, 
+                    arma::uvec samp_clus){
+  
+  /* This function will calculate the proposal distribution q(ci_A|ci_B) in
+     a log scale. */
+  
+  double lq = 0.0;
+  
+  // Calculate the log marginal for the interested clusters, samp_clus.
+  arma::mat lmar(z.n_rows, 2, arma::fill::zeros);
+  lmar.col(0) = logmar_k(z, atrisk, beta_mat.row(samp_clus[0]));
+  lmar.col(1) = logmar_k(z, atrisk, beta_mat.row(samp_clus[1]));
+  
+  // Calculate the initial nk
+  arma::vec nk(2, arma::fill::zeros);
+  for(int kk = 0; kk < 2; ++kk){
+    nk[kk] += arma::accu(ci_B == samp_clus[kk]);
+  }
+  
+  // Calculate the log proposal
+  arma::uvec ci_int(ci_B);
+  for(int ss = 0; ss < S.size(); ++ss){
+    int s = S[ss];
+    
+    // Index Change: From Kmax to samp_clus
+    arma::uvec ciB_index = arma::find(samp_clus == ci_B[s]);
+    arma::uvec ciA_index = arma::find(samp_clus == ci_A[s]);
+    
+    nk[ciB_index[0]] -= 1;
+    arma::vec alloc_prob = log_sum_exp(arma::log(nk) + lmar.row(s).t());
+    lq += std::log(alloc_prob[ciA_index[0]]);
+    ci_int[s] = ci_A[s];
+    nk[ciA_index[0]] += 1;
+    
+  } 
+  
+  return lq;
+  
+}
+
 // Algorithms for updating parameters: -----------------------------------------
 
 // At-risk
@@ -154,14 +260,14 @@ arma::mat update_beta(arma::mat z, arma::mat atrisk, arma::mat beta_old,
 // Cluster Assignment
 // [[Rcpp::export]]
 Rcpp::List update_ci(unsigned int Kmax, arma::mat z, arma::mat atrisk, 
-                     arma::mat beta_mat, arma::uvec ci_old, double theta, 
-                     double mu, double s2){
+                     arma::mat beta_old, arma::uvec ci_old, double theta, 
+                     double mu, double s2, unsigned int launch_iter){
   
   // Reallocate
   arma::uvec active_clus = arma::unique(ci_old); 
   //// Result from unique is already sorted from lowest to largest.
   unsigned int Kpos = active_clus.size();
-  arma::mat lmar_realloc = logmar(z, atrisk, beta_mat);
+  arma::mat lmar_realloc = logmar(z, atrisk, beta_old);
   
   //// Find the number of the observations in each active cluster
   arma::vec nk(Kmax, arma::fill::zeros);
@@ -188,32 +294,119 @@ Rcpp::List update_ci(unsigned int Kmax, arma::mat z, arma::mat atrisk,
     ci_realloc[i] = new_ci;
   }
   
-  
   // Split-Merge
   int split_index = -1;
+  arma::vec nk_realloc(nk);
   //// Start with determine to split (expand) or merge (collapse)
-  //// samp_index: the index of two observations used for considering to split or merge.
+  //// samp_ind: the index of two observations used for considering to split or merge.
+  //// samp_clus: the cluster of the two observations from samp_ind.
+  
   arma::uvec samp_ind = arma::randperm(z.n_rows, 2);
   while((Kpos == Kmax) and 
           (ci_realloc[samp_ind[0]] == ci_realloc[samp_ind[1]])){
     samp_ind = arma::randperm(z.n_rows, 2);
   }
+  arma::uvec samp_clus = ci_realloc.rows(samp_ind);
   
-  if(ci_realloc[samp_ind[0]] == ci_realloc[samp_ind[1]]){
+  //// Then, create a set S: the index of the observation with the same cluster as
+  //// samp_ind, but not the samp_ind itself.
+  
+  arma::uvec S = arma::find(ci_realloc == samp_clus[0] or ci_realloc == samp_clus[1]);
+  arma::uvec notS = arma::find(S != samp_ind[0] and S != samp_ind[1]);
+  S = S.rows(notS);
+  
+  //// Perform the launch step
+  arma::uvec ci_launch(ci_realloc);
+  arma::mat beta_launch(beta_old);
+  
+  if(samp_clus[0] == samp_clus[1]){
     //// If split, proposed a new cluster with a new beta vector simulated from the prior
     split_index = 1;
     arma::uvec inactive_clus = arma::find(nk == 0);
-    /// int new_active_clus = inactive_clus.row(arma::randperm(inactive_clus.size, 1));
-    //// Dont't forget to adjust nk vec
-    std::cout << inactive_clus << std::endl;
+    arma::uvec new_active_index = arma::randperm(inactive_clus.size(), 1);
+    arma::uvec new_active_clus = inactive_clus.row(new_active_index[0]);
+    nk[samp_clus[0]] -= 1;
+    nk[new_active_clus[0]] += 1;
+    samp_clus[0] = new_active_clus[0];
+    ci_launch[samp_ind[0]] = new_active_clus[0];
+    beta_launch.row(new_active_clus[0]) = arma::randn<arma::rowvec>(z.n_cols, 
+                    arma::distr_param(mu, std::sqrt(s2)));
   } else {
     split_index = 0;
   }
+  
+  //// Randomly assign S to one of the samp_clus.
+  for(int ss = 0; ss < S.size(); ++ss){
+    int s = S[ss];
+    int new_clus_index = std::round(R::runif(0.0, 1.0));
+    nk[ci_launch[s]] -= 1;
+    ci_launch[s] = samp_clus[new_clus_index];
+    nk[ci_launch[s]] += 1;
+  }
+  
+  //// Perform Launch Iteration
+  Rcpp::List launch_result = launch_mcmc(z, atrisk, beta_launch, ci_launch, 
+                                         launch_iter, S, samp_clus, nk);
+  arma::uvec ll_ci = launch_result["ci_result"];
+  arma::vec nnk = launch_result["nk"];
+  ci_launch = ll_ci;
+  nk = nnk;
+  
+  //// Proposed a new cluster assignment
+  arma::uvec ci_proposed(ci_launch);
+  if(split_index == 1){
+    // If we split, we will do one final launch iteration.
+    Rcpp::List proposed_result = launch_mcmc(z, atrisk, beta_launch, ci_proposed, 
+                                             launch_iter, S, samp_clus, nk);
+    arma::uvec pp_ci = proposed_result["ci_result"];
+    arma::vec nnnk = proposed_result["nk"];
+    ci_proposed = pp_ci;
+    nk = nnnk;
+  } else {
+    nk[samp_clus[1]] += nk[samp_clus[0]];
+    nk[samp_clus[0]] = 0;
+    ci_proposed.rows(S).fill(samp_clus[1]);
+    ci_proposed.rows(samp_ind).fill(samp_clus[1]);
+  }
+  
+  //// MH
+  double logA = 0.0;
+  
+  //// Data Part -- Consider only the observation in set S and samp_ind.
+  for(int ss = 0; ss < S.size(); ++ss){
+    int s = S[ss];
+    logA += logmar_ik(z.row(s), atrisk.row(s), beta_launch.row(ci_proposed[s]));
+    logA -= logmar_ik(z.row(s), atrisk.row(s), beta_old.row(ci_realloc[s]));
+  }
+  
+  for(int ii = 0; ii < 2; ++ii){
+    int i = samp_ind[ii];
+    logA += logmar_ik(z.row(i), atrisk.row(i), beta_launch.row(ci_proposed[i]));
+    logA -= logmar_ik(z.row(i), atrisk.row(i), beta_old.row(ci_realloc[i]));
+  }
+  
+  //// Cluster Dirichlet Part
+  
+  //// Cluster Beta Distribution
+  
+  //// Proposal
+  logA += log_proposal(z, atrisk, beta_launch, ci_launch, ci_proposed, S, samp_clus);
+  if(split_index == 1){
+    logA -= log_proposal(z, atrisk, beta_launch, ci_proposed, ci_launch, S, samp_clus);
+  }
+  
+  std::cout << "logA: " << logA << std::endl;
   
   Rcpp::List result;
   result["ci_realloc"] = ci_realloc;
   result["split_index"] = split_index;
   result["samp_ind"] = samp_ind;
+  result["samp_clus"] = samp_clus;
+  result["nk"] = nk;
+  result["ci_launch"] = ci_launch;
+  result["beta_launch"] = beta_launch;
+  result["ci_proposed"] = ci_proposed;
+  result["S"] = S;
   return result;
   
 }

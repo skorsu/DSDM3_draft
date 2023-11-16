@@ -17,8 +17,8 @@ library(sparseMbClust)
 ### Try taking out the marginal out
 ### Collapse the cluster
 
-sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Function: Simulating the data
 data_sim <- function(n, pat_mat, pi_gamma, xi_conc, xi_non_conc, sum_z){
@@ -54,6 +54,8 @@ stopImplicitCluster()
 
 beta_mat <- matrix(1, ncol = 20, nrow = 5)
 test <- logmar_k(z = datsim[[1]]$z, atrisk = datsim[[1]]$at_risk_mat, beta_k = diag(20)[1, ])
+logmar_ik(zi = datsim[[1]]$z[6, ], atrisk_i = datsim[[1]]$at_risk_mat[6, ], 
+          beta_k = diag(20)[1, ])
 test_all <- logmar(z = datsim[[1]]$z, atrisk = datsim[[1]]$at_risk_mat, beta_mat = diag(20))
 test_all[, 1] == test
 lgamma(2500 + 1)
@@ -62,12 +64,42 @@ ub <- update_beta(z = datsim[[1]]$z, atrisk = datsim[[1]]$at_risk_mat,
                   beta_old = diag(20)[1:5, ], ci = datsim[[1]]$ci - 1, 
                   mu = 0, s2 = 1, s2_MH = 1)
 
-ci_test <- sample(c(8, 5, 1), size = 50, replace = TRUE)
+ci_test <- sample(c(8, 5, 6), size = 50, replace = TRUE)
 
 test <- update_ci(Kmax = 10, z = datsim[[1]]$z, atrisk = datsim[[1]]$at_risk_mat, 
-                  beta_mat = diag(20)[1:10, ], ci_old = ci_test, 
-                  theta = 1, mu = 0, s2 = 1)
+                  beta_old = diag(20)[1:10, ], ci_old = ci_test, 
+                  theta = 1, mu = 0, s2 = 1, launch_iter = 10)
 test$split_index
+length(test$S)
+sum(test$ci_launch == test$samp_clus[1])
+sum(test$ci_launch == test$samp_clus[2])
+
+table(before = test$ci_realloc, after = test$ci_proposed)
+test$beta_launch
+test$beta_launch[7, ]
+test$ci_proposed[1]
+test$ci_realloc[1]
+which(test$ci_proposed == 2)
+
+cbind(test$ci_realloc, test$ci_proposed)[25, ]
+
+logmar_ik(zi = datsim[[1]]$z[25, ], atrisk_i = datsim[[1]]$at_risk_mat[25, ], 
+          beta_k = test$beta_launch[7, ])
+logmar_ik(zi = datsim[[1]]$z[25, ], atrisk_i = datsim[[1]]$at_risk_mat[25, ], 
+          beta_k = test$beta_launch[3, ])
+
+test$split_index
+test$beta_launch
+test$nk
+table(test$ci_proposed)
+table(test$ci_launch)
+ltest$nk
+
+length(test$S)
+test$nk
+test$nk
+
+table(test$ci_launch)
 test$ci_realloc[test$samp_ind + 1, ]
 datsim[[1]]$z[test$ci_realloc == 2, ]
 
