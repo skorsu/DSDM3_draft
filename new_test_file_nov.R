@@ -42,6 +42,43 @@ data_sim <- function(n, pat_mat, pi_gamma, xi_conc, xi_non_conc, sum_z){
   
 }
 
+### Log marginal for each cluster
+### Easy Case
+registerDoParallel(5)
+datsim <- foreach(t = 1:15) %dopar% {
+  set.seed(t)
+  data_sim(n = 50, pat_mat = (diag(20)[1:3, ]), pi_gamma = 1,
+           xi_conc = 10, xi_non_conc = 0.01, sum_z = 2500)
+}
+stopImplicitCluster()
+
+beta_mat <- matrix(1, ncol = 20, nrow = 5)
+test <- logmar_k(z = datsim[[1]]$z, atrisk = datsim[[1]]$at_risk_mat, beta_k = diag(20)[1, ])
+test_all <- logmar(z = datsim[[1]]$z, atrisk = datsim[[1]]$at_risk_mat, beta_mat = diag(20))
+test_all[, 1] == test
+lgamma(2500 + 1)
+
+ub <- update_beta(z = datsim[[1]]$z, atrisk = datsim[[1]]$at_risk_mat, 
+                  beta_old = diag(20)[1:5, ], ci = datsim[[1]]$ci - 1, 
+                  mu = 0, s2 = 1, s2_MH = 1)
+
+ci_test <- sample(c(8, 5, 1), size = 50, replace = TRUE)
+
+test <- update_ci(Kmax = 10, z = datsim[[1]]$z, atrisk = datsim[[1]]$at_risk_mat, 
+                  beta_mat = diag(20)[1:10, ], ci_old = ci_test, 
+                  theta = 1, mu = 0, s2 = 1)
+test$split_index
+test$ci_realloc[test$samp_ind + 1, ]
+datsim[[1]]$z[test$ci_realloc == 2, ]
+
+
+msamp <- matrix(NA, ncol = 10000, nrow = 4)
+for(i in 1:10000){
+  msamp[, i] <- rmultinom_1(probs_arma = c(0.1, 0.2, 0.3, 0.4))
+}
+rowMeans(msamp)
+
+
 ### Update 11/14 ===============================================================
 #### Try Reallocate without SM and Marginal ====================================
 
