@@ -46,6 +46,25 @@ arma::vec log_sum_exp(arma::vec log_unnorm_prob){
 }
 
 // [[Rcpp::export]]
+double log_marginal(arma::vec zi, arma::vec gmi, arma::vec beta_k){
+  
+  /* Calculate the proportional of the marginal probability in a log scale. */
+  
+  double result = 0.0;
+  
+  arma::uvec gm1 = arma::find(gmi == 1);
+  arma::vec xi_k = arma::exp(beta_k);
+  
+  result += std::lgamma(arma::accu(xi_k.rows(gm1)));
+  result -= arma::accu(arma::lgamma(xi_k.rows(gm1)));
+  result += arma::accu(arma::lgamma(zi.rows(gm1) + xi_k.rows(gm1)));
+  result -= std::lgamma(arma::accu(zi.rows(gm1) + xi_k.rows(gm1)));
+  
+  return result;
+  
+}
+
+// [[Rcpp::export]]
 double logmar_ik(arma::rowvec zi, arma::rowvec atrisk_i, arma::rowvec beta_k){
   
   /* Calculate the log marginal for each observation in a log scale for the 
@@ -56,8 +75,12 @@ double logmar_ik(arma::rowvec zi, arma::rowvec atrisk_i, arma::rowvec beta_k){
   lmar += std::lgamma(arma::accu(zi) + 1);
   lmar -= arma::accu(arma::lgamma(zi + 1));
   
-  arma::rowvec zi_e_beta = zi + arma::exp(beta_k);
+  arma::rowvec e_beta = arma::exp(beta_k); 
+  arma::rowvec zi_e_beta = zi + e_beta;
   arma::uvec atrisk_one = arma::find(atrisk_i == 1);
+  
+  lmar += std::lgamma(arma::accu(e_beta.cols(atrisk_one)));
+  lmar -= arma::accu(arma::lgamma(e_beta.cols(atrisk_one)));
   
   lmar += arma::accu(arma::lgamma(zi_e_beta.cols(atrisk_one)));
   lmar -= std::lgamma(arma::accu(zi_e_beta.cols(atrisk_one)));
@@ -84,6 +107,8 @@ arma::vec logmar_k(arma::mat z, arma::mat atrisk, arma::rowvec beta_k){
   for(int i = 0; i < z.n_rows; ++i){
     arma::uvec atrisk_zero = arma::find(atrisk.row(i) == 1);
     arma::rowvec zi_ebeta = z.row(i) + e_beta;
+    lmar[i] += std::lgamma(arma::accu(e_beta.cols(atrisk_zero)));
+    lmar[i] -= arma::accu(arma::lgamma(e_beta.cols(atrisk_zero)));
     lmar[i] += arma::accu(arma::lgamma(zi_ebeta.cols(atrisk_zero)));
     lmar[i] -= std::lgamma(arma::accu(zi_ebeta.cols(atrisk_zero)));
   }
@@ -102,6 +127,7 @@ arma::mat logmar(arma::mat z, arma::mat atrisk, arma::mat beta_mat){
   // At-risk indicator always equal 1 for non-zero z_ijk. It can be 0 if z_ijk = 0 only.
   // Data (z)
   arma::vec sum_zi = arma::sum(z, 1); 
+  
   logmar_mat += arma::repelem(arma::lgamma(sum_zi + 1), 1, Kmax);
   logmar_mat -= arma::repelem(arma::sum(arma::lgamma(z + 1), 1), 1, Kmax);
   
@@ -113,6 +139,8 @@ arma::mat logmar(arma::mat z, arma::mat atrisk, arma::mat beta_mat){
     for(int i = 0; i < z.n_rows; ++i){
       arma::uvec atrisk_loc = arma::find(atrisk.row(i) == 1);
       arma::rowvec e_beta_k_zi = z.row(i) + e_beta_k;
+      marginal_part[i] += std::lgamma(arma::accu(e_beta_k.cols(atrisk_loc)));
+      marginal_part[i] -= arma::accu(arma::lgamma(e_beta_k.cols(atrisk_loc)));
       marginal_part[i] += arma::accu(arma::lgamma(e_beta_k_zi.cols(atrisk_loc)));
       marginal_part[i] -= std::lgamma(arma::accu(e_beta_k_zi.cols(atrisk_loc))); 
     }
@@ -255,7 +283,11 @@ arma::mat update_beta(arma::mat z, arma::mat atrisk, arma::mat beta_old,
   
   return beta_result;
   
-} 
+}
+
+// Cluster Assignment: Reallocation
+
+
 
 // Cluster Assignment
 // [[Rcpp::export]]
@@ -489,214 +521,135 @@ Rcpp::List update_bc(unsigned int iter, unsigned int Kmax, arma::mat z,
   
 }
 
-// Debugging: ------------------------------------------------------------------
-// Update the Cluster Assignment without update the beta in the split-merge.
+// Debugging: Reallocation + Beta Update ---------------------------------------
+
 // [[Rcpp::export]]
-Rcpp::List update_ci_fb(unsigned int Kmax, arma::mat z, arma::mat atrisk, 
-                        arma::mat beta_old, arma::uvec ci_old, double theta, 
-                        unsigned int launch_iter, double r0c, double r1c){
+arma::mat beta_realloc(arma::mat z, arma::mat atrisk, arma::mat beta_old, 
+                       arma::uvec ci, double mu, double s2, double s2_MH){
   
-  // Reallocate
-  arma::uvec active_clus = arma::unique(ci_old); 
-  //// Result from unique is already sorted from lowest to largest.
+  // Active Clusters
+  arma::uvec active_clus = arma::unique(ci);
   unsigned int Kpos = active_clus.size();
-  arma::mat lmar_realloc = logmar(z, atrisk, beta_old);
   
-  //// Find the number of the observations in each active cluster
+  // Update the beta vector for the active cluster.
+  arma::mat beta_result(beta_old.n_rows, beta_old.n_cols, arma::fill::randn);
+  beta_result *= std::sqrt(s2);
+  beta_result += mu;
+  
+  for(int kk = 0; kk < Kpos; ++kk){
+    
+    int k = active_clus[kk];
+    arma::uvec ck = arma::find(ci == k);
+    arma::rowvec bk_old = beta_old.row(k);
+    
+    // Proposed a new beta_k
+    arma::rowvec bk_pro = arma::conv_to<arma::rowvec>::from(arma::mvnrnd(bk_old.t(), 
+                                                                         s2_MH * arma::eye(z.n_cols, z.n_cols)));
+    // Calculate logA
+    double logA = 0.0;
+    logA += arma::accu(arma::log_normpdf(bk_pro, mu, std::sqrt(s2)));
+    logA += arma::accu(logmar_k(z, atrisk, bk_pro).rows(ck));
+    logA -= arma::accu(arma::log_normpdf(bk_old, mu, std::sqrt(s2)));
+    logA -= arma::accu(logmar_k(z, atrisk, bk_old).rows(ck));
+    
+    double logU = std::log(R::runif(0.01, 1.0));
+    if(logU < logA){
+      beta_result.row(k) = bk_pro;
+    } else {
+      beta_result.row(k) = bk_old;
+    } 
+    
+  } 
+  
+  return beta_result;
+  
+} 
+
+// [[Rcpp::export]]
+arma::uvec realloc(unsigned int Kmax, arma::mat z, arma::mat atrisk, 
+                   arma::mat beta_mat, arma::uvec ci_old, double theta){
+  
+  arma::uvec ci_updated(ci_old);
+  arma::uvec active_clus = arma::unique(ci_old);
+  unsigned int Kpos = active_clus.size();
+  
+  // Calculate the log marginal for every observation in each posible clusters.
+  // We can do this as this step does not change beta vector.
+  arma::mat lmar_realloc = logmar(z, atrisk, beta_mat);
+  
+  // Find the number of the observations in each active cluster
   arma::vec nk(Kmax, arma::fill::zeros);
-  for(int k = 0; k < Kmax; ++k){
+  for(int kk = 0; kk < Kpos; ++kk){
+    int k = active_clus[kk];
     nk[k] += arma::accu(ci_old == k);
-  }
+  } 
   
-  //// Start: Reallocation
-  arma::uvec ci_realloc(ci_old);
   for(int i = 0; i < z.n_rows; ++i){
-    int ci_old = ci_realloc[i];
+    int ci_old = ci_updated[i];
     nk[ci_old] -= 1;
     arma::vec log_realloc_prob = arma::log(nk + theta) + lmar_realloc.row(i).t();
-    
-    // Change of index: From Kmax to the active only.
-    arma::vec realloc_prob = log_sum_exp(log_realloc_prob.rows(active_clus));
-    arma::vec ck_new_kk_vec = rmultinom_1(realloc_prob);
-    arma::uvec kk_new_vec = arma::find(ck_new_kk_vec == 1);
-    int kk_new = kk_new_vec[0];
-    
-    // Need to check the index back: From active to Kmax.
-    int new_ci = active_clus[kk_new];
+    arma::vec realloc_prob = log_sum_exp(log_realloc_prob);
+    arma::vec ck_new_vec = rmultinom_1(realloc_prob);
+    arma::uvec kk_new_vec = arma::find(ck_new_vec == 1);
+    int new_ci = kk_new_vec[0];
     nk[new_ci] += 1;
-    ci_realloc[i] = new_ci;
-  }
-  
-  // Split-Merge
-  int split_index = -1;
-  arma::vec nk_realloc(nk);
-  //// Start with determine to split (expand) or merge (collapse)
-  //// samp_ind: the index of two observations used for considering to split or merge.
-  //// samp_clus: the cluster of the two observations from samp_ind.
-  
-  arma::uvec samp_ind = arma::randperm(z.n_rows, 2);
-  while((Kpos == Kmax) and 
-          (ci_realloc[samp_ind[0]] == ci_realloc[samp_ind[1]])){
-    samp_ind = arma::randperm(z.n_rows, 2);
-  }
-  arma::uvec samp_clus = ci_realloc.rows(samp_ind);
-  
-  //// Then, create a set S: the index of the observation with the same cluster as
-  //// samp_ind, but not the samp_ind itself.
-  
-  arma::uvec S = arma::find(ci_realloc == samp_clus[0] or ci_realloc == samp_clus[1]);
-  arma::uvec notS = arma::find(S != samp_ind[0] and S != samp_ind[1]);
-  S = S.rows(notS);
-  
-  //// Perform the launch step
-  arma::uvec ci_launch(ci_realloc);
-  
-  if(samp_clus[0] == samp_clus[1]){
-    //// If split, proposed a new cluster with a new beta vector simulated from the prior
-    split_index = 1;
-    arma::uvec inactive_clus = arma::find(nk == 0);
-    arma::uvec new_active_index = arma::randperm(inactive_clus.size(), 1);
-    arma::uvec new_active_clus = inactive_clus.row(new_active_index[0]);
-    nk[samp_clus[0]] -= 1;
-    nk[new_active_clus[0]] += 1;
-    samp_clus[0] = new_active_clus[0];
-    ci_launch[samp_ind[0]] = new_active_clus[0];
-  } else {
-    split_index = 0;
-  }
-  
-  //// Randomly assign S to one of the samp_clus.
-  for(int ss = 0; ss < S.size(); ++ss){
-    int s = S[ss];
-    int new_clus_index = std::round(R::runif(0.0, 1.0));
-    nk[ci_launch[s]] -= 1;
-    ci_launch[s] = samp_clus[new_clus_index];
-    nk[ci_launch[s]] += 1;
-  }
-  
-  //// Perform Launch Iteration
-  Rcpp::List launch_result = launch_mcmc(z, atrisk, beta_old, ci_launch, 
-                                         launch_iter, S, samp_clus, nk);
-  arma::uvec ll_ci = launch_result["ci_result"];
-  arma::vec nnk = launch_result["nk"];
-  ci_launch = ll_ci;
-  nk = nnk;
-  
-  //// Proposed a new cluster assignment
-  arma::uvec ci_proposed(ci_launch);
-  if(split_index == 1){
-    // If we split, we will do one final launch iteration.
-    Rcpp::List proposed_result = launch_mcmc(z, atrisk, beta_old, ci_proposed, 
-                                             launch_iter, S, samp_clus, nk);
-    arma::uvec pp_ci = proposed_result["ci_result"];
-    arma::vec nnnk = proposed_result["nk"];
-    ci_proposed = pp_ci;
-    nk = nnnk;
-  } else {
-    nk[samp_clus[1]] += nk[samp_clus[0]];
-    nk[samp_clus[0]] = 0;
-    ci_proposed.rows(S).fill(samp_clus[1]);
-    ci_proposed.rows(samp_ind).fill(samp_clus[1]);
-  }
-  
-  //// MH
-  double logA = 0.0;
-  
-  //// Data Part -- Consider only the observation in set S and samp_ind.
-  for(int ss = 0; ss < S.size(); ++ss){
-    int s = S[ss];
-    logA += logmar_ik(z.row(s), atrisk.row(s), beta_old.row(ci_proposed[s]));
-    logA -= logmar_ik(z.row(s), atrisk.row(s), beta_old.row(ci_realloc[s]));
+    ci_updated[i] = new_ci;
   } 
   
-  for(int ii = 0; ii < 2; ++ii){
-    int i = samp_ind[ii];
-    logA += logmar_ik(z.row(i), atrisk.row(i), beta_old.row(ci_proposed[i]));
-    logA -= logmar_ik(z.row(i), atrisk.row(i), beta_old.row(ci_realloc[i]));
-  } 
-  
-  //// Cluster Dirichlet Part
-  ////// Proposed
-  arma::uvec active_proposed = arma::find(nk == 0);
-  logA += std::lgamma(theta * active_proposed.size());
-  logA -= active_proposed.size()  * std::lgamma(theta);
-  arma::vec ntheta_proposed = theta + nk;
-  logA += arma::accu(arma::lgamma(ntheta_proposed.rows(active_proposed)));
-  logA -= std::lgamma(arma::accu(ntheta_proposed.rows(active_proposed)));
-  
-  ////// Old
-  arma::uvec active_old = arma::find(nk_realloc == 0);
-  logA += std::lgamma(theta * active_old.size());
-  logA -= active_old.size()  * std::lgamma(theta);
-  arma::vec ntheta_old = theta + nk_realloc;
-  logA += arma::accu(arma::lgamma(ntheta_old.rows(active_old)));
-  logA -= std::lgamma(arma::accu(ntheta_old.rows(active_old)));
-  
-  //// Cluster Beta Distribution and the Beta
-  if(split_index == 1){
-    logA += std::log(r0c);
-    logA -= std::log(r1c);
-  } else {
-    logA += std::log(r1c);
-    logA -= std::log(r0c);
-  }
-  
-  //// Proposal
-  logA += log_proposal(z, atrisk, beta_old, ci_launch, ci_proposed, S, samp_clus);
-  if(split_index == 1){
-    logA -= log_proposal(z, atrisk, beta_old, ci_proposed, ci_launch, S, samp_clus);
-  }
-  
-  //// MH: Final Step
-  arma::uvec ci_result;
-  int accept_SM = 0;
-  
-  double logU = std::log(R::runif(0.0, 1.0));
-  if(logU < logA){
-    accept_SM += 1;
-    ci_result = ci_proposed;
-  } else {
-    // Perform only reallocation step
-    ci_result = ci_realloc;
-  }
-  
-  Rcpp::List result;
-  result["split_index"] = split_index;
-  result["samp_ind"] = samp_ind;
-  result["samp_clus"] = samp_clus;
-  result["nk"] = nk;
-  result["S"] = S;
-  result["accept_SM"] = accept_SM;
-  result["logA"] = logA;
-  result["ci_result"] = ci_result;
-  return result;
+  return ci_updated;
   
 }
 
 // [[Rcpp::export]]
-arma::umat ci_realloc_no_fb(unsigned int iter, unsigned int Kmax, arma::mat z, 
-                            arma::mat atrisk, arma::mat beta_old, arma::uvec ci_old, 
-                            double theta, unsigned int launch_iter, double r0c, 
-                            double r1c){
+arma::umat debug_r(unsigned int iter, unsigned int Kmax, arma::mat z, 
+                   arma::mat atrisk, arma::mat beta_fixed, arma::uvec ci_init, 
+                   double theta){
   
-  Rcpp::List ci_List;
-  arma::uvec ci_init(ci_old);
   arma::umat ci_result(z.n_rows, iter, arma::fill::value(Kmax + 1));
-
+  arma::uvec ci_mcmc(ci_init);
+  
   for(int t = 0; t < iter; ++t){
+    // update ci
+    ci_mcmc = realloc(Kmax, z, atrisk, beta_fixed, ci_init, theta);
     
-    // Update ci
-    ci_List = update_ci_fb(Kmax, z, atrisk, beta_old, ci_init, theta, launch_iter,
-                           r0c, r1c);
-    arma::uvec ci_update = ci_List["ci_result"];
-    
-    // Record the result
-    ci_init = ci_update;
-    ci_result.col(t) = ci_update;
-    
+    // record the result
+    ci_init = ci_mcmc;
+    ci_result.col(t) = ci_init;
   }
-
+  
   return ci_result.t();
+  
+}
+
+
+// [[Rcpp::export]]
+Rcpp::List debug_rb(unsigned int iter, unsigned int Kmax, arma::mat z, 
+                    arma::mat atrisk, arma::mat beta_init, arma::uvec ci_init, 
+                    double theta, double mu, double s2, double s2_MH){
+  
+  arma::umat ci_result(z.n_rows, iter, arma::fill::value(Kmax + 1));
+  arma::cube beta_result(Kmax, z.n_cols, iter, arma::fill::value(0));
+  
+  arma::mat beta_mcmc(beta_init);
+  arma::uvec ci_mcmc(ci_init);
+  
+  for(int t = 0; t < iter; ++t){
+    // update beta
+    beta_mcmc = beta_realloc(z, atrisk, beta_init, ci_init, mu, s2, s2_MH);
+    // update ci
+    ci_mcmc = realloc(Kmax, z, atrisk, beta_mcmc, ci_init, theta);
+    
+    // record the result
+    beta_init = beta_mcmc;
+    beta_result.slice(t) = beta_init;
+    ci_init = ci_mcmc;
+    ci_result.col(t) = ci_init;
+  }
+  
+  Rcpp::List result;
+  result["ci_result"] = ci_result.t();
+  result["beta_result"] = beta_result;
+  return result;
   
 }
 
