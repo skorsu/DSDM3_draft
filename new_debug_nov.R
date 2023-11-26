@@ -44,7 +44,7 @@ datsim <- foreach(t = 1:20) %dopar% {
   set.seed(t)
   patmat <- diag(10)[1:5, ]
   dat <- data_sim(n = 50, pat_mat = patmat, pi_gamma = 1,
-                  xi_conc = 10, xi_non_conc = 0.01, sum_z = 1000)
+                  xi_conc = 10, xi_non_conc = 0.1, sum_z = 1000)
   list(dat = dat, patmat = patmat)
 }
 stopImplicitCluster()
@@ -55,7 +55,7 @@ datsim <- foreach(t = 1:20) %dopar% {
   set.seed(t)
   patmat <- diag(10)[sample(1:10, size = 5), ]
   dat <- data_sim(n = 50, pat_mat = patmat, pi_gamma = 1,
-                  xi_conc = 10, xi_non_conc = 0.01, sum_z = 1000)
+                  xi_conc = 10, xi_non_conc = 0.1, sum_z = 1000)
   list(dat = dat, patmat = patmat)
 }
 stopImplicitCluster()
@@ -69,7 +69,7 @@ datsim <- foreach(t = 1:20) %dopar% {
   patmat[2, 1:2] <- 1
   patmat[3, 1:3] <- 1
   dat <- data_sim(n = 50, pat_mat = patmat, pi_gamma = 1,
-                  xi_conc = 10, xi_non_conc = 0.01, sum_z = 2500)
+                  xi_conc = 10, xi_non_conc = 0.1, sum_z = 2500)
   list(dat = dat, patmat = patmat)
 }
 stopImplicitCluster()
@@ -83,7 +83,7 @@ datsim <- foreach(t = 1:20) %dopar% {
   patmat[2, sample(1:20, 2, replace = FALSE)] <- 1
   patmat[3, sample(1:20, 3, replace = FALSE)] <- 1
   dat <- data_sim(n = 50, pat_mat = patmat, pi_gamma = 1,
-                  xi_conc = 10, xi_non_conc = 0.01, sum_z = 2500)
+                  xi_conc = 10, xi_non_conc = 0.1, sum_z = 2500)
   list(dat = dat, patmat = patmat)
 }
 stopImplicitCluster()
@@ -166,3 +166,46 @@ adj_rand <- sapply(1:20,
                                           datsim[[x]]$dat$ci)[1, 2]})
 mean(adj_rand)
 sd(adj_rand)
+
+### Reallocation and Beta update -----------------------------------------------
+
+### Run the model
+registerDoParallel(5)
+result <- foreach(t = 1:20) %dopar% {
+  
+  ### S1: beta_init = datsim[[t]]$patmat, ci_init = datsim[[t]]$dat$ci - 1
+  ### S2: beta_init = datsim[[t]]$patmat, ci_init = sample(0:Kmax, 50, replace = TRUE)
+  ### S3: Kmax = 50, beta_init = datsim[[t]]$dat$z/rowSums(datsim[[t]]$dat$z), ci_init = 0:49
+  ### S4: Kmax = 50, beta_init = matrix(0, ncol = 10, nrow = 50), ci_init = rep(0, 50)
+  ### S5: Kmax = 10, beta_init = matrix(0, ncol = 10, nrow = 10), ci_init = rep(0, 50)
+  
+  set.seed(t)
+  debug_rb(iter = 1000, Kmax = 3, z = datsim[[t]]$dat$z, 
+           atrisk = datsim[[t]]$dat$at_risk_mat, 
+           beta_init = datsim[[t]]$patmat, 
+           ci_init = datsim[[t]]$dat$ci - 1, 
+           theta = 1, mu = 0, s2 = 1, s2_MH = 1)
+  
+}
+stopImplicitCluster()
+
+### Analyze the result
+sapply(1:20, 
+       function(x){apply(result[[x]]$ci_result, 1, function(y){length(unique(y))})}) |>
+  matplot(type = "l", ylim = c(1, 5), ylab = "Active Clusters",
+          xlab = "Iteration", main = "Case 2 - S1")
+
+### Adjusted Rand Index
+set.seed(3)
+adj_rand <- sapply(1:20,
+                   function(x){mclustcomp(as.numeric(salso(result[[x]]$ci_result[-(1:500), ])),
+                                          datsim[[x]]$dat$ci)[1, 2]})
+mean(adj_rand)
+sd(adj_rand)
+
+lapply(which(adj_rand != 1), function(x){unique(result[[x]]$ci_result[999, ]) + 1})
+
+table(as.numeric(salso(result[[3]]$ci_result[-(1:500), ])), datsim[[3]]$dat$ci)
+matplot(exp(t(result[[3]]$beta_result[3, ,]))/rowSums(exp(t(result[[3]]$beta_result[3, ,]))),
+        type = "l")
+

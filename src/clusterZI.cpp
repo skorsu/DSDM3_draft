@@ -238,6 +238,22 @@ double log_proposal(arma::mat z, arma::mat atrisk, arma::mat beta_mat,
   
 }
 
+// [[Rcpp::export]]
+Rcpp::List label_switch(arma::uvec ci, arma::mat beta_mat, arma::mat z){
+  
+  // We will order the label by sorting the mean of the column with the highest
+  // variance.
+  
+  
+  arma::vec var_column = arma::var(z, 0);
+  arma::vec z_hi = z.col(arma::index_max(var_column));
+  
+  Rcpp::List result;
+  result["var_col"] = var_column;
+  return result;
+  
+}
+
 // Algorithms for updating parameters: -----------------------------------------
 
 // At-risk
@@ -532,6 +548,8 @@ arma::mat beta_realloc(arma::mat z, arma::mat atrisk, arma::mat beta_old,
   unsigned int Kpos = active_clus.size();
   
   // Update the beta vector for the active cluster.
+  // This is not the same for the beta update for the full function.
+  // We simulate the beta for all inactive clusters from the prior.
   arma::mat beta_result(beta_old.n_rows, beta_old.n_cols, arma::fill::randn);
   beta_result *= std::sqrt(s2);
   beta_result += mu;
@@ -621,7 +639,6 @@ arma::umat debug_r(unsigned int iter, unsigned int Kmax, arma::mat z,
   
 }
 
-
 // [[Rcpp::export]]
 Rcpp::List debug_rb(unsigned int iter, unsigned int Kmax, arma::mat z, 
                     arma::mat atrisk, arma::mat beta_init, arma::uvec ci_init, 
@@ -652,6 +669,5 @@ Rcpp::List debug_rb(unsigned int iter, unsigned int Kmax, arma::mat z,
   return result;
   
 }
-
 
 // *****************************************************************************
