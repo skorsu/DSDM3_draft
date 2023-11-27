@@ -540,8 +540,12 @@ Rcpp::List update_bc(unsigned int iter, unsigned int Kmax, arma::mat z,
 // Debugging: Reallocation + Beta Update ---------------------------------------
 
 // [[Rcpp::export]]
-arma::mat beta_realloc(arma::mat z, arma::mat atrisk, arma::mat beta_old, 
-                       arma::uvec ci, double mu, double s2, double s2_MH){
+Rcpp::List beta_realloc(arma::mat z, arma::mat atrisk, arma::mat beta_old, 
+                        arma::uvec ci, double mu, double s2, double s2_MH){
+  
+  // Accept-Reject status
+  // -1 = Sample from Prior; 0 = Reject; 1 = Accept
+  arma::rowvec ac_vec(beta_old.n_rows, arma::fill::value(-1)); 
   
   // Active Clusters
   arma::uvec active_clus = arma::unique(ci);
@@ -553,6 +557,8 @@ arma::mat beta_realloc(arma::mat z, arma::mat atrisk, arma::mat beta_old,
   arma::mat beta_result(beta_old.n_rows, beta_old.n_cols, arma::fill::randn);
   beta_result *= std::sqrt(s2);
   beta_result += mu;
+  
+  // Consider only the active cluster
   
   for(int kk = 0; kk < Kpos; ++kk){
     
@@ -572,14 +578,19 @@ arma::mat beta_realloc(arma::mat z, arma::mat atrisk, arma::mat beta_old,
     
     double logU = std::log(R::runif(0.01, 1.0));
     if(logU < logA){
+      ac_vec.col(k) = 1;
       beta_result.row(k) = bk_pro;
     } else {
+      ac_vec.col(k) = 0;
       beta_result.row(k) = bk_old;
     } 
     
   } 
   
-  return beta_result;
+  Rcpp::List result;
+  result["beta_result"] = beta_result;
+  result["ac_vec"] = ac_vec;
+  return result;
   
 } 
 
@@ -646,13 +657,17 @@ Rcpp::List debug_rb(unsigned int iter, unsigned int Kmax, arma::mat z,
   
   arma::umat ci_result(z.n_rows, iter, arma::fill::value(Kmax + 1));
   arma::cube beta_result(Kmax, z.n_cols, iter, arma::fill::value(0));
+  arma::mat ac_beta(iter, Kmax, arma::fill::value(2));
   
-  arma::mat beta_mcmc(beta_init);
+  Rcpp::List beta_sum; 
   arma::uvec ci_mcmc(ci_init);
   
   for(int t = 0; t < iter; ++t){
     // update beta
-    beta_mcmc = beta_realloc(z, atrisk, beta_init, ci_init, mu, s2, s2_MH);
+    beta_sum = beta_realloc(z, atrisk, beta_init, ci_init, mu, s2, s2_MH);
+    arma::mat beta_mcmc = beta_sum["beta_result"];
+    arma::rowvec act = beta_sum["ac_vec"]; 
+    ac_beta.row(t) = act;
     // update ci
     ci_mcmc = realloc(Kmax, z, atrisk, beta_mcmc, ci_init, theta);
     
@@ -665,6 +680,7 @@ Rcpp::List debug_rb(unsigned int iter, unsigned int Kmax, arma::mat z,
   
   Rcpp::List result;
   result["ci_result"] = ci_result.t();
+  result["ac_beta"] = ac_beta;
   result["beta_result"] = beta_result;
   return result;
   

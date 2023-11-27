@@ -60,7 +60,7 @@ datsim <- foreach(t = 1:20) %dopar% {
 }
 stopImplicitCluster()
 
-#### Case 2
+#### Case 2 (reduced case: # variable = 5; n = 200 with J = 10)
 registerDoParallel(5)
 datsim <- foreach(t = 1:20) %dopar% {
   set.seed(t)
@@ -74,14 +74,14 @@ datsim <- foreach(t = 1:20) %dopar% {
 }
 stopImplicitCluster()
 
-#### Case 2a
+#### Case 2a (reduced case: # variable = 5)
 registerDoParallel(5)
 datsim <- foreach(t = 1:20) %dopar% {
   set.seed(t)
-  patmat <- matrix(0, ncol = 20, nrow = 3)
-  patmat[1, sample(1:20, 1, replace = FALSE)] <- 1
-  patmat[2, sample(1:20, 2, replace = FALSE)] <- 1
-  patmat[3, sample(1:20, 3, replace = FALSE)] <- 1
+  patmat <- matrix(0, ncol = 10, nrow = 3)
+  patmat[1, sample(1:10, 1, replace = FALSE)] <- 1
+  patmat[2, sample(1:10, 2, replace = FALSE)] <- 1
+  patmat[3, sample(1:10, 3, replace = FALSE)] <- 1
   dat <- data_sim(n = 50, pat_mat = patmat, pi_gamma = 1,
                   xi_conc = 10, xi_non_conc = 0.1, sum_z = 2500)
   list(dat = dat, patmat = patmat)
@@ -180,11 +180,11 @@ result <- foreach(t = 1:20) %dopar% {
   ### S5: Kmax = 10, beta_init = matrix(0, ncol = 10, nrow = 10), ci_init = rep(0, 50)
   
   set.seed(t)
-  debug_rb(iter = 1000, Kmax = 3, z = datsim[[t]]$dat$z, 
+  debug_rb(iter = 10000, Kmax = 3, z = datsim[[t]]$dat$z, 
            atrisk = datsim[[t]]$dat$at_risk_mat, 
            beta_init = datsim[[t]]$patmat, 
            ci_init = datsim[[t]]$dat$ci - 1, 
-           theta = 1, mu = 0, s2 = 1, s2_MH = 1)
+           theta = 10, mu = 0, s2 = 1, s2_MH = 1)
   
 }
 stopImplicitCluster()
@@ -192,20 +192,45 @@ stopImplicitCluster()
 ### Analyze the result
 sapply(1:20, 
        function(x){apply(result[[x]]$ci_result, 1, function(y){length(unique(y))})}) |>
-  matplot(type = "l", ylim = c(1, 5), ylab = "Active Clusters",
-          xlab = "Iteration", main = "Case 2 - S1")
+  matplot(type = "l", ylim = c(1, 10), ylab = "Active Clusters",
+          xlab = "Iteration", main = "Case 2 (20 Variables) - S1 with theta = 10")
 
 ### Adjusted Rand Index
 set.seed(3)
 adj_rand <- sapply(1:20,
-                   function(x){mclustcomp(as.numeric(salso(result[[x]]$ci_result[-(1:500), ])),
+                   function(x){mclustcomp(as.numeric(salso(result[[x]]$ci_result[-(1:5000), ])),
                                           datsim[[x]]$dat$ci)[1, 2]})
 mean(adj_rand)
 sd(adj_rand)
 
-lapply(which(adj_rand != 1), function(x){unique(result[[x]]$ci_result[999, ]) + 1})
+for(i in 1:20){
+  print(table(as.numeric(salso(result[[i]]$ci_result[-(1:5000), ])), datsim[[i]]$dat$ci))
+}
 
-table(as.numeric(salso(result[[3]]$ci_result[-(1:500), ])), datsim[[3]]$dat$ci)
-matplot(exp(t(result[[3]]$beta_result[3, ,]))/rowSums(exp(t(result[[3]]$beta_result[3, ,]))),
+###
+which(adj_rand != 1)
+colMeans(datsim[[2]]$dat$z[datsim[[2]]$dat$ci == 1, ]/2500)
+colMeans(datsim[[2]]$dat$z[datsim[[2]]$dat$ci == 2, ]/2500)
+colMeans(datsim[[2]]$dat$z[datsim[[2]]$dat$ci == 3, ]/2500)
+
+### Beta: Accept-Reject
+active_clus <- apply(result[[2]]$ci_result, 1, function(x){length(unique(x))})
+which(active_clus == 3)
+result[[2]]$ci_result[84, ]
+exp(result[[2]]$beta_result[, , 86])/rowSums(exp(result[[2]]$beta_result[, , 86]))
+
+apply(result[[2]]$ac_beta, 2, function(x){length(unique(x))})
+table(factor(result[[2]]$ac_beta[, 3], levels = c(-1, 0, 1), labels = c("NA", "Reject", "Accept")))
+
+matplot(exp(t(result[[2]]$beta_result[3, , ]))/rowSums(exp(t(result[[2]]$beta_result[3, , ]))),
         type = "l")
+
+factor(result[[2]]$ac_beta[, 1], labels = c("NA", "Reject", "Accept"))
+t(result[[1]]$beta_result[1, , ]) %>%
+  head(10)
+result[[1]]$ci_result[10, ]
+
+datsim[[1]]$dat$z
+
+
 
