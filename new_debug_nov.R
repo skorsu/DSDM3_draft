@@ -12,8 +12,8 @@ library(latex2exp)
 library(sparseMbClust)
 library(tidyverse)
 
-# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Function: Simulating the data
 data_sim <- function(n, pat_mat, pi_gamma, xi_conc, xi_non_conc, sum_z){
@@ -207,30 +207,32 @@ for(i in 1:20){
   print(table(as.numeric(salso(result[[i]]$ci_result[-(1:5000), ])), datsim[[i]]$dat$ci))
 }
 
-###
-which(adj_rand != 1)
-colMeans(datsim[[2]]$dat$z[datsim[[2]]$dat$ci == 1, ]/2500)
-colMeans(datsim[[2]]$dat$z[datsim[[2]]$dat$ci == 2, ]/2500)
-colMeans(datsim[[2]]$dat$z[datsim[[2]]$dat$ci == 3, ]/2500)
+### Full (without at-risk indicator) -------------------------------------------
+set.seed(1)
 
-### Beta: Accept-Reject
-active_clus <- apply(result[[2]]$ci_result, 1, function(x){length(unique(x))})
-which(active_clus == 3)
-result[[2]]$ci_result[84, ]
-exp(result[[2]]$beta_result[, , 86])/rowSums(exp(result[[2]]$beta_result[, , 86]))
+test_result <- debug_brs(iter = 1000, Kmax = 5, z = datsim[[1]]$dat$z, 
+                         atrisk = datsim[[1]]$dat$at_risk_mat, 
+                         beta_init = datsim[[1]]$patmat, 
+                         ci_init = datsim[[1]]$dat$ci - 1,
+                         theta = 1, mu = 1, s2 = 1, s2_MH = 1, launch_iter = 10, 
+                         r0c = 1, r1c = 1)
 
-apply(result[[2]]$ac_beta, 2, function(x){length(unique(x))})
-table(factor(result[[2]]$ac_beta[, 3], levels = c(-1, 0, 1), labels = c("NA", "Reject", "Accept")))
+table(factor(test_result$sm_status, levels = c(0, 1), labels = c("Merge", "Split")),
+      factor(test_result$sm_accept, levels = c(0, 1), labels = c("Reject", "Accept")))
 
-matplot(exp(t(result[[2]]$beta_result[3, , ]))/rowSums(exp(t(result[[2]]$beta_result[3, , ]))),
-        type = "l")
+table(salso(test_result$ci_result[-c(1:500), ]), datsim[[1]]$dat$ci - 1)
+mclustcomp(as.numeric(salso(test_result$ci_result[-c(1:500), ])), 
+           datsim[[1]]$dat$ci - 1)[1, 2]
 
-factor(result[[2]]$ac_beta[, 1], labels = c("NA", "Reject", "Accept"))
-t(result[[1]]$beta_result[1, , ]) %>%
-  head(10)
-result[[1]]$ci_result[10, ]
+### Rand Index
 
-datsim[[1]]$dat$z
+exp(test_result$beta_launch[3, ])/sum(exp(test_result$beta_launch[3, ]))
+
+table(datsim[[1]]$dat$ci - 1, test_result$ci_proposed)
+
+exp(c(1, rep(0, 9)))/sum(exp(c(1, rep(0, 9))))
+
+table(datsim[[1]]$dat$ci)
 
 
 
