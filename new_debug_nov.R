@@ -12,8 +12,8 @@ library(latex2exp)
 library(sparseMbClust)
 library(tidyverse)
 
-# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Function: Simulating the data
 data_sim <- function(n, pat_mat, pi_gamma, xi_conc, xi_non_conc, sum_z){
@@ -209,8 +209,7 @@ for(i in 1:20){
 
 ### Full (without at-risk indicator) -------------------------------------------
 #### Data Simulation for the full model (without at-risk indicator) ------------
-#### SM: Case 1 -- Try to mimic case 1a earlier but make it easier in terms of 
-####               the number of the cluster
+#### SM: Case 1 -- case 1a 
 
 registerDoParallel(5)
 datsim <- foreach(t = 1:20) %dopar% {
@@ -223,15 +222,22 @@ datsim <- foreach(t = 1:20) %dopar% {
 stopImplicitCluster()
 
 #### Run the model -------------------------------------------------------------
+
+s <- rnorm(10, sd = sqrt(100))
+exp(s)/sum(exp(s))
+
 registerDoParallel(5)
 result <- foreach(t = 1:20) %dopar% {
+  
+  ### S1: beta_init = datsim[[t]]$patmat, ci_init = datsim[[t]]$dat$ci - 1
+  ### S2: beta_init = datsim[[t]]$patmat, ci_init = sample(0:Kmax, 50, replace = TRUE)
   
   set.seed(t)
   debug_brs(iter = 1000, Kmax = 5, z = datsim[[t]]$dat$z, 
             atrisk = datsim[[t]]$dat$at_risk_mat, 
             beta_init = datsim[[t]]$patmat, 
-            ci_init = datsim[[t]]$dat$ci - 1,
-            theta = 1, mu = 1, s2 = 1, s2_MH = 1, launch_iter = 10, 
+            ci_init = sample(0:4, 50, replace = TRUE),
+            theta = 1, mu = 0, s2 = 1, s2_MH = 5, launch_iter = 10, 
             r0c = 1, r1c = 1)
   
 }
@@ -241,7 +247,7 @@ stopImplicitCluster()
 sapply(1:20, 
        function(x){apply(result[[x]]$ci_result, 1, function(y){length(unique(y))})}) |>
   matplot(type = "l", ylim = c(1, 10), ylab = "Active Clusters",
-          xlab = "Iteration", main = "Case 2 (20 Variables) - S1 with theta = 10")
+          xlab = "Iteration", main = "Case 1a - S2 (s2_MH = 5)")
 
 ### Adjusted Rand Index
 set.seed(3)
@@ -261,31 +267,15 @@ accept_result <- t(sapply(1:20, function(x){
   
   accept_tab <- table(factor(result[[x]]$sm_status, levels = c(0, 1), labels = c("Merge", "Split")),
                              factor(result[[x]]$sm_accept, levels = c(0, 1), labels = c("Reject", "Accept")))
+  print(accept_tab)
          c(sum(accept_tab[, 2])/sum(accept_tab) ,
            as.numeric(accept_tab[, 2]/table(factor(result[[x]]$sm_status, levels = c(0, 1), labels = c("Merge", "Split")))))
        }))
-
-
-
-accept_tab <- table(factor(result[[1]]$sm_status, levels = c(0, 1), labels = c("Merge", "Split")),
-                    factor(result[[1]]$sm_accept, levels = c(0, 1), labels = c("Reject", "Accept")))
-c(sum(accept_tab[, 2])/sum(accept_tab) ,
-  as.numeric(accept_tab[, 2]/table(factor(result[[1]]$sm_status, levels = c(0, 1), labels = c("Merge", "Split")))))
 ### P(Accept) P(Accept|Merge) P(Accept|Reject)
 
-table(salso(test_result$ci_result[-c(1:500), ]), datsim[[1]]$dat$ci - 1)
-mclustcomp(as.numeric(salso(test_result$ci_result[-c(1:500), ])), 
-           datsim[[1]]$dat$ci - 1)[1, 2]
+accept_result
 
-### Rand Index
-
-exp(test_result$beta_launch[3, ])/sum(exp(test_result$beta_launch[3, ]))
-
-table(datsim[[1]]$dat$ci - 1, test_result$ci_proposed)
-
-exp(c(1, rep(0, 9)))/sum(exp(c(1, rep(0, 9))))
-
-table(datsim[[1]]$dat$ci)
+result[[1]]$beta_result
 
 
 

@@ -287,35 +287,42 @@ arma::mat update_beta(arma::mat z, arma::mat atrisk, arma::mat beta_old,
 
 // Cluster Assignment: Reallocation
 // [[Rcpp::export]]
-arma::uvec realloc(unsigned int Kmax, arma::mat z, arma::mat atrisk, 
-                   arma::mat beta_mat, arma::uvec ci_old, double theta){
+arma::uvec realloc_full(unsigned int Kmax, arma::mat z, arma::mat atrisk, 
+                        arma::mat beta_mat, arma::uvec ci_old, double theta){
   
   arma::uvec ci_updated(ci_old);
   arma::uvec active_clus = arma::unique(ci_old);
   unsigned int Kpos = active_clus.size();
   
-  // Calculate the log marginal for every observation in each posible clusters.
+  // Note that we allow the observation to go to the active cluster only
+  
+  // Calculate the log marginal for every observation in each possible clusters.
   // We can do this as this step does not change beta vector.
-  arma::mat lmar_realloc = logmar(z, atrisk, beta_mat);
+  arma::mat lmar_realloc = logmar(z, atrisk, beta_mat.rows(active_clus));
   
   // Find the number of the observations in each active cluster
-  arma::vec nk(Kmax, arma::fill::zeros);
+  arma::vec nkk(Kpos, arma::fill::zeros);
   for(int kk = 0; kk < Kpos; ++kk){
     int k = active_clus[kk];
-    nk[k] += arma::accu(ci_old == k);
+    nkk[kk] += arma::accu(ci_old == k);
   } 
   
   for(int i = 0; i < z.n_rows; ++i){
     int ci_old = ci_updated[i];
-    nk[ci_old] -= 1;
-    arma::vec log_realloc_prob = arma::log(nk + theta) + lmar_realloc.row(i).t();
+    
+    // Adjust from Kmax space to Kpos space
+    nkk.elem(arma::find(active_clus == ci_old)) -= 1; 
+    arma::vec log_realloc_prob = arma::log(nkk + theta) + lmar_realloc.row(i).t();
     arma::vec realloc_prob = log_sum_exp(log_realloc_prob);
     arma::vec ck_new_vec = rmultinom_1(realloc_prob);
     arma::uvec kk_new_vec = arma::find(ck_new_vec == 1);
-    int new_ci = kk_new_vec[0];
-    nk[new_ci] += 1;
-    ci_updated[i] = new_ci;
-  } 
+    int kk_new_ci = kk_new_vec[0];
+    nkk[kk_new_ci] += 1;
+    
+    // Adjust from Kpos space back to Kmax space
+    ci_updated[i] = active_clus[kk_new_ci];
+    
+  }
   
   return ci_updated;
   
@@ -493,6 +500,41 @@ Rcpp::List sm(unsigned int Kmax, arma::mat z, arma::mat atrisk,
 // Debugging: Reallocation + Beta Update ---------------------------------------
 
 // [[Rcpp::export]]
+arma::uvec realloc(unsigned int Kmax, arma::mat z, arma::mat atrisk, 
+                   arma::mat beta_mat, arma::uvec ci_old, double theta){
+  
+  arma::uvec ci_updated(ci_old);
+  arma::uvec active_clus = arma::unique(ci_old);
+  unsigned int Kpos = active_clus.size();
+  
+  // Calculate the log marginal for every observation in each possible clusters.
+  // We can do this as this step does not change beta vector.
+  arma::mat lmar_realloc = logmar(z, atrisk, beta_mat);
+  
+  // Find the number of the observations in each active cluster
+  arma::vec nk(Kmax, arma::fill::zeros);
+  for(int kk = 0; kk < Kpos; ++kk){
+    int k = active_clus[kk];
+    nk[k] += arma::accu(ci_old == k);
+  } 
+  
+  for(int i = 0; i < z.n_rows; ++i){
+    int ci_old = ci_updated[i];
+    nk[ci_old] -= 1;
+    arma::vec log_realloc_prob = arma::log(nk + theta) + lmar_realloc.row(i).t();
+    arma::vec realloc_prob = log_sum_exp(log_realloc_prob);
+    arma::vec ck_new_vec = rmultinom_1(realloc_prob);
+    arma::uvec kk_new_vec = arma::find(ck_new_vec == 1);
+    int new_ci = kk_new_vec[0];
+    nk[new_ci] += 1;
+    ci_updated[i] = new_ci;
+  }  
+  
+  return ci_updated;
+  
+} 
+
+// [[Rcpp::export]]
 Rcpp::List beta_realloc(arma::mat z, arma::mat atrisk, arma::mat beta_old, 
                         arma::uvec ci, double mu, double s2, double s2_MH){
   
@@ -623,7 +665,7 @@ Rcpp::List debug_brs(unsigned int iter, unsigned int Kmax, arma::mat z,
     // update beta
     beta_mcmc = update_beta(z, atrisk, beta_init, ci_init, mu, s2, s2_MH);
     // reallocation
-    ci_mcmc = realloc(Kmax, z, atrisk, beta_mcmc, ci_init, theta);
+    ci_mcmc = realloc_full(Kmax, z, atrisk, beta_mcmc, ci_init, theta);
     // sm
     sm_sum = sm(Kmax, z, atrisk, beta_mcmc, ci_mcmc, theta, mu, s2, 
                 launch_iter, r0c, r1c);
