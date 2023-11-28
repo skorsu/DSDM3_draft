@@ -12,8 +12,8 @@ library(latex2exp)
 library(sparseMbClust)
 library(tidyverse)
 
-sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Function: Simulating the data
 data_sim <- function(n, pat_mat, pi_gamma, xi_conc, xi_non_conc, sum_z){
@@ -208,17 +208,70 @@ for(i in 1:20){
 }
 
 ### Full (without at-risk indicator) -------------------------------------------
-set.seed(1)
+#### Data Simulation for the full model (without at-risk indicator) ------------
+#### SM: Case 1 -- Try to mimic case 1a earlier but make it easier in terms of 
+####               the number of the cluster
 
-test_result <- debug_brs(iter = 1000, Kmax = 5, z = datsim[[1]]$dat$z, 
-                         atrisk = datsim[[1]]$dat$at_risk_mat, 
-                         beta_init = datsim[[1]]$patmat, 
-                         ci_init = datsim[[1]]$dat$ci - 1,
-                         theta = 1, mu = 1, s2 = 1, s2_MH = 1, launch_iter = 10, 
-                         r0c = 1, r1c = 1)
+registerDoParallel(5)
+datsim <- foreach(t = 1:20) %dopar% {
+  set.seed(t)
+  patmat <- diag(10)[sample(1:10, size = 5), ]
+  dat <- data_sim(n = 50, pat_mat = patmat, pi_gamma = 1,
+                  xi_conc = 10, xi_non_conc = 0.1, sum_z = 2500)
+  list(dat = dat, patmat = patmat)
+}
+stopImplicitCluster()
 
-table(factor(test_result$sm_status, levels = c(0, 1), labels = c("Merge", "Split")),
-      factor(test_result$sm_accept, levels = c(0, 1), labels = c("Reject", "Accept")))
+#### Run the model -------------------------------------------------------------
+registerDoParallel(5)
+result <- foreach(t = 1:20) %dopar% {
+  
+  set.seed(t)
+  debug_brs(iter = 1000, Kmax = 5, z = datsim[[t]]$dat$z, 
+            atrisk = datsim[[t]]$dat$at_risk_mat, 
+            beta_init = datsim[[t]]$patmat, 
+            ci_init = datsim[[t]]$dat$ci - 1,
+            theta = 1, mu = 1, s2 = 1, s2_MH = 1, launch_iter = 10, 
+            r0c = 1, r1c = 1)
+  
+}
+stopImplicitCluster()
+
+### Plot
+sapply(1:20, 
+       function(x){apply(result[[x]]$ci_result, 1, function(y){length(unique(y))})}) |>
+  matplot(type = "l", ylim = c(1, 10), ylab = "Active Clusters",
+          xlab = "Iteration", main = "Case 2 (20 Variables) - S1 with theta = 10")
+
+### Adjusted Rand Index
+set.seed(3)
+adj_rand <- sapply(1:20,
+                   function(x){mclustcomp(as.numeric(salso(result[[x]]$ci_result[-(1:500), ])),
+                                          datsim[[x]]$dat$ci)[1, 2]})
+mean(adj_rand)
+sd(adj_rand)
+
+for(i in 1:20){
+  print(paste0("i: ", i))
+  print(table(as.numeric(salso(result[[i]]$ci_result[-(1:500), ])), datsim[[i]]$dat$ci))
+}
+
+### Calculate the acceptance rate
+accept_result <- t(sapply(1:20, function(x){
+  
+  accept_tab <- table(factor(result[[x]]$sm_status, levels = c(0, 1), labels = c("Merge", "Split")),
+                             factor(result[[x]]$sm_accept, levels = c(0, 1), labels = c("Reject", "Accept")))
+         c(sum(accept_tab[, 2])/sum(accept_tab) ,
+           as.numeric(accept_tab[, 2]/table(factor(result[[x]]$sm_status, levels = c(0, 1), labels = c("Merge", "Split")))))
+       }))
+
+
+
+accept_tab <- table(factor(result[[1]]$sm_status, levels = c(0, 1), labels = c("Merge", "Split")),
+                    factor(result[[1]]$sm_accept, levels = c(0, 1), labels = c("Reject", "Accept")))
+c(sum(accept_tab[, 2])/sum(accept_tab) ,
+  as.numeric(accept_tab[, 2]/table(factor(result[[1]]$sm_status, levels = c(0, 1), labels = c("Merge", "Split")))))
+### P(Accept) P(Accept|Merge) P(Accept|Reject)
 
 table(salso(test_result$ci_result[-c(1:500), ]), datsim[[1]]$dat$ci - 1)
 mclustcomp(as.numeric(salso(test_result$ci_result[-c(1:500), ])), 
