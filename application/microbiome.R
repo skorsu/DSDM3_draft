@@ -10,12 +10,12 @@ library(cluster)
 library(ecodist)
 library(factoextra)
 library(rbiom)
-library(Bio)
-library(phyloseq)
+## library(Bio)
+## library(phyloseq)
 
 ### Import the data
-path <- "/Users/kevinkvp/Desktop/"
-# path <- "/Users/kevin-imac/Desktop/"
+# path <- "/Users/kevinkvp/Desktop/"
+path <- "/Users/kevin-imac/Desktop/"
 ni <- read.csv(paste0(path, "Nicaragua_12mo_Metadata_csv.csv"))
 ml <- read.csv(paste0(path, "Mali_12mo_Metadata_csv.csv"))
 
@@ -25,6 +25,10 @@ dat <- cbind("country" = c("NI"), ni[, intersect(colnames(ni), colnames(ml))]) %
 for(i in c(1, 2, 3, 5)){
   dat[, i] <- factor(dat[, i])
 }
+
+dim(dat)
+
+dat[, 1:5]
 
 ### Function
 ## recursion function
@@ -55,6 +59,10 @@ dat <- dat %>% dplyr::select(-Age)
 demo_dat <- dat[, 1:4]
 taxa_dat <- dat[, -(1:4)]
 taxa_dat <- taxa_dat[, colMeans(taxa_dat > 0) >= 0.1]
+
+view(cbind(demo_dat, taxa_dat))
+
+dim(dat)
 
 ### Apply: ZIDM-ZIDM
 set.seed(1)
