@@ -292,5 +292,95 @@ apply(accept_result, 2, sd)
 
 result[[1]]$beta_result
 
+## Try to update the beta ======================================================
+registerDoParallel(5)
+datsim <- foreach(t = 1:20) %dopar% {
+  set.seed(t)
+  patmat <- matrix(0, ncol = 50, nrow = 3)
+  patmat[1, 1] <- 1
+  patmat[2, 1:2] <- 1
+  patmat[3, 1:3] <- 1
+  dat <- data_sim(n = 50, pat_mat = patmat, pi_gamma = 1,
+                  xi_conc = 10, xi_non_conc = 0.1, sum_z = 2500)
+  list(dat = dat, patmat = patmat)
+}
+stopImplicitCluster()
+
+registerDoParallel(5)
+result <- foreach(t = 1:20) %dopar% {
+  
+  ### S1: beta_init = datsim[[t]]$patmat, ci_init = datsim[[t]]$dat$ci - 1
+  ### S2: beta_init = datsim[[t]]$patmat, ci_init = sample(0:Kmax, 50, replace = TRUE)
+  ### S3: Kmax = 50, beta_init = datsim[[t]]$dat$z/rowSums(datsim[[t]]$dat$z), ci_init = 0:49
+  ### S3: Kmax = 10, beta_init = matrix(0, ncol = 50, nrow = 10), ci_init = rep(0, 50)
+  
+  set.seed(t)
+  debug_brs(iter = 10000, Kmax = 10, nbeta_split = 5, s2_split = 1,
+            z = datsim[[t]]$dat$z, 
+            atrisk = datsim[[t]]$dat$at_risk_mat, 
+            beta_init = matrix(0, ncol = 50, nrow = 10), 
+            ci_init = rep(0, 50),
+            theta = 1, mu = 0, s2 = 1, s2_MH = 1, launch_iter = 10, 
+            r0c = 1, r1c = 1)
+  
+}
+stopImplicitCluster()
+
+### Plot
+sapply(1:20, 
+       function(x){apply(result[[x]]$ci_result, 1, function(y){length(unique(y))})}) |>
+  matplot(type = "l", ylim = c(1, 10), ylab = "Active Clusters",
+          xlab = "Iteration", main = "Same cluster with Kmax = 10 - theta = 10, s2MH = 10",
+          lwd = 1.5)
+
+### Adjusted Rand Index
+set.seed(3)
+adj_rand <- sapply(1:20,
+                   function(x){mclustcomp(as.numeric(salso(result[[x]]$ci_result[-(1:5000), ])),
+                                          datsim[[x]]$dat$ci)[1, 2]})
+mean(adj_rand)
+sd(adj_rand)
+
+matplot(t(exp(result[[2]]$beta_result[3, , ])/colSums(exp(result[[2]]$beta_result[3, , ]))),
+        type = "l")
+
+result[[2]]$ci_result[1000, ]
+
+table(salso(result[[1]]$ci_result[-(1:5000), ]), datsim[[1]]$dat$ci)
+
+set.seed(1)
+test_bet <- rbind(c(rnorm(1, 2, 1), rnorm(9)), rep(0, 10))
+new_bet <- split_beta(nbeta = 1, clus_split = 0, clus_new = 1, 
+                      beta_old = test_bet, s2_MH = 5)
+matplot(t(exp(new_bet)/rowSums(exp(new_bet))), type = "b")
+logmar(datsim[[1]]$dat$z[which(datsim[[1]]$dat$ci <= 2, ), ], 
+       datsim[[1]]$dat$at_risk_mat[which(datsim[[1]]$dat$ci <= 2, ), ],
+       new_bet) %>%
+  apply(1, log_sum_exp)
+
+logmar(datsim[[1]]$dat$z[which(datsim[[1]]$dat$ci <= 2, ), ], 
+       datsim[[1]]$dat$at_risk_mat[which(datsim[[1]]$dat$ci <= 2, ), ],
+       new_bet) %>%
+  apply(1, which.max)
 
 
+
+set.seed(1)
+bt_old <- rbind(matrix(rnorm(30, 3, 1), ncol = 10), 
+                matrix(0, ncol = 10, nrow = 2))
+
+betaMat <- matrix(NA, ncol = 10, nrow = 10)
+for(i in 1:10){
+  new_bt <- split_beta(nbeta = 2, clus_split = 2, clus_new = 4,
+                       beta_old = bt_old, s2_MH = 1)
+  betaMat[i, ] <- new_bt[5, ]
+}
+
+rel_beta <- exp(betaMat)/rowSums(exp(betaMat))
+matplot(t(rel_beta), type = "l", lwd = 0.20)
+lines(x = 1:10, y = exp(bt_old[3, ])/sum(exp(bt_old[3, ])))
+
+
+f_prior <- matrix(rnorm(100, 0, sqrt(1)), ncol = 10)
+matplot(t(exp(f_prior)/rowSums(exp(f_prior))), type = "l", lwd = 0.20)
+lines(x = 1:10, y = exp(bt_old[3, ])/sum(exp(bt_old[3, ])))

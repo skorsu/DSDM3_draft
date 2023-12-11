@@ -238,6 +238,28 @@ double log_proposal(arma::mat z, arma::mat atrisk, arma::mat beta_mat,
   
 }
 
+// [[Rcpp::export]]
+arma::mat split_beta(unsigned int nbeta, unsigned int clus_split, 
+                     unsigned int clus_new, arma::mat beta_old, 
+                     double mu, double s2){
+  
+  arma::mat beta_new(beta_old);
+  
+  // First, propose a new beta vector from the cluster that we want to split.
+  arma::vec beta_proposed = beta_old.row(clus_split).t();
+  
+  // Sample the index that we want to update beta
+  arma::uvec beta_index = arma::randperm(beta_proposed.size(), nbeta);
+  arma::vec samp_bt = arma::mvnrnd(mu * arma::ones(nbeta),
+                                   s2 * arma::eye(nbeta, nbeta));
+  
+  beta_proposed.rows(beta_index) = samp_bt;
+  beta_new.row(clus_new) = beta_proposed.t();
+  
+  return beta_new;
+  
+}
+
 // Algorithms for updating parameters: -----------------------------------------
 
 // At-risk
@@ -330,8 +352,9 @@ arma::uvec realloc_full(unsigned int Kmax, arma::mat z, arma::mat atrisk,
 
 // Cluster Assignment: Split-Merge
 // [[Rcpp::export]]
-Rcpp::List sm(unsigned int Kmax, arma::mat z, arma::mat atrisk, 
-              arma::mat beta_old, arma::uvec ci_old, double theta, 
+Rcpp::List sm(unsigned int Kmax, unsigned int nbeta_split, 
+              arma::mat z, arma::mat atrisk, arma::mat beta_old, 
+              arma::uvec ci_old, double theta, 
               double mu, double s2, unsigned int launch_iter,
               double r0c, double r1c){
   
@@ -379,8 +402,7 @@ Rcpp::List sm(unsigned int Kmax, arma::mat z, arma::mat atrisk,
     nk[new_active_clus[0]] += 1;
     samp_clus[0] = new_active_clus[0];
     ci_launch[samp_ind[0]] = new_active_clus[0];
-    beta_launch.row(new_active_clus[0]) = arma::randn<arma::rowvec>(z.n_cols, 
-                    arma::distr_param(mu, std::sqrt(s2)));
+    beta_launch = split_beta(nbeta_split, samp_clus[1], samp_clus[0], beta_old, mu, s2);
   } else {
     split_index = 0;
   }
@@ -647,10 +669,10 @@ Rcpp::List debug_rb(unsigned int iter, unsigned int Kmax, arma::mat z,
 }
 
 // [[Rcpp::export]]
-Rcpp::List debug_brs(unsigned int iter, unsigned int Kmax, arma::mat z, 
-                     arma::mat atrisk, arma::mat beta_init, arma::uvec ci_init, 
-                     double theta, double mu, double s2, double s2_MH, 
-                     unsigned int launch_iter, double r0c, double r1c){
+Rcpp::List debug_brs(unsigned int iter, unsigned int Kmax, unsigned int nbeta_split, 
+                     arma::mat z, arma::mat atrisk, arma::mat beta_init, 
+                     arma::uvec ci_init, double theta, double mu, double s2, 
+                     double s2_MH, unsigned int launch_iter, double r0c, double r1c){
   
   arma::umat ci_result(z.n_rows, iter, arma::fill::value(Kmax + 1));
   arma::cube beta_result(Kmax, z.n_cols, iter, arma::fill::value(0));
@@ -667,8 +689,8 @@ Rcpp::List debug_brs(unsigned int iter, unsigned int Kmax, arma::mat z,
     // reallocation
     ci_mcmc = realloc_full(Kmax, z, atrisk, beta_mcmc, ci_init, theta);
     // sm
-    sm_sum = sm(Kmax, z, atrisk, beta_mcmc, ci_mcmc, theta, mu, s2, 
-                launch_iter, r0c, r1c);
+    sm_sum = sm(Kmax, nbeta_split, z, atrisk, beta_mcmc, ci_mcmc, 
+                theta, mu, s2, launch_iter, r0c, r1c);
     
     // record the result
     arma::mat beta_final = sm_sum["beta_result"];
