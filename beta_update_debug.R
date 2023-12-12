@@ -12,8 +12,8 @@ library(latex2exp)
 library(sparseMbClust)
 library(tidyverse)
 
-# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Function: Simulating the data
 data_sim <- function(n, pat_mat, pi_gamma, xi_conc, xi_non_conc, sum_z){
@@ -60,7 +60,7 @@ result <- foreach(t = 1:20) %dopar% {
   ### S4: Kmax = 10, beta_init = matrix(0, ncol = 50, nrow = 10), ci_init = rep(0, 50)
   
   set.seed(t)
-  debug_brs(iter = 10000, Kmax = 10, nbeta_split = 50,
+  debug_brs(iter = 10000, Kmax = 10, nbeta_split = 5,
             z = datsim[[t]]$dat$z, 
             atrisk = datsim[[t]]$dat$at_risk_mat, 
             beta_init = matrix(0, ncol = 50, nrow = 10), 
@@ -78,6 +78,24 @@ sapply(1:20,
           xlab = "Iteration", main = "One cluster - theta = 10 and s2MH = 10 with n_beta = 5",
           lwd = 1.5)
 
+### Individual Replicated Data
+
+par(mfrow = c(2, 2))
+
+for(i in 1:20){
+  title_plot <- paste0("Case 6d: Replicate # ", i)
+  adjRandindex <- mclustcomp(as.numeric(salso(result[[i]]$ci_result[-(1:5000), ])),
+                             datsim[[i]]$dat$ci)[1, 2]
+  nsplit <- sum(result[[i]]$sm_status)
+  naccept_split <- sum(result[[i]]$sm_accept[result[[i]]$sm_status == 1])
+    
+  apply(result[[i]]$ci_result, 1, function(x){length(unique(x))}) %>%
+  plot(type = "l", ylim = c(1, 10), main = title_plot, 
+       xlab = "Iteration", ylab = "Number of the active cluster",
+       sub = paste0("Adj Rand index = ", round(adjRandindex, 3), 
+                    " -- P(Accept|Split) = ", naccept_split, "/", nsplit))
+}
+
 ### Acceptance Probability
 accept_prob <- function(result_list){
   overall_accept <- mean(result_list$sm_accept)
@@ -85,6 +103,8 @@ accept_prob <- function(result_list){
   split_accept <- mean(result_list$sm_accept[result_list$sm_status == 1])
   c(overall_accept, merge_accept, split_accept)
 }
+
+accept_prob(result[[1]])
 
 rowMeans(sapply(1:20, function(x){accept_prob(result[[x]])}))
 apply(sapply(1:20, function(x){accept_prob(result[[x]])}), 1, sd)
@@ -96,5 +116,7 @@ adj_rand <- sapply(1:20,
                                           datsim[[x]]$dat$ci)[1, 2]})
 mean(adj_rand)
 sd(adj_rand)
+
+table(as.numeric(salso(result[[5]]$ci_result[-(1:5000), ])), datsim[[5]]$dat$ci)
 
 
