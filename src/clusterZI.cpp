@@ -154,6 +154,21 @@ arma::mat logmar(arma::mat z, arma::mat atrisk, arma::mat beta_mat){
 }
 
 // [[Rcpp::export]]
+double log_atrisk(arma::rowvec zi, arma::rowvec atrisk_i, arma::rowvec beta_k,
+                  double r0g, double r1g){
+  
+  double result = logmar_ik(zi, atrisk_i, beta_k);
+  arma::uvec zi_zero = arma::find(zi == 0);
+  arma::rowvec ar_zi_zero = atrisk_i.cols(zi_zero);
+  result += arma::accu(arma::lgamma(ar_zi_zero + r0g));
+  result += arma::accu(arma::lgamma((1 - ar_zi_zero) + r1g));
+  result -= (ar_zi_zero.size() * std::lgamma(r0g + r1g + 1));
+  
+  return result;
+  
+}
+
+// [[Rcpp::export]]
 Rcpp::List launch_mcmc(arma::mat z, arma::mat atrisk, arma::mat beta_mat, 
                        arma::uvec ci_old, unsigned int launch_iter, arma::uvec S, 
                        arma::uvec samp_clus, arma::vec nk){

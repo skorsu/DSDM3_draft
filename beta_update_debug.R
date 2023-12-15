@@ -119,4 +119,26 @@ sd(adj_rand)
 
 table(as.numeric(salso(result[[5]]$ci_result[-(1:5000), ])), datsim[[5]]$dat$ci)
 
+## Now: Include the at-risk zero part ==========================================
+#### Note: Need to find the new way to simulated the data
+registerDoParallel(5)
+datsim <- foreach(t = 1:20) %dopar% {
+  set.seed(t)
+  patmat <- matrix(0, ncol = 50, nrow = 3)
+  patmat[1, 1] <- 1
+  patmat[2, 1:2] <- 1
+  patmat[3, 1:3] <- 1
+  dat <- data_sim(n = 50, pat_mat = patmat, pi_gamma = 0.95,
+                  xi_conc = 10, xi_non_conc = 0.1, sum_z = 250)
+  list(dat = dat, patmat = patmat)
+}
+stopImplicitCluster()
+
+log_atrisk(zi = datsim[[1]]$dat$z[1, ], atrisk_i = datsim[[1]]$dat$at_risk_mat[1, ], 
+           beta_k = datsim[[1]]$patmat[datsim[[1]]$dat$ci[1], ],
+           r0g = 3, r1g = 2)
+which(datsim[[1]]$dat$z[1, ] == 0)
+datsim[[1]]$dat$z
+datsim[[1]]$dat$ci
+
 
