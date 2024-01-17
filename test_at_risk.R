@@ -13,8 +13,8 @@ library(sparseMbClust)
 library(tidyverse)
 library(pheatmap)
 
-sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Function: Simulating the data ----------------------------------------------
 data_sim <- function(n, pat_mat, pi_gamma, xi_conc, xi_non_conc, sum_z){
@@ -37,6 +37,39 @@ data_sim <- function(n, pat_mat, pi_gamma, xi_conc, xi_non_conc, sum_z){
               z = z, xi_mat = pmat))
   
 }
+
+### Test DM-DM: Can it go down if we have a obvious pattern ====================
+set.seed(34)
+registerDoParallel(5)
+datsim <- foreach(t = 1:20) %dopar% {
+  set.seed(t)
+  data_sim(n = 50, pat_mat = (diag(20)[1:3, ]), pi_gamma = 1,
+           xi_conc = 10, xi_non_conc = 0.01, sum_z = 2500)
+}
+stopImplicitCluster()
+
+registerDoParallel(5)
+result <- foreach(t = 1:20) %dopar% {
+  DMDM(iter = 10000, Kmax = 10, z = datsim[[t]]$z, 
+       beta_mat = matrix(0, ncol = 20, nrow = 10), ci_init = rep(0, 50), 
+       theta = 1, thin = 100)
+}
+stopImplicitCluster()
+
+resultCluster <- sapply(1:20, function(x){salso(result[[x]][-(1:50), ])})
+table(apply(resultCluster, 2, function(x){length(unique(x))}))
+
+### Try sparse
+registerDoParallel(5)
+resultSparse <- foreach(t = 1:20) %dopar% {
+  DMDM(iter = 10000, Kmax = 10, z = datsim[[t]]$z, 
+       beta_mat = matrix(0, ncol = 20, nrow = 10), ci_init = rep(0, 50), 
+       theta = 0.01, thin = 10)
+}
+stopImplicitCluster()
+
+resultSparseCluster <- sapply(1:20, function(x){salso(resultSparse[[x]][-(1:50), ])})
+table(apply(resultSparseCluster, 2, function(x){length(unique(x))}))
 
 ### Test DM-x ==================================================================
 set.seed(34)

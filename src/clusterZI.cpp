@@ -642,6 +642,9 @@ Rcpp::List mod(unsigned int iter, unsigned int Kmax, unsigned int nbeta_split,
 arma::rowvec dm_data(unsigned int Kmax, arma::rowvec zi, arma::mat z_not_i, 
                      arma::mat beta_mat, arma::uvec ci_not_i){
   
+  // This function will calculate the posterior predictive for zi given 
+  // z_not_i for all possible cluster in a log-scale.
+  
   double data_part = std::lgamma(arma::accu(zi) + 1);
   data_part -= arma::accu(arma::lgamma(zi + 1));
   arma::rowvec dm_prob(Kmax, arma::fill::value(data_part));
@@ -693,7 +696,7 @@ arma::umat DMDM(unsigned int iter, unsigned int Kmax, arma::mat z,
   
   for(int t = 0; t < iter; ++t){
     
-    // Reallcation based on DM
+    // Reallocation based on DM
     for(int i = 0; i < z.n_rows; ++i){
       
       int ci_old = ci_init[i];

@@ -12,8 +12,11 @@ library(latex2exp)
 library(sparseMbClust)
 library(tidyverse)
 library(pheatmap)
+library(mixtools)
+library(coda.base)
 
-sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Data Simulation followed Shi's paper ---------------------------------------
 data_sim_shi <- function(N, J, pi_gamma, z_case, aPhi = 1, bPhi = 9,
@@ -101,7 +104,8 @@ while(index <= nData){
 
 ### Save the simulated data
 datlist <- list(dat = datsim, clus = clussim)
-save_path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/simulation study/result_1224/"
+# save_path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/simulation study/result_1224/"
+save_path <- "/Users/kevin-imac/Desktop/"
 case_name <- "easiest_case"
 saveRDS(datlist, paste0(save_path, case_name, "_simDat.RData"))
 
@@ -237,6 +241,7 @@ save_path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/simulation study/res
 case_name <- "easiest_case"
 
 dat <- readRDS(paste0(save_path, case_name, "_simDat.RData")) ## Data
+
 resultZZ <- readRDS(paste0(save_path, case_name, "_ZZ.RData")) ## ZIDM-ZIDM
 resultDZ <- readRDS(paste0(save_path, case_name, "_DZ.RData")) ## DM-ZIDM
 resultDD <- readRDS(paste0(save_path, case_name, "_DD.RData")) ## DM-DM
@@ -422,6 +427,80 @@ for(i in 2:10){
           ((i * 50) + i) * log(50))
 }
 
+### Non-parametric models ------------------------------------------------------
+#### EM: Choose the number of cluster by using BIC
+
+ciresult_EM <- matrix(0, ncol = nData, nrow = 50)
+
+for(t in 1:nData){
+  
+  ### Perform EM
+  seed_try <- 1
+  EMresult <- tryCatch({set.seed(seed_try);
+    nchoose <- multmixmodel.sel(dat$dat[[t]], 2:10); ### Find the optimal number of cluster
+    kopt <- nchoose["BIC", "Winner"]; 
+    set.seed(seed_try);
+    multmixEM(y = dat$dat[[t]], k = kopt)
+  }, error = function(e){"ERROR"})
+  
+  while(sum(EMresult == "ERROR") == 1){
+    seed_try <- seed_try + 1
+    EMresult <- tryCatch({set.seed(seed_try);
+      nchoose <- multmixmodel.sel(dat$dat[[t]], 2:10); 
+      kopt <- nchoose["BIC", "Winner"]; 
+      set.seed(seed_try);
+      multmixEM(y = dat$dat[[t]], k = kopt)
+    }, error = function(e){"ERROR"})
+  }
+  
+  ### Perform clustering assignment
+  ciresult_EM[, t] <- apply(EMresult$posterior, 1, function(x){which(rmultinom_1(x) == 1)})
+  
+}
+
+#### Number of cluster
+apply(ciresult_EM, 2, function(x){length(unique(x))}) %>% meanSD()
+sapply(1:nData, 
+       function(x){mclustcomp(ciresult_EM[, x], dat$clus[[x]])[1, 2]}) %>% meanSD()
+
+#### PAM: Bray-Curtiss
+registerDoParallel(5)
+resultBC <- foreach(t = 1:nData) %dopar% {
+  
+  silVec <- rep(NA, 9)
+  bcDist <- bcdist(dat$dat[[t]])
+  
+  for(k in 2:10){
+    silCal <- silhouette(pam(bcDist, k), dmatrix = bcDist)
+    silVec[(k-1)] <- mean(silCal[, "sil_width"])
+  }
+  
+  list(kopt = which.max(silVec) + 1, 
+       result =  pam(bcDist, which.max(silVec) + 1)$clustering)
+  
+}
+stopImplicitCluster()
+
+#### PAM: Aitchison
+registerDoParallel(5)
+resultAT <- foreach(t = 1:nData) %dopar% {
+  
+  silVec <- rep(NA, 9)
+  
+  datAdj <- dat$dat[[t]]
+  datAdj[datAdj == 0] <- 1e-10
+  atDist <- dist(datAdj, "aitchison")
+  
+  for(k in 2:10){
+    silCal <- silhouette(pam(atDist, k), dmatrix = atDist)
+    silVec[(k-1)] <- mean(silCal[, "sil_width"])
+  }
+  
+  list(kopt = which.max(silVec) + 1, 
+       result =  pam(atDist, which.max(silVec) + 1)$clustering)
+  
+}
+stopImplicitCluster()
 
 ### ----------------------------------------------------------------------------
 
