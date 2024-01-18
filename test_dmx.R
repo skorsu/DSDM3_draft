@@ -15,8 +15,8 @@ library(pheatmap)
 library(mixtools)
 library(coda.base)
 
-# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Data Simulation followed Shi's paper ---------------------------------------
 data_sim_shi <- function(N, J, pi_gamma, z_case, aPhi = 1, bPhi = 9,
@@ -87,7 +87,7 @@ while(index <= nData){
   simDat <- tryCatch({
     datsim_new(n = 50, Jnoise = 40, Jsignal = 10, 
                pi_gamma = 1, ZSumNoise = 20000, 
-               caseSignal = 5, aPhi = 1, bPhi = 1, 
+               caseSignal = 1.5, aPhi = 1, bPhi = 1, 
                aLambda = 1, bLambda = 1, ZSumSignal = 10000);
   }, error = function(e){"ERROR"})
   
@@ -104,9 +104,9 @@ while(index <= nData){
 
 ### Save the simulated data
 datlist <- list(dat = datsim, clus = clussim)
-# save_path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/simulation study/result_1224/"
-save_path <- "/Users/kevin-imac/Desktop/"
-case_name <- "easiest_case"
+save_path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/simulation study/result_1224/"
+# save_path <- "/Users/kevin-imac/Desktop/"
+case_name <- "diffindex_15"
 saveRDS(datlist, paste0(save_path, case_name, "_simDat.RData"))
 
 ### Example of the data --------------------------------------------------------
@@ -181,21 +181,40 @@ saveRDS(resultZZ, paste0(save_path, case_name, "_ZZ.RData"))
 ### DM-ZIDM
 start_ova <- Sys.time()
 registerDoParallel(5)
-resultDZ <- foreach(t = 1:nData) %:%
-  foreach(k = 2:10) %dopar% {
-    start_time <- Sys.time()
-    clus_result <- DMZIDM(iter = 100000, Kmax = k, z = dat$dat[[t]], 
-                          beta_mat = matrix(0, ncol = 50, nrow = 10), 
-                          ci_init = rep(0, 50), 
-                          theta = 10, launch_iter = 10, r0c = 1, r1c = 1, 
-                          thin = 100)
-    tot_time <- difftime(Sys.time(), start_time, units = "secs")
-    list(time = tot_time, result = clus_result)
-  }
+resultDZ <- foreach(t = 1:nData) %dopar% {
+  
+  start_time <- Sys.time()
+  clus_result <- DMZIDM(iter = 100000, Kmax = 10, z = dat$dat[[t]], 
+                        beta_mat = matrix(0, ncol = 50, nrow = 10), 
+                        ci_init = rep(0, 50), 
+                        theta = 10, launch_iter = 10, r0c = 1, r1c = 1, 
+                        thin = 100)
+  tot_time <- difftime(Sys.time(), start_time, units = "secs")
+  list(time = tot_time, result = clus_result)
+  
+}
 stopImplicitCluster()
 difftime(Sys.time(), start_ova)
 
 saveRDS(resultDZ, paste0(save_path, case_name, "_DZ.RData"))
+
+# start_ova <- Sys.time()
+# registerDoParallel(5)
+# resultDZ <- foreach(t = 1:nData) %:%
+#   foreach(k = 2:10) %dopar% {
+#     start_time <- Sys.time()
+#     clus_result <- DMZIDM(iter = 100000, Kmax = k, z = dat$dat[[t]], 
+#                           beta_mat = matrix(0, ncol = 50, nrow = 10), 
+#                           ci_init = rep(0, 50), 
+#                           theta = 10, launch_iter = 10, r0c = 1, r1c = 1, 
+#                           thin = 100)
+#     tot_time <- difftime(Sys.time(), start_time, units = "secs")
+#     list(time = tot_time, result = clus_result)
+#   }
+# stopImplicitCluster()
+# difftime(Sys.time(), start_ova)
+# 
+# saveRDS(resultDZ, paste0(save_path, case_name, "_DZ.RData"))
 
 ### DM-DM
 start_ova <- Sys.time()
@@ -481,6 +500,11 @@ resultBC <- foreach(t = 1:nData) %dopar% {
 }
 stopImplicitCluster()
 
+sapply(1:nData, function(x){resultBC[[x]]$kopt}) %>% meanSD()
+clusBC <- sapply(1:nData, function(x){resultBC[[x]]$result})
+sapply(1:nData, 
+       function(x){mclustcomp(clusBC[, x], dat$clus[[x]])[1, 2]}) %>% meanSD()
+
 #### PAM: Aitchison
 registerDoParallel(5)
 resultAT <- foreach(t = 1:nData) %dopar% {
@@ -501,6 +525,32 @@ resultAT <- foreach(t = 1:nData) %dopar% {
   
 }
 stopImplicitCluster()
+sapply(1:nData, function(x){resultAT[[x]]$kopt}) %>% meanSD()
+clusAT <- sapply(1:nData, function(x){resultAT[[x]]$result})
+sapply(1:nData, 
+       function(x){mclustcomp(clusAT[, x], dat$clus[[x]])[1, 2]}) %>% meanSD()
+
+#### PAM: Euclidean
+registerDoParallel(5)
+resultEU <- foreach(t = 1:nData) %dopar% {
+  
+  silVec <- rep(NA, 9)
+  euDist <- dist(dat$dat[[t]], "euclidean")
+  
+  for(k in 2:10){
+    silCal <- silhouette(pam(euDist, k), dmatrix = euDist)
+    silVec[(k-1)] <- mean(silCal[, "sil_width"])
+  }
+  
+  list(kopt = which.max(silVec) + 1, 
+       result =  pam(euDist, which.max(silVec) + 1)$clustering)
+  
+}
+stopImplicitCluster()
+
+sapply(1:nData, function(x){resultEU[[x]]$kopt}) %>% meanSD()
+clusEU <- sapply(1:nData, function(x){resultEU[[x]]$result})
+sapply(1:nData, 
+       function(x){mclustcomp(clusEU[, x], dat$clus[[x]])[1, 2]}) %>% meanSD()
 
 ### ----------------------------------------------------------------------------
-
