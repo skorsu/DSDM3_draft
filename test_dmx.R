@@ -364,6 +364,14 @@ viZZ <- sapply(1:nData,
 apply(viZZ, 2, function(x){length(unique(x))}) %>% meanSD()
 sapply(1:nData, 
        function(x){mclustcomp(viZZ[, x], actual_clus[, x])[1, 2]}) %>% meanSD()
+table(apply(viZZ, 2, function(x){length(unique(x))}))
+table(viZZ[, 2], actual_clus[, 2])
+table(viZZ[, 3], actual_clus[, 3])
+table(viZZ[, 10], actual_clus[, 10])
+table(viZZ[, 12], actual_clus[, 12])
+table(viZZ[, 15], actual_clus[, 15])
+table(viZZ[, 20], actual_clus[, 20])
+which(apply(viZZ, 2, function(x){length(unique(x))}) != 1)
 
 ##### DM-ZIDM
 viDZ <- sapply(1:nData,
@@ -400,6 +408,15 @@ bdZZ <- sapply(1:nData,
 apply(bdZZ, 2, function(x){length(unique(x))}) %>% meanSD()
 sapply(1:nData, 
        function(x){mclustcomp(bdZZ[, x], actual_clus[, x])[1, 2]}) %>% meanSD()
+
+which(apply(bdZZ, 2, function(x){length(unique(x))}) == 1)
+
+for(i in 1:20){
+  if(! (i %in% c(4, 7))){
+    print(paste0("i: ", i))
+    print(table(bdZZ[, i], actual_clus[, i]))
+  }
+}
 
 ##### DM-ZIDM
 bdDZ <- sapply(1:nData,
