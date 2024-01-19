@@ -15,8 +15,8 @@ library(pheatmap)
 library(mixtools)
 library(coda.base)
 
-sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Data Simulation followed Shi's paper ---------------------------------------
 data_sim_shi <- function(N, J, pi_gamma, z_case, aPhi = 1, bPhi = 9,
@@ -111,6 +111,9 @@ saveRDS(datlist, paste0(save_path, case_name, "_simDat.RData"))
 
 ### Example of the data --------------------------------------------------------
 rm(datsim, clussim, datlist)
+save_path <- "/Users/kevin-imac/Desktop/result_cluster/"
+case_name <- "diffindex_15"
+nData <- 20
 dat <- readRDS(paste0(save_path, case_name, "_simDat.RData")) ## Data
 
 pheatmap(dat$dat[[1]][sort(dat$clus[[1]], index.return = TRUE)$ix, ], 
@@ -256,8 +259,12 @@ saveRDS(resultDsD, paste0(save_path, case_name, "_DsD.RData"))
 ### Begin the analysis ---------------------------------------------------------
 
 #### (If needed) Load the result -----------------------------------------------
-save_path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/simulation study/result_1224/"
-case_name <- "easiest_case"
+# save_path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/simulation study/result_1224/"
+# case_name <- "easiest_case"
+
+save_path <- "/Users/kevin-imac/Desktop/result_cluster/"
+case_name <- "more_difficult_case"
+nData <- 20
 
 dat <- readRDS(paste0(save_path, case_name, "_simDat.RData")) ## Data
 
@@ -277,7 +284,7 @@ meanSD <- function(x, dplace = 5){
 
 #### Analyze: Computational Time -----------------------------------------------
 
-resultDZ <- lapply(1:nData, function(x){resultDZ[[x]][[9]]})
+## resultDZ <- lapply(1:nData, function(x){resultDZ[[x]][[9]]})
 test <- list(resultZZ, resultDZ, resultDsD, resultDP, resultMFM)
 length(test)
 sapply(1:length(test), 
@@ -300,7 +307,7 @@ sapply(1:nData,
 
 sapply(1:nData, 
        function(x){apply(resultZZ[[x]]$result$ci_result, 1, function(y){length(unique(y))})}) %>%
-  matplot(type = "l", ylim = c(1, 10), main = "ZIDM-ZIDM: Easiest Case",
+  matplot(type = "l", ylim = c(1, 10), main = "ZIDM-ZIDM: Most Difficult Case",
           xlab = "Iteration (Thinning)", ylab = "Active Clusters")
 
 ##### DM-ZIDM
@@ -311,7 +318,7 @@ sapply(1:nData,
 
 sapply(1:nData, 
        function(x){apply(resultDZ[[x]]$result$ci_result, 1, function(y){length(unique(y))})}) %>%
-  matplot(type = "l", ylim = c(1, 10), main = "DM-ZIDM: Easiest Case",
+  matplot(type = "l", ylim = c(1, 10), main = "DM-ZIDM: Most Difficult Case",
           xlab = "Iteration (Thinning)", ylab = "Active Clusters")
 
 ##### DM-sDM
@@ -322,7 +329,7 @@ sapply(1:nData,
 
 sapply(1:nData, 
        function(x){apply(resultDsD[[x]]$result, 1, function(y){length(unique(y))})}) %>%
-  matplot(type = "l", ylim = c(1, 10), main = "DM-sDM: Easiest Case",
+  matplot(type = "l", ylim = c(1, 10), main = "DM-sDM: Most Difficult Case",
           xlab = "Iteration (Thinning)", ylab = "Active Clusters")
 
 ##### DP
@@ -333,7 +340,7 @@ sapply(1:nData,
 
 sapply(1:nData, 
        function(x){apply(resultDP[[x]]$result, 1, function(y){max(y) - min(y) + 1})}) %>%
-  matplot(type = "l", ylim = c(1, 50), main = "DP: Easiest Case",
+  matplot(type = "l", ylim = c(1, 50), main = "DP: Most Difficult Case",
           xlab = "Iteration (Thinning)", ylab = "Active Clusters")
 
 ##### MFM
@@ -344,7 +351,7 @@ sapply(1:nData,
 
 sapply(1:nData, 
        function(x){apply(resultMFM[[x]]$result, 1, function(y){max(y) - min(y) + 1})}) %>%
-  matplot(type = "l", ylim = c(1, 50), main = "MFM: Easiest Case",
+  matplot(type = "l", ylim = c(1, 50), main = "MFM: Most Difficult Case",
           xlab = "Iteration (Thinning)", ylab = "Active Clusters")
 
 
@@ -442,7 +449,7 @@ resultDD[[20]][[1]]
 ci_result <- salso(resultDD[[1]][[1]]$result)
 ci_result
 for(i in 2:10){
-  print(-2 * sum(logmar(dat$dat[[2]], matrix(1, ncol = 50, nrow = 50), matrix(0, ncol = 50, nrow = 5))[, 1]) + 
+  print(-2 * sum(logmar(dat$dat[[1]], matrix(1, ncol = 50, nrow = 50), matrix(0, ncol = 50, nrow = 5))[, 1]) + 
           ((i * 50) + i) * log(50))
 }
 
