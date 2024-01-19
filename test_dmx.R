@@ -15,8 +15,8 @@ library(pheatmap)
 library(mixtools)
 library(coda.base)
 
-# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Data Simulation followed Shi's paper ---------------------------------------
 data_sim_shi <- function(N, J, pi_gamma, z_case, aPhi = 1, bPhi = 9,
@@ -87,7 +87,7 @@ while(index <= nData){
   simDat <- tryCatch({
     datsim_new(n = 50, Jnoise = 40, Jsignal = 10, 
                pi_gamma = 1, ZSumNoise = 20000, 
-               caseSignal = 1.5, aPhi = 1, bPhi = 1, 
+               caseSignal = 3, aPhi = 1, bPhi = 1, 
                aLambda = 1, bLambda = 1, ZSumSignal = 10000);
   }, error = function(e){"ERROR"})
   
@@ -106,7 +106,7 @@ while(index <= nData){
 datlist <- list(dat = datsim, clus = clussim)
 save_path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/simulation study/result_1224/"
 # save_path <- "/Users/kevin-imac/Desktop/"
-case_name <- "diffindex_15"
+case_name <- "diffindex_3"
 saveRDS(datlist, paste0(save_path, case_name, "_simDat.RData"))
 
 ### Example of the data --------------------------------------------------------
@@ -307,7 +307,7 @@ sapply(1:nData,
 
 sapply(1:nData, 
        function(x){apply(resultZZ[[x]]$result$ci_result, 1, function(y){length(unique(y))})}) %>%
-  matplot(type = "l", ylim = c(1, 10), main = "ZIDM-ZIDM: Most Difficult Case",
+  matplot(type = "l", ylim = c(1, 10), main = "ZIDM-ZIDM: Difficult Level = 3",
           xlab = "Iteration (Thinning)", ylab = "Active Clusters")
 
 ##### DM-ZIDM
@@ -318,7 +318,7 @@ sapply(1:nData,
 
 sapply(1:nData, 
        function(x){apply(resultDZ[[x]]$result$ci_result, 1, function(y){length(unique(y))})}) %>%
-  matplot(type = "l", ylim = c(1, 10), main = "DM-ZIDM: Most Difficult Case",
+  matplot(type = "l", ylim = c(1, 10), main = "DM-ZIDM: Difficult Level = 3",
           xlab = "Iteration (Thinning)", ylab = "Active Clusters")
 
 ##### DM-sDM
@@ -329,7 +329,7 @@ sapply(1:nData,
 
 sapply(1:nData, 
        function(x){apply(resultDsD[[x]]$result, 1, function(y){length(unique(y))})}) %>%
-  matplot(type = "l", ylim = c(1, 10), main = "DM-sDM: Most Difficult Case",
+  matplot(type = "l", ylim = c(1, 10), main = "DM-sDM: Difficult Level = 3",
           xlab = "Iteration (Thinning)", ylab = "Active Clusters")
 
 ##### DP
@@ -340,7 +340,7 @@ sapply(1:nData,
 
 sapply(1:nData, 
        function(x){apply(resultDP[[x]]$result, 1, function(y){max(y) - min(y) + 1})}) %>%
-  matplot(type = "l", ylim = c(1, 50), main = "DP: Most Difficult Case",
+  matplot(type = "l", ylim = c(1, 50), main = "DP: Difficult Level = 3",
           xlab = "Iteration (Thinning)", ylab = "Active Clusters")
 
 ##### MFM
@@ -351,7 +351,7 @@ sapply(1:nData,
 
 sapply(1:nData, 
        function(x){apply(resultMFM[[x]]$result, 1, function(y){max(y) - min(y) + 1})}) %>%
-  matplot(type = "l", ylim = c(1, 50), main = "MFM: Most Difficult Case",
+  matplot(type = "l", ylim = c(1, 50), main = "MFM: Difficult Level = 3",
           xlab = "Iteration (Thinning)", ylab = "Active Clusters")
 
 
@@ -364,6 +364,7 @@ viZZ <- sapply(1:nData,
 apply(viZZ, 2, function(x){length(unique(x))}) %>% meanSD()
 sapply(1:nData, 
        function(x){mclustcomp(viZZ[, x], actual_clus[, x])[1, 2]}) %>% meanSD()
+
 table(apply(viZZ, 2, function(x){length(unique(x))}))
 table(viZZ[, 2], actual_clus[, 2])
 table(viZZ[, 3], actual_clus[, 3])
