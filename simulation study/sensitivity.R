@@ -76,7 +76,7 @@ datsim_new <- function(n, Jnoise, Jsignal, pi_gamma,
 }
 
 ### Simulate the data ----------------------------------------------------------
-nData <- 30
+nData <- 20
 datsim <- vector(mode = 'list', length = nData)
 clussim <- vector(mode = 'list', length = nData)
 index <- 1
