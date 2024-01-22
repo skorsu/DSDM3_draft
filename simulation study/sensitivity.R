@@ -15,8 +15,8 @@ library(pheatmap)
 library(mixtools)
 library(coda.base)
 
-sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Data Simulation followed Shi's paper ---------------------------------------
 data_sim_shi <- function(N, J, pi_gamma, z_case, aPhi = 1, bPhi = 9,
@@ -104,8 +104,8 @@ while(index <= nData){
 
 ### Save the simulated data
 datlist <- list(dat = datsim, clus = clussim)
-save_path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/simulation study/sensitivity/"
-# save_path <- "/Users/kevin-imac/Desktop/"
+# save_path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/simulation study/sensitivity/"
+save_path <- "/Users/kevin-imac/Desktop/sensitivity_0119/"
 case_name <- "diff_index_3"
 saveRDS(datlist, paste0(save_path, case_name, "_simDat.RData"))
 
@@ -152,7 +152,7 @@ result <- foreach(h = 1:nHyperSet) %:% ### Each set of the hyperparameter
                        nbeta_split = hyperParam[[h]]["nbeta_split"], 
                        z = dat$dat[[r]], 
                        atrisk_init = matrix(1, ncol = 50, nrow = 50), 
-                       beta_init = matrix(0, ncol = 50, nrow = 10), 
+                       beta_init = matrix(0, ncol = 50, nrow = hyperParam[[h]]["Kmax"]), 
                        ci_init = rep(0, 50), theta = hyperParam[[h]]["theta"], 
                        mu = 0, s2 = hyperParam[[h]]["s2"], 
                        s2_MH = hyperParam[[h]]["s2_MH"], 
