@@ -106,15 +106,15 @@ while(index <= nData){
 
 ### Save the simulated data
 datlist <- list(dat = datsim, clus = clussim)
-save_path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/simulation study/result_1224/"
+save_path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/simulation study/result_1222/"
 # save_path <- "/Users/kevin-imac/Desktop/"
 case_name <- "diffindex_3"
 saveRDS(datlist, paste0(save_path, case_name, "_simDat.RData"))
 
 ### Example of the data --------------------------------------------------------
 rm(datsim, clussim, datlist)
-save_path <- "/Users/kevin-imac/Desktop/result_cluster/"
-case_name <- "diffindex_15"
+# save_path <- "/Users/kevin-imac/Desktop/result_cluster/"
+# case_name <- "diffindex_15"
 nData <- 20
 dat <- readRDS(paste0(save_path, case_name, "_simDat.RData")) ## Data
 
@@ -274,8 +274,8 @@ resultZZ <- readRDS(paste0(save_path, case_name, "_ZZ.RData")) ## ZIDM-ZIDM
 resultDZ <- readRDS(paste0(save_path, case_name, "_DZ.RData")) ## DM-ZIDM
 resultDD <- readRDS(paste0(save_path, case_name, "_DD.RData")) ## DM-DM
 resultDsD <- readRDS(paste0(save_path, case_name, "_DsD.RData")) ## DM-sDM
-resultDP <- readRDS(paste0(save_path, case_name, "_DP.RData")) ## DP
-resultMFM <- readRDS(paste0(save_path, case_name, "_MFM.RData")) ## MFM
+resultDP <- readRDS(paste0(save_path, case_name, "_DP_new.RData")) ## DP
+resultMFM <- readRDS(paste0(save_path, case_name, "_MFM_new.RData")) ## MFM
 
 #### Function: Calculate mean and SD -------------------------------------------
 meanSD <- function(x, dplace = 5){
@@ -342,7 +342,7 @@ sapply(1:nData,
 
 sapply(1:nData, 
        function(x){apply(resultDP[[x]]$result, 1, function(y){max(y) - min(y) + 1})}) %>%
-  matplot(type = "l", ylim = c(1, 50), main = "DP: Difficult Level = 3",
+  matplot(type = "l", ylim = c(1, 50), main = "DP: Difficult Level = 3 (with 100,000 iterations)",
           xlab = "Iteration (Thinning)", ylab = "Active Clusters")
 
 ##### MFM
@@ -353,7 +353,7 @@ sapply(1:nData,
 
 sapply(1:nData, 
        function(x){apply(resultMFM[[x]]$result, 1, function(y){max(y) - min(y) + 1})}) %>%
-  matplot(type = "l", ylim = c(1, 50), main = "MFM: Difficult Level = 3",
+  matplot(type = "l", ylim = c(1, 50), main = "MFM: Difficult Level = 3 (with 100,000 iterations)",
           xlab = "Iteration (Thinning)", ylab = "Active Clusters")
 
 
@@ -392,14 +392,14 @@ sapply(1:nData,
 
 ##### DP
 viDP <- sapply(1:nData,
-               function(x){as.numeric(salso(resultDP[[x]]$result[-(1:5000), ]))})
+               function(x){as.numeric(salso(resultDP[[x]]$result[-(1:500), ]))})
 apply(viDP, 2, function(x){length(unique(x))}) %>% meanSD()
 sapply(1:nData, 
        function(x){mclustcomp(viDP[, x], actual_clus[, x])[1, 2]}) %>% meanSD()
 
 ##### MFM
 viMFM <- sapply(1:nData,
-                function(x){as.numeric(salso(resultMFM[[x]]$result[-(1:5000), ]))})
+                function(x){as.numeric(salso(resultMFM[[x]]$result[-(1:500), ]))})
 apply(viMFM, 2, function(x){length(unique(x))}) %>% meanSD()
 sapply(1:nData, 
        function(x){mclustcomp(viMFM[, x], actual_clus[, x])[1, 2]}) %>% meanSD()
@@ -437,14 +437,14 @@ sapply(1:nData,
 
 ##### DP
 bdDP <- sapply(1:nData,
-               function(x){as.numeric(salso(resultDP[[x]]$result[-(1:5000), ], loss = binder()))})
+               function(x){as.numeric(salso(resultDP[[x]]$result[-(1:500), ], loss = binder()))})
 apply(bdDP, 2, function(x){length(unique(x))}) %>% meanSD()
 sapply(1:nData, 
        function(x){mclustcomp(bdDP[, x], actual_clus[, x])[1, 2]}) %>% meanSD()
 
 ##### MFM
 bdMFM <- sapply(1:nData,
-                function(x){as.numeric(salso(resultMFM[[x]]$result[-(1:5000), ], loss = binder()))})
+                function(x){as.numeric(salso(resultMFM[[x]]$result[-(1:500), ], loss = binder()))})
 apply(bdMFM, 2, function(x){length(unique(x))}) %>% meanSD()
 sapply(1:nData, 
        function(x){mclustcomp(bdMFM[, x], actual_clus[, x])[1, 2]}) %>% meanSD()

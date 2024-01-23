@@ -1,7 +1,7 @@
 ### Setting
 nCores <- 5
-path_data <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/simulation study/result_1224/"
-path_result <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/simulation study/result_1224/"
+path_data <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/simulation study/result_1222/"
+path_result <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/simulation study/result_1222/"
 case_name <- "diffindex_3"
 
 ### Required Library
@@ -32,7 +32,7 @@ resultDP <- foreach(t = 1:n) %dopar% {
 stopImplicitCluster()
 difftime(Sys.time(), start_ova)
 
-saveRDS(resultDP, paste0(path_result, case_name, "_DP_goose.RData"))
+saveRDS(resultDP, paste0(path_result, case_name, "_DP_new.RData"))
 
 ### Run the model with MFM
 start_ova <- Sys.time()
@@ -51,4 +51,4 @@ resultMFM <- foreach(t = 1:n) %dopar% {
 stopImplicitCluster()
 difftime(Sys.time(), start_ova)
 
-saveRDS(resultMFM, paste0(path_result, case_name, "_MFM_goose.RData"))
+saveRDS(resultMFM, paste0(path_result, case_name, "_MFM_new.RData"))

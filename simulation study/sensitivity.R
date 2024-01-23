@@ -15,8 +15,8 @@ library(pheatmap)
 library(mixtools)
 library(coda.base)
 
-# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Data Simulation followed Shi's paper ---------------------------------------
 data_sim_shi <- function(N, J, pi_gamma, z_case, aPhi = 1, bPhi = 9,
@@ -104,8 +104,8 @@ while(index <= nData){
 
 ### Save the simulated data
 datlist <- list(dat = datsim, clus = clussim)
-# save_path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/simulation study/sensitivity/"
-save_path <- "/Users/kevin-imac/Desktop/sensitivity_0119/"
+save_path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/simulation study/sensitivity/"
+# save_path <- "/Users/kevin-imac/Desktop/sensitivity_0119/"
 case_name <- "diff_index_3"
 saveRDS(datlist, paste0(save_path, case_name, "_simDat.RData"))
 
@@ -176,7 +176,7 @@ for(i in 1:nHyperSet){
   save_result <- list(hyper = hyperParam[[i]], 
                       result = result[[i]])
   saveRDS(save_result, 
-          paste0(save_path, case_name, "_",file_case, ".RData"))
+          paste0(save_path, case_name, "_",file_case, "_MB.RData"))
   
 }
 
