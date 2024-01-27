@@ -145,27 +145,25 @@ pheatmap(dat[[1]]$dat[sort(dat[[1]]$clus, index.return = TRUE)$ix, ],
          display_numbers = F, color = colorRampPalette(c('white','springgreen4'))(100), 
          cluster_rows = F, cluster_cols = F)
 
+#### Function: Calculate mean and SD -------------------------------------------
+meanSD <- function(x, dplace = 5){
+  mm <- round(mean(x), digits = dplace)
+  ss <- round(sd(x), digits = dplace)
+  paste0(mm, " (", ss, ")")
+}
+
 ### Run all models and save the result -----------------------------------------
-start_time <- Sys.time()
-clus_result <- mod(iter = 100000, Kmax = 10, nbeta_split = 5, z = dat[[1]]$dat, 
-                   atrisk_init = matrix(1, ncol = 50, nrow = 100), 
-                   beta_init = matrix(0, ncol = 50, nrow = 10), 
-                   ci_init = rep(0, 100), theta = 1, mu = 0, s2 = 1, s2_MH = 1, 
-                   launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, 
-                   thin = 100)
-tot_time <- difftime(Sys.time(), start_time, units = "secs")
-
-
 ### ZIDM-ZIDM
+set.seed(3124, kind = "L'Ecuyer-CMRG")
 start_ova <- Sys.time()
 registerDoParallel(5)
 resultZZ <- foreach(t = 1:nData) %dopar% {
   
   start_time <- Sys.time()
-  clus_result <- mod(iter = 100000, Kmax = 10, nbeta_split = 10, z = dat$dat[[t]], 
-                     atrisk_init = matrix(1, ncol = 50, nrow = 50), 
+  clus_result <- mod(iter = 100000, Kmax = 10, nbeta_split = 5, z = dat[[t]]$dat, 
+                     atrisk_init = matrix(1, ncol = 50, nrow = 100), 
                      beta_init = matrix(0, ncol = 50, nrow = 10), 
-                     ci_init = rep(0, 50), theta = 10, mu = 0, s2 = 1, s2_MH = 10, 
+                     ci_init = rep(0, 100), theta = 1, mu = 0, s2 = 1, s2_MH = 1, 
                      launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, 
                      thin = 100)
   tot_time <- difftime(Sys.time(), start_time, units = "secs")
@@ -174,8 +172,43 @@ resultZZ <- foreach(t = 1:nData) %dopar% {
 }
 stopImplicitCluster()
 difftime(Sys.time(), start_ova)
-
 saveRDS(resultZZ, paste0(save_path, case_name, "_ZZ.RData"))
+
+sapply(1:nData, function(x){resultZZ[[x]]$time}) %>% meanSD()
+
+sapply(1:nData, 
+       function(x){apply(resultZZ[[x]]$result$ci_result, 1, 
+                         function(y){length(unique(y))})}) %>%
+  matplot(type = "l", ylim = c(1, 10), main = "ZIDM-ZIDM",
+          xlab = "Iteration (Thinning)", ylab = "Active Clusters")
+
+sapply(1:nData, 
+       function(x){apply(resultZZ[[x]]$result$ci_result, 1, 
+                         function(y){length(unique(y))})}) %>%
+  colMeans() %>% meanSD()
+
+actual_clus <- sapply(1:nData, function(x){dat[[x]]$clus})
+
+viZZ <- sapply(1:nData,
+               function(x){as.numeric(salso(resultZZ[[x]]$result$ci_result[-(1:500), ]))})
+apply(viZZ, 2, function(x){length(unique(x))}) %>% meanSD()
+sapply(1:nData, 
+       function(x){mclustcomp(viZZ[, x], actual_clus[, x])[1, 2]}) %>% meanSD()
+
+bdZZ <- sapply(1:nData,
+               function(x){as.numeric(salso(resultZZ[[x]]$result$ci_result[-(1:500), ], loss = binder()))})
+apply(bdZZ, 2, function(x){length(unique(x))}) %>% meanSD()
+sapply(1:nData, 
+       function(x){mclustcomp(bdZZ[, x], actual_clus[, x])[1, 2]}) %>% meanSD()
+
+##: ----------------------------------------------------------------------------
+
+
+
+
+
+
+
 
 ### DM-ZIDM
 start_ova <- Sys.time()
@@ -271,12 +304,6 @@ resultDsD <- readRDS(paste0(save_path, case_name, "_DsD.RData")) ## DM-sDM
 resultDP <- readRDS(paste0(save_path, case_name, "_DP_new.RData")) ## DP
 resultMFM <- readRDS(paste0(save_path, case_name, "_MFM_new.RData")) ## MFM
 
-#### Function: Calculate mean and SD -------------------------------------------
-meanSD <- function(x, dplace = 5){
-  mm <- round(mean(x), digits = dplace)
-  ss <- round(sd(x), digits = dplace)
-  paste0(mm, " (", ss, ")")
-}
 
 #### Analyze: Computational Time -----------------------------------------------
 
