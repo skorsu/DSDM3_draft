@@ -15,8 +15,8 @@ library(pheatmap)
 library(mixtools)
 library(coda.base)
 
-# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Data Simulation followed Shi's paper ---------------------------------------
 data_sim_shi <- function(N, J, pi_gamma, z_case, aPhi = 1, bPhi = 9,
@@ -129,8 +129,8 @@ datSimK <- foreach(t = 1:nData) %dopar% {
 stopImplicitCluster()
 
 ### Save the simulated data
-# save_path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/simulation study/sensitivity/"
-save_path <- "/Users/kevin-imac/Desktop/"
+save_path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/simulation study/sensitivity/"
+# save_path <- "/Users/kevin-imac/Desktop/"
 case_name <- "diffindex_3_K_5"
 saveRDS(datSimK, paste0(save_path, case_name, "_simDat.RData"))
 
