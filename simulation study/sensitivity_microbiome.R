@@ -11,14 +11,16 @@ library(ecodist)
 library(factoextra)
 library(rbiom)
 library(ggcorrplot)
+library(mclustcomp)
 
 ### Import the data
-path <- "/Users/kevinkvp/Desktop/"
-# path <- "/Users/kevin-imac/Desktop/"
+# path <- "/Users/kevinkvp/Desktop/"
+path <- "/Users/kevin-imac/Desktop/"
 ni <- read.csv(paste0(path, "Nicaragua_12mo_Metadata_csv.csv"))
 ml <- read.csv(paste0(path, "Mali_12mo_Metadata_csv.csv"))
 
-sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ### Functions ------------------------------------------------------------------
 ### recursion function
@@ -115,15 +117,39 @@ stopImplicitCluster()
 
 # path <- "/Users/kevinkvp/Desktop/"
 result_path <- "Github Repo/ClusterZI/simulation study/sensitivity/annika/"
+result_path <- NULL
 saveRDS(result, paste0(path, result_path, "result.RData"))
 
 ### Post-Processing ------------------------------------------------------------
-## plot(apply(clus_result$ci_result, 1, function(x){length(unique(x))}), type = "l")
+result <- readRDS(paste0(path, result_path, "result.RData"))
+sapply(1:length(hyperParam),  function(x){result[[x]]$time})
+sapply(1:length(hyperParam),
+       function(x){apply(result[[x]]$result, 1, function(y){length(unique(y))})}) %>%
+  matplot(type = "l")
 
-### Pairwise salso
-dat_mat <- matrix(runif(441, -1, 1), ncol = 21)
-diag(dat_mat) <- 1
-ggcorrplot(dat_mat, lab = TRUE, 
-           colors = c("white", "white", "red"))
-?ggcorrplot
+clusVI <- sapply(1:length(hyperParam), function(x){as.numeric(salso(result[[x]]$result[-(1:500), ]))})
+clusBinder <- sapply(1:length(hyperParam), function(x){as.numeric(salso(result[[x]]$result[-(1:500), ], loss = "binder"))})
+
+sapply(1:length(hyperParam), function(x){length(unique(clusVI[, x]))})
+sapply(1:length(hyperParam), function(x){length(unique(clusBinder[, x]))})
+
+ariVI <- diag(21)
+ariBinder <- diag(21)
+for(i in 1:length(hyperParam)){
+  
+  for(j in 1:length(hyperParam)){
+    ariVI[i, j] <- mclustcomp(clusVI[, i], clusVI[, j], types = "adjrand")[, 2]
+    ariBinder[i, j] <- mclustcomp(clusBinder[, i], clusBinder[, j], types = "adjrand")[, 2]
+  }
+  
+}
+
+ggcorrplot(ariVI, lab = TRUE, type = "upper", show.diag = TRUE, 
+           title = "Post-processing: using VI as a loss function.",
+           show.legend = FALSE)
+
+ggcorrplot(ariBinder, lab = TRUE, type = "upper", show.diag = TRUE, 
+           title = "Post-processing: using binder as a loss function.",
+           show.legend = FALSE)
+
 
