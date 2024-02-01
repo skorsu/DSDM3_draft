@@ -1,10 +1,12 @@
 ### Required Library
 library(tidyverse)
+library(stringr)
+
+
 library(ggplot2)
 library(reshape2)
 library(salso)
 library(gridExtra)
-library(stringr)
 library(sparseMbClust)
 library(cluster)
 library(ecodist)
@@ -15,14 +17,53 @@ library(mclustcomp)
 library(pheatmap)
 library(gridExtra)
 
-### Import the data
-# path <- "/Users/kevinkvp/Desktop/"
-path <- "/Users/kevin-imac/Desktop/"
-ni <- read.csv(paste0(path, "Nicaragua_12mo_Metadata_csv.csv"))
-ml <- read.csv(paste0(path, "Mali_12mo_Metadata_csv.csv"))
+sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
-# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+## Import the data -------------------------------------------------------------
+path <- "/Users/kevinkvp/Desktop/Annika/"
+# path <- "/Users/kevin-imac/Desktop/Annika/"
+
+### 6 and 8 Months
+ni68 <- read.csv(paste0(path, "Nicaragua_6mo_8mo_genus.csv"))
+ml68 <- read.csv(paste0(path, "Mali_6mo_8mo_genus.csv"))
+
+### 12 Months
+ni12 <- read.csv(paste0(path, "Nicaragua_12mo_Metadata_csv.csv"))
+ml12 <- read.csv(paste0(path, "Mali_12mo_Metadata_csv.csv"))
+
+## Data Pre-processing ---------------------------------------------------------
+### For each nationality, first split 6 and 8 from x68. Then, choose only the 
+### common infants among three datasets.
+ni06 <- ni68 %>% filter(Age..months. == 6)
+ni08 <- ni68 %>% filter(Age..months. == 8)
+
+identical(str_extract(ni06$ID., "^[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}"),
+          str_extract(ni08$ID., "^[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}"))
+### For Nicaraguan, 6 an 8 months dataset contain the same infants.
+
+ni06 <- ni06[which(str_extract(ni06$ID., "^[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}") %in% str_extract(ni12$ID, "^[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}")),]
+ni08 <- ni08[which(str_extract(ni08$ID., "^[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}") %in% str_extract(ni12$ID, "^[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}")),]
+
+identical(str_extract(ni06$ID., "^[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}"),
+          str_extract(ni12$ID, "^[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}"))
+
+ml06 <- ml68 %>% filter(Age..months. == 6)
+ml08 <- ml68 %>% filter(Age..months. == 8)
+
+str_extract(ml06$X.SampleID, "^[:digit:]+\\.") %in% str_extract(ml08$X.SampleID, "^[:digit:]+\\.")
+str_extract(ml08$X.SampleID, "^[:digit:]+\\.") %in% str_extract(ml06$X.SampleID, "^[:digit:]+\\.")
+
+ml06 <- ml06[which(str_extract(ml06$X.SampleID, "^[:digit:]+\\.") %in% str_extract(ml08$X.SampleID, "^[:digit:]+\\.")), ]
+identical(str_extract(ml06$X.SampleID, "^[:digit:]+\\."), str_extract(ml08$X.SampleID, "^[:digit:]+\\."))
+
+str_extract(ml12$ID, "^[:digit:]+\\.") %in% str_extract(ml08$X.SampleID, "^[:digit:]+\\.")
+str_extract(ml08$X.SampleID, "^[:digit:]+\\.") %in% str_extract(ml12$ID, "^[:digit:]+\\.")
+dim(ml06)
+dim(ml08)
+dim(ml12)
+
+
 
 ### Functions ------------------------------------------------------------------
 ### recursion function
