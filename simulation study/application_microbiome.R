@@ -1,9 +1,16 @@
 ### Required Library
 library(tidyverse)
 library(stringr)
-
-
+library(foreach)
+library(doParallel)
+library(mclustcomp)
 library(ggplot2)
+library(forcats)
+library(phyloseq)
+library(gridExtra)
+
+library(ggVennDiagram)
+
 library(reshape2)
 library(salso)
 library(gridExtra)
@@ -13,16 +20,32 @@ library(ecodist)
 library(factoextra)
 library(rbiom)
 library(ggcorrplot)
-library(mclustcomp)
+
 library(pheatmap)
 library(gridExtra)
 
-sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+
+## Functions -------------------------------------------------------------------
+### https://stackoverflow.com/a/49832231
+ColourPalleteMulti <- function(df, group, subgroup){
+  
+  # Find how many colour categories to create and the number of colours in each
+  categories <- aggregate(as.formula(paste(subgroup, group, sep="~" )), df, function(x) length(unique(x)))
+  category.start <- (scales::hue_pal(l = 100)(nrow(categories))) # Set the top of the colour pallete
+  category.end  <- (scales::hue_pal(l = 40)(nrow(categories))) # set the bottom
+  
+  # Build Colour pallette
+  colours <- unlist(lapply(1:nrow(categories),
+                           function(i){
+                             colorRampPalette(colors = c(category.start[i], category.end[i]))(categories[i,2])}))
+  return(colours)
+}
 
 ## Import the data -------------------------------------------------------------
-path <- "/Users/kevinkvp/Desktop/Annika/"
-# path <- "/Users/kevin-imac/Desktop/Annika/"
+# path <- "/Users/kevinkvp/Desktop/Annika/"
+path <- "/Users/kevin-imac/Desktop/Annika/"
 
 ### 6 and 8 Months
 ni68 <- read.csv(paste0(path, "Nicaragua_6mo_8mo_genus.csv"))
@@ -38,204 +61,403 @@ ml12 <- read.csv(paste0(path, "Mali_12mo_Metadata_csv.csv"))
 ni06 <- ni68 %>% filter(Age..months. == 6)
 ni08 <- ni68 %>% filter(Age..months. == 8)
 
-identical(str_extract(ni06$ID., "^[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}"),
-          str_extract(ni08$ID., "^[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}"))
-### For Nicaraguan, 6 an 8 months dataset contain the same infants.
+niInfant <- intersect(intersect(str_extract(ni06$ID., "^[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}"),
+                                str_extract(ni08$ID., "^[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}")),
+                      str_extract(ni12$ID, "^[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}"))
 
-ni06 <- ni06[which(str_extract(ni06$ID., "^[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}") %in% str_extract(ni12$ID, "^[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}")),]
-ni08 <- ni08[which(str_extract(ni08$ID., "^[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}") %in% str_extract(ni12$ID, "^[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}")),]
-
-identical(str_extract(ni06$ID., "^[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}"),
-          str_extract(ni12$ID, "^[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}"))
+ni06 <- ni06[which(str_extract(ni06$ID., "^[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}") %in% niInfant),]
+ni06 <- ni06 %>% rename(ID = ID.)
+ni08 <- ni08[which(str_extract(ni08$ID., "^[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}") %in% niInfant),]
+ni08 <- ni08 %>% rename(ID = ID.)
+ni12 <- ni12[which(str_extract(ni12$ID, "^[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}") %in% niInfant),]
 
 ml06 <- ml68 %>% filter(Age..months. == 6)
 ml08 <- ml68 %>% filter(Age..months. == 8)
 
-str_extract(ml06$X.SampleID, "^[:digit:]+\\.") %in% str_extract(ml08$X.SampleID, "^[:digit:]+\\.")
-str_extract(ml08$X.SampleID, "^[:digit:]+\\.") %in% str_extract(ml06$X.SampleID, "^[:digit:]+\\.")
+mlInfant <- intersect(intersect(str_extract(ml06$X.SampleID, "^[:digit:]+\\."), 
+                                str_extract(ml08$X.SampleID, "^[:digit:]+\\.")), 
+                      str_extract(ml12$ID, "^[:digit:]+\\."))
 
-ml06 <- ml06[which(str_extract(ml06$X.SampleID, "^[:digit:]+\\.") %in% str_extract(ml08$X.SampleID, "^[:digit:]+\\.")), ]
-identical(str_extract(ml06$X.SampleID, "^[:digit:]+\\."), str_extract(ml08$X.SampleID, "^[:digit:]+\\."))
+ml06 <- ml06[which(str_extract(ml06$X.SampleID, "^[:digit:]+\\.") %in% mlInfant), ]
+ml06 <- ml06 %>% rename(ID = X.SampleID)
+ml08 <- ml08[which(str_extract(ml08$X.SampleID, "^[:digit:]+\\.") %in% mlInfant), ]
+ml08 <- ml08 %>% rename(ID = X.SampleID)
+ml12 <- ml12[which(str_extract(ml12$ID, "^[:digit:]+\\.") %in% mlInfant), ]
 
-str_extract(ml12$ID, "^[:digit:]+\\.") %in% str_extract(ml08$X.SampleID, "^[:digit:]+\\.")
-str_extract(ml08$X.SampleID, "^[:digit:]+\\.") %in% str_extract(ml12$ID, "^[:digit:]+\\.")
-dim(ml06)
-dim(ml08)
-dim(ml12)
+### For the columns, we will first join the Nicaraguan and Malian with the same timestamp
+dat06 <- cbind("country" = c("NI"), ni06[, c(intersect(colnames(ni06), colnames(ml06)))]) %>%
+  rbind(cbind("country" = c("ML"), ml06[, c(intersect(colnames(ni06), colnames(ml06)))]))
+dat08 <- cbind("country" = c("NI"), ni08[, c(intersect(colnames(ni08), colnames(ml08)))]) %>%
+  rbind(cbind("country" = c("ML"), ml08[, c(intersect(colnames(ni08), colnames(ml08)))]))
+dat12 <- cbind("country" = c("NI"), ni12[, c(intersect(colnames(ni12), colnames(ml12)))]) %>%
+  rbind(cbind("country" = c("ML"), ml12[, c(intersect(colnames(ni12), colnames(ml12)))]))
 
+### For the taxa, select only the column with the non-negative count proportion is greater than or equal 0.1
+dat06 <- dat06[, colMeans(dat06 > 0) >= 0.1]
+dat08 <- dat08[, colMeans(dat08 > 0) >= 0.1]
+dat12 <- dat12[, colMeans(dat12 > 0) >= 0.1]
 
+commomTaxa <- intersect(intersect(colnames(dat06[, -(1:5)]), colnames(dat08[, -(1:5)])), 
+                        colnames(dat12[, -(1:5)]))
 
-### Functions ------------------------------------------------------------------
-### recursion function
-traverse <- function(a,i,innerl){
-  if(i < (ncol(df))){
-    alevelinner <- as.character(unique(df[which(as.character(df[,i])==a),i+1]))
-    desc <- NULL
-    if(length(alevelinner) == 1) (newickout <- traverse(alevelinner,i+1,innerl))
-    else {
-      for(b in alevelinner) desc <- c(desc,traverse(b,i+1,innerl))
-      il <- NULL; if(innerl==TRUE) il <- a
-      (newickout <- paste("(",paste(desc,collapse=","),")",il,sep=""))
-    }
-  }
-  else { (newickout <- a) }
+dat06 <- dat06[, c(1:5, which(colnames(dat06[, -(1:5)]) %in% commomTaxa) + 5)]
+dat08 <- dat08[, c(1:5, which(colnames(dat08[, -(1:5)]) %in% commomTaxa) + 5)]
+dat12 <- dat12[, c(1:5, which(colnames(dat12[, -(1:5)]) %in% commomTaxa) + 5)]
+
+identical(colnames(dat06), colnames(dat08))
+identical(colnames(dat12[, -(1:5)]), colnames(dat08[, -(1:5)]))
+
+### ZIDM-ZIDM ------------------------------------------------------------------
+datList <- list(dat06[, -(1:5)], dat08[, -(1:5)], dat12[, -(1:5)])
+sapply(1:3, function(x){dim(datList[[x]])})
+
+set.seed(1241, kind = "L'Ecuyer-CMRG")
+start_ova <- Sys.time()
+registerDoParallel(5)
+annikaZZ <- foreach(t = 1:3) %dopar% {
+  
+  start_time <- Sys.time()
+  clus_result <- mod(iter = 100000, Kmax = 10, nbeta_split = 5, 
+                     z = as.matrix(datList[[t]]), 
+                     atrisk_init = matrix(1, ncol = 38, nrow = 90), 
+                     beta_init = matrix(0, ncol = 38, nrow = 10), 
+                     ci_init = rep(0, 90), theta = 1, mu = 0, s2 = 1, s2_MH = 1, 
+                     launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, 
+                     thin = 100)
+  tot_time <- difftime(Sys.time(), start_time, units = "secs")
+  list(time = tot_time, result = clus_result)
+  
 }
+stopImplicitCluster()
+difftime(Sys.time(), start_ova)
+saveRDS(annikaZZ, paste0(path, "annikaZZ.RData"))
 
-## data.frame to newick function
-df2newick <- function(df, innerlabel=FALSE){
-  alevel <- as.character(unique(df[,1]))
-  newick <- NULL
-  for(x in alevel) newick <- c(newick,traverse(x,1,innerlabel))
-  (newick <- paste("(",paste(newick,collapse=","),");",sep=""))
-}
+### Analyze --------------------------------------------------------------------
+annikaZZ[[1]]$time
+annikaZZ[[2]]$time
+annikaZZ[[3]]$time
 
-meanSD <- function(x, dplace = 3){
-  mm <- round(mean(x), digits = dplace)
-  ss <- round(sd(x), digits = dplace)
-  paste0(mm, " (", ss, ")")
-}
+sapply(1:3, 
+       function(x){apply(annikaZZ[[x]]$result$ci_result, 1, 
+                         function(y){length(unique(y))})}) %>%
+  matplot(type = "l", ylim = c(1, 10), main = " ",
+          xlab = "Iteration (Thinning)", ylab = "Active Clusters")
 
-## Data Cleaning ---------------------------------------------------------------
-### Create a new variable and join the two datasets
-dat <- cbind("country" = c("NI"), ni[, intersect(colnames(ni), colnames(ml))]) %>%
-  rbind(cbind("country" = c("ML"), ml[, intersect(colnames(ni), colnames(ml))]))
-for(i in c(1, 2, 3, 5)){
-  dat[, i] <- factor(dat[, i])
-}
+clusVI <- sapply(1:3, 
+                 function(x){as.numeric(salso(annikaZZ[[x]]$result$ci_result[-(1:500), ]))})
+clusBinder <- sapply(1:3, 
+                     function(x){as.numeric(salso(annikaZZ[[x]]$result$ci_result[-(1:500), ],
+                                                  loss = "binder"))})
 
-### Clean the data
-dat <- dat %>% dplyr::select(-Age)
-demo_dat <- dat[, 1:4]
-taxa_dat <- dat[, -(1:4)]
-taxa_dat <- taxa_dat[, colMeans(taxa_dat > 0) >= 0.1]
+mclustcomp(clusVI[, 1], clusBinder[, 1]); table(VI = clusVI[, 1], Binder = clusBinder[, 1])
+mclustcomp(clusVI[, 2], clusBinder[, 2]); table(VI = clusVI[, 2], Binder = clusBinder[, 2])
+mclustcomp(clusVI[, 3], clusBinder[, 3]); table(VI = clusVI[, 3], Binder = clusBinder[, 3])
 
-view(cbind(demo_dat, taxa_dat))
+table(clusBinder[, 1])
+table(clusBinder[, 2])
+table(clusBinder[, 3])
 
-### Visualize the data ---------------------------------------------------------
-pheatmap(taxa_dat, 
-         display_numbers = FALSE, color = colorRampPalette(c('white','lightblue3'))(100), 
-         cluster_rows = F, cluster_cols = F,
-         show_rownames = FALSE, show_colnames = FALSE)
-
-result_path <- "Github Repo/ClusterZI/simulation study/sensitivity/annika/"
-result_path <- NULL
-
-### Post-Processing ------------------------------------------------------------
-result <- readRDS(paste0(path, result_path, "result.RData"))
-
-#### Check that VI and binder give the same result or not?
-clusVI <- as.numeric(salso(result[[1]]$result[-(1:500), ]))
-clusBinder <- as.numeric(salso(result[[1]]$result[-(1:500), ]), loss = "binder")
-mclustcomp(clusVI, clusBinder) ### According to the ARI, these two loss functions give the same result.
-
-table(clusVI, clusBinder)
-
-### Visualization of the bacteria
-relaTaxa <- taxa_dat/rowSums(taxa_dat)
-
-taxa_index <- paste0("TX", str_pad(1:46, ceiling(log10(46)), pad = "0"))
-
-tt <- str_extract(colnames(taxa_dat), pattern = regex("f__[:punct:]?[:alpha:]*[e]"))
+### Use binder
+#### Visualization of the bacteria
+##### 6 Months
+relaTaxa06 <- dat06[, -(1:5)]/rowSums(dat06[, -(1:5)])
+taxa_index <- paste0("TX", str_pad(1:38, ceiling(log10(46)), pad = "0"))
+tt <- str_extract(colnames(relaTaxa06), pattern = regex("f__[:punct:]?[:alpha:]*[e]"))
 tt <- ifelse(substr(tt, 4, 4) == ".", substr(tt, 5, 100), substr(tt, 4, 100))
-taxa_name <- data.frame(k = substr(str_extract(colnames(taxa_dat), pattern = regex("k__[:alpha:]*")), 4, 1000),
-                        p = substr(str_extract(colnames(taxa_dat), pattern = regex("p__[:alpha:]*")), 4, 1000),
-                        c = substr(str_extract(colnames(taxa_dat), pattern = regex("c__[:alpha:]*")), 4, 1000),
-                        o = substr(str_extract(colnames(taxa_dat), pattern = regex("o__[:alpha:]*")), 4, 1000),
+taxa_name <- data.frame(k = substr(str_extract(colnames(relaTaxa06), pattern = regex("k__[:alpha:]*")), 4, 1000),
+                        p = substr(str_extract(colnames(relaTaxa06), pattern = regex("p__[:alpha:]*")), 4, 1000),
+                        c = substr(str_extract(colnames(relaTaxa06), pattern = regex("c__[:alpha:]*")), 4, 1000),
+                        o = substr(str_extract(colnames(relaTaxa06), pattern = regex("o__[:alpha:]*")), 4, 1000),
                         f = tt,
-                        g = substr(str_extract(colnames(taxa_dat), pattern = regex("g__[:alpha:]*")), 4, 1000))
+                        g = substr(str_extract(colnames(relaTaxa06), pattern = regex("g__[:alpha:]*")), 4, 1000))
 taxa_name[taxa_name == ""] <- NA
 
 plot_ticks <- ifelse(!is.na(taxa_name[, "g"]), taxa_name[, "g"], 
                      ifelse(!is.na(taxa_name[, "f"]), taxa_name[, "f"], taxa_index))
 plot_tick <- c(taxa_index[1], 
                (ifelse(plot_ticks == lag(plot_ticks), taxa_index, plot_ticks))[-1])
-colnames(relaTaxa) <- plot_tick
+colnames(relaTaxa06) <- plot_tick
 
-pheatmap(relaTaxa[which(clusVI == 1), ], 
+pheatmap(relaTaxa06[which(clusBinder[, 1] == 5), ], 
          display_numbers = FALSE, color = colorRampPalette(c('white','maroon3'))(100), 
          cluster_rows = FALSE, cluster_cols = FALSE,
          show_rownames = FALSE, show_colnames = TRUE,
-         main = "Cluster 1: Proportion of the Taxa count")
+         main = "Cluster 5: Proportion of the Taxa count")
 
-pheatmap(relaTaxa[which(clusVI == 2), ], 
+##### 8 Months
+relaTaxa08 <- dat08[, -(1:5)]/rowSums(dat08[, -(1:5)])
+colnames(relaTaxa08) <- plot_tick
+pheatmap(relaTaxa08[which(clusBinder[, 2] == 4), ], 
          display_numbers = FALSE, color = colorRampPalette(c('white','maroon3'))(100), 
-         cluster_rows = F, cluster_cols = F,
+         cluster_rows = FALSE, cluster_cols = FALSE,
          show_rownames = FALSE, show_colnames = TRUE,
-         main = "Cluster 2: Proportion of the Taxa count")
+         main = "Cluster 4: Proportion of the Taxa count")
 
-pheatmap(relaTaxa[which(clusVI == 3), ], 
+##### 12 Months
+relaTaxa12 <- dat12[, -(1:5)]/rowSums(dat12[, -(1:5)])
+colnames(relaTaxa12) <- plot_tick
+pheatmap(relaTaxa12[which(clusBinder[, 3] == 4), ], 
          display_numbers = FALSE, color = colorRampPalette(c('white','maroon3'))(100), 
-         cluster_rows = F, cluster_cols = F,
+         cluster_rows = FALSE, cluster_cols = FALSE,
          show_rownames = FALSE, show_colnames = TRUE,
-         main = "Cluster 3: Proportion of the Taxa count")
+         main = "Cluster 4: Proportion of the Taxa count")
 
-### Demographic: Nationality (/)
-table(demo_dat[which(clusVI == 1), "country"])
-table(demo_dat[which(clusVI == 2), "country"])
-table(demo_dat[which(clusVI == 3), "country"])
+### Demographic: Nationality
+table(clus = clusBinder[, 1], dat06[, 1])
+table(clus = clusBinder[, 2], dat08[, 1])
+table(clus = clusBinder[, 3], dat12[, 1])
 
-### Demographic: Sex (No)
-table(demo_dat[which(clusVI == 1), "Sex"])
-table(demo_dat[which(clusVI == 2), "Sex"])
-table(demo_dat[which(clusVI == 3), "Sex"])
+### Demographic: Gender
+table(clus = clusBinder[, 1], dat06[, 3])
+table(clus = clusBinder[, 2], dat08[, 3])
+table(clus = clusBinder[, 3], dat12[, 3])
 
-### Demographic: Group (No)
-table(demo_dat[which(clusVI == 1), "Group"])
-table(demo_dat[which(clusVI == 2), "Group"])
-table(demo_dat[which(clusVI == 3), "Group"])
+### Demographic: Rice Bran
+dat06[, 5] <- factor(dat06[, 5], labels = c("Control", "Rice Bran", "Rice Bran"))
+dat08[, 5] <- factor(dat08[, 5], labels = c("Control", "Rice Bran", "Rice Bran"))
+table(clus = clusBinder[, 1], dat06[, 5])
+table(clus = clusBinder[, 2], dat08[, 5])
+table(clus = clusBinder[, 3], dat12[, 5])
 
-### 2 Demographics: Nationality x Sex
-table(demo_dat[which(clusVI == 1), c("country", "Sex")])
-table(demo_dat[which(clusVI == 2), c("country", "Sex")])
-table(demo_dat[which(clusVI == 3), c("country", "Sex")])
+### Demographic: Nationality x Gender
+table(dat06[, 1], dat06[, 3], clus = clusBinder[, 1])
+table(dat08[, 1], dat08[, 3], clus = clusBinder[, 2])
+table(dat12[, 1], dat12[, 3], clus = clusBinder[, 3])
 
-### 2 Demographics: Nationality x Group
-table(demo_dat[which(clusVI == 1), c("Group", "country")])
-table(demo_dat[which(clusVI == 2), c("Group", "country")])
-table(demo_dat[which(clusVI == 3), c("Group", "country")])
+### Demographic: Nationality x Rice Bran
+table(dat06[, 1], dat06[, 5], clus = clusBinder[, 1])
+table(dat08[, 1], dat08[, 5], clus = clusBinder[, 2])
+table(dat12[, 1], dat12[, 5], clus = clusBinder[, 3])
 
-### 2 Demographics: Sex x Group
-table(demo_dat[which(clusVI == 1), c("Sex", "Group")])
-table(demo_dat[which(clusVI == 2), c("Sex", "Group")])
-table(demo_dat[which(clusVI == 3), c("Sex", "Group")])
+### Visualzation ---------------------------------------------------------------
+#### Line plot: Change of the cluster
+c6 <- data.frame(obs = 1:90, clus6 = factor(clusBinder[, 1])) %>%
+  arrange(clus6) %>% 
+  mutate(index6 = 90:1)
+c8 <- data.frame(obs = 1:90, clus8 = factor(clusBinder[, 2])) %>%
+  arrange(clus8) %>% 
+  mutate(index8 = 90:1)
+c12 <- data.frame(obs = 1:90, clus12 = factor(clusBinder[, 3])) %>%
+  arrange(clus12) %>% 
+  mutate(index12 = 90:1)
 
-### 3 Demographics
-table(demo_dat[which(clusVI == 1), c("Group", "Sex", "country")])
-table(demo_dat[which(clusVI == 2), c("Group", "Sex", "country")])
-table(demo_dat[which(clusVI == 3), c("Group", "Sex", "country")])
-
-sapply(1:length(hyperParam),  function(x){result[[x]]$time})
-sapply(1:length(hyperParam),
-       function(x){apply(result[[x]]$result, 1, function(y){length(unique(y))})}) %>%
-  matplot(type = "l")
-
-sapply(1:length(hyperParam),
-       function(x){apply(result[[x]]$result, 1, function(y){length(unique(y))})}) %>%
-  apply(2, meanSD)
-
-clusVI <- sapply(1:length(hyperParam), function(x){as.numeric(salso(result[[x]]$result[-(1:500), ]))})
-clusBinder <- sapply(1:length(hyperParam), function(x){as.numeric(salso(result[[x]]$result[-(1:500), ], loss = "binder"))})
-
-sapply(1:length(hyperParam), function(x){length(unique(clusVI[, x]))})
-sapply(1:length(hyperParam), function(x){length(unique(clusBinder[, x]))})
-
-ariVI <- diag(21)
-ariBinder <- diag(21)
-for(i in 1:length(hyperParam)){
+obsChange <- NULL
+for(i in 1:90){
   
-  for(j in 1:length(hyperParam)){
-    ariVI[i, j] <- mclustcomp(clusVI[, i], clusVI[, j], types = "adjrand")[, 2]
-    ariBinder[i, j] <- mclustcomp(clusBinder[, i], clusBinder[, j], types = "adjrand")[, 2]
+  if(c6[which(c6$obs == i), "clus6"] != c8[which(c8$obs == i), "clus8"]){
+    obsChange <- rbind(obsChange,
+                       c(c8[which(c8$obs == i), "clus8"], c6[which(c6$obs == i), "index6"], c8[which(c8$obs == i), "index8"]))
   }
   
 }
 
-ggcorrplot(ariVI, lab = TRUE, type = "upper", show.diag = TRUE, 
-           title = "Post-processing: using VI as a loss function.",
-           show.legend = FALSE)
+obsChange2 <- NULL
+for(i in 1:90){
+  
+  if(c8[which(c8$obs == i), "clus8"] != c12[which(c12$obs == i), "clus12"]){
+    obsChange2 <- rbind(obsChange2,
+                        c(c12[which(c12$obs == i), "clus12"], c8[which(c8$obs == i), "index8"], c12[which(c12$obs == i), "index12"]))
+  }
+  
+}
 
-ggcorrplot(ariBinder, lab = TRUE, type = "upper", show.diag = TRUE, 
-           title = "Post-processing: using binder as a loss function.",
-           show.legend = FALSE)
+ggplot() +
+  geom_text(data = c6, aes(x = rep(1, 90), y = index6, label = obs, color = clus6), size = 2.5) +
+  geom_text(data = c8, aes(x = rep(2, 90), y = index8, label = obs, color = clus8), size = 2.5) +
+  geom_text(data = c12, aes(x = rep(3, 90), y = index12, label = obs, color = clus12), size = 2.5) +
+  geom_segment(aes(x = rep(1.01, 77), y = obsChange[, 2], 
+                   xend = rep(1.99, 77), yend = obsChange[, 3],
+                   color = factor(obsChange[, 1])), alpha = 0.4, linetype = "dashed") +
+  geom_segment(aes(x = rep(2.01, 62), y = obsChange2[, 2], 
+                   xend = rep(2.99, 62), yend = obsChange2[, 3],
+                   color = factor(obsChange2[, 1])), alpha = 0.4, linetype = "dashed") +
+  theme_minimal() + 
+  theme(legend.position = "none", axis.ticks = element_blank(), axis.text.y = element_blank()) + 
+  scale_x_continuous(breaks = c(1, 2, 3), labels = c("6 months", "8 months", "12 months")) +
+  labs(x = "Timestamps", y = "", title = "The change of cluster behavior for each infants across three timestamps")
 
+### Stacked Bar chart: Relative Taxa
+taxon <- taxa_name[, c("p", "g")]
+phylums <- unique(taxon[, "p"])[-1]
+taxon$p[! (taxon$p %in% phylums)] <- "Others"
+taxon$g[! (taxon$p %in% phylums)] <- "Others"
 
+taxon$g[taxon$p == phylums[1] & taxon$g != "Bifidobacterium"] <- "Other Bifidobacterium"
+taxon$g[taxon$p == phylums[1] & is.na(taxon$g)] <- "Other Bifidobacterium"
+
+taxon$g[taxon$p == phylums[2] & !(taxon$g %in% c("Bacteroides", "Prevotella"))] <- "Other Bacteroidetes"
+taxon$g[taxon$p == phylums[2] & is.na(taxon$g)] <- "Other Bacteroidetes"
+
+taxon$g[taxon$p == phylums[3] & !(taxon$g %in% taxon$g[c(16, 30, 36, 38)])] <- "Other Firmicutes"
+taxon$g[27] <- "Ruminococcus"
+taxon$g[taxon$p == phylums[3] & is.na(taxon$g)] <- "Other Firmicutes"
+
+obsID <- c(str_extract(dat06[1:45, 2], "^[:alpha:]+\\.[:alpha:]+\\.[:digit:]+"),
+           str_extract(dat06[-(1:45), 2], "^[:digit:]{7}"))
+
+registerDoParallel(5)
+dat06Plot <- foreach(t = 1:90, .combine = "rbind") %dopar% {
+  
+  data.frame(taxon, ID = rep(obsID[t], 38), 
+             taxa = as.numeric(dat06[t, -(1:5)])) %>%
+    group_by(ID, p, g) %>%
+    summarise(sum_taxa = sum(taxa)) %>%
+    ungroup() %>%
+    mutate(prop_taxa = sum_taxa/sum(sum_taxa)) %>%
+    dplyr::select(-sum_taxa)
+  
+}
+stopImplicitCluster()
+
+dat06Plot$g <- factor(dat06Plot$g,
+                      levels = c("Bifidobacterium", "Other Bifidobacterium",
+                                 "Bacteroides", "Other Bacteroidetes", "Prevotella",
+                                 "Faecalibacterium", "Megasphaera", "Other Firmicutes",
+                                 "Ruminococcus", "Streptococcus", "Veillonella", 
+                                 "Others"))
+colours <- c("lightsalmon", "papayawhip", "lightskyblue", "slategray1", "#3C6D00",
+             "darkseagreen4", "olivedrab", "darkseagreen1", "palegreen3", "seagreen3", 
+             "yellowgreen", "azure2")
+
+registerDoParallel(5)
+dat06ggPlot <- foreach(t = 1:5) %dopar% {
+  
+  main_cap <- paste0("Cluster ", t, ": 6-Month Infants")
+  dat06Plot %>%
+    dplyr::filter(ID %in% obsID[which(clusBinder[, 1] == t)]) %>%
+    ggplot(aes(x = ID, y = prop_taxa, fill = factor(g))) +
+    geom_bar(position = "stack", stat="identity") +
+    scale_fill_manual("", values=colours) +
+    theme_bw() +
+    theme(axis.text.x=element_text(angle=90, vjust=0.5)) +  # Vertical x-axis tick labels
+    scale_y_continuous(labels = scales::percent_format()) +
+    labs(y = "Relative abundance", title = main_cap)
+  
+}
+stopImplicitCluster()
+
+grid.arrange(grobs = dat06ggPlot)
+
+registerDoParallel(5)
+dat08Plot <- foreach(t = 1:90, .combine = "rbind") %dopar% {
+  
+  data.frame(taxon, ID = rep(obsID[t], 38), 
+             taxa = as.numeric(dat08[t, -(1:5)])) %>%
+    group_by(ID, p, g) %>%
+    summarise(sum_taxa = sum(taxa)) %>%
+    ungroup() %>%
+    mutate(prop_taxa = sum_taxa/sum(sum_taxa)) %>%
+    dplyr::select(-sum_taxa)
+  
+}
+stopImplicitCluster()
+
+dat08Plot$g <- factor(dat08Plot$g,
+                      levels = c("Bifidobacterium", "Other Bifidobacterium",
+                                 "Bacteroides", "Other Bacteroidetes", "Prevotella",
+                                 "Faecalibacterium", "Megasphaera", "Other Firmicutes",
+                                 "Ruminococcus", "Streptococcus", "Veillonella", 
+                                 "Others"))
+
+registerDoParallel(5)
+dat08ggPlot <- foreach(t = 1:4) %dopar% {
+  
+  main_cap <- paste0("Cluster ", t, ": 8-Month Infants")
+  dat08Plot %>%
+    dplyr::filter(ID %in% obsID[which(clusBinder[, 2] == t)]) %>%
+    ggplot(aes(x = ID, y = prop_taxa, fill = factor(g))) +
+    geom_bar(position = "stack", stat="identity") +
+    scale_fill_manual("", values=colours) +
+    theme_bw() +
+    theme(axis.text.x=element_text(angle=90, vjust=0.5)) +  # Vertical x-axis tick labels
+    scale_y_continuous(labels = scales::percent_format()) +
+    labs(y = "Relative abundance", title = main_cap)
+  
+}
+stopImplicitCluster()
+
+grid.arrange(grobs = dat08ggPlot)
+
+registerDoParallel(5)
+dat12Plot <- foreach(t = 1:90, .combine = "rbind") %dopar% {
+  
+  data.frame(taxon, ID = rep(obsID[t], 38), 
+             taxa = as.numeric(dat12[t, -(1:5)])) %>%
+    group_by(ID, p, g) %>%
+    summarise(sum_taxa = sum(taxa)) %>%
+    ungroup() %>%
+    mutate(prop_taxa = sum_taxa/sum(sum_taxa)) %>%
+    dplyr::select(-sum_taxa)
+  
+}
+stopImplicitCluster()
+
+dat12Plot$g <- factor(dat12Plot$g,
+                      levels = c("Bifidobacterium", "Other Bifidobacterium",
+                                 "Bacteroides", "Other Bacteroidetes", "Prevotella",
+                                 "Faecalibacterium", "Megasphaera", "Other Firmicutes",
+                                 "Ruminococcus", "Streptococcus", "Veillonella", 
+                                 "Others"))
+
+registerDoParallel(5)
+dat12ggPlot <- foreach(t = 1:4) %dopar% {
+  
+  main_cap <- paste0("Cluster ", t, ": 12-Month Infants")
+  dat12Plot %>%
+    dplyr::filter(ID %in% obsID[which(clusBinder[, 3] == t)]) %>%
+    ggplot(aes(x = ID, y = prop_taxa, fill = factor(g))) +
+    geom_bar(position = "stack", stat="identity") +
+    scale_fill_manual("", values=colours) +
+    theme_bw() +
+    theme(axis.text.x=element_text(angle=90, vjust=0.5)) +  # Vertical x-axis tick labels
+    scale_y_continuous(labels = scales::percent_format()) +
+    labs(y = "Relative abundance", title = main_cap)
+  
+}
+stopImplicitCluster()
+
+grid.arrange(grobs = dat12ggPlot)
+
+### Venn Diagram
+VennData <- vector("list", 13)
+#### 6-month
+VennData[[1]] <- which(clusBinder[, 1] == 1) 
+VennData[[2]] <- which(clusBinder[, 1] == 2) 
+VennData[[3]] <- which(clusBinder[, 1] == 3) 
+VennData[[4]] <- which(clusBinder[, 1] == 4) 
+VennData[[5]] <- which(clusBinder[, 1] == 5)
+#### 8-month
+VennData[[6]] <- which(clusBinder[, 2] == 1) 
+VennData[[7]] <- which(clusBinder[, 2] == 2) 
+VennData[[8]] <- which(clusBinder[, 2] == 3) 
+VennData[[9]] <- which(clusBinder[, 2] == 4)
+#### 12-month
+VennData[[10]] <- which(clusBinder[, 3] == 1) 
+VennData[[11]] <- which(clusBinder[, 3] == 2) 
+VennData[[12]] <- which(clusBinder[, 3] == 3) 
+VennData[[13]] <- which(clusBinder[, 3] == 4)
+
+names(VennData) <- c(paste0("06M: Cluster ", 1:5), 
+                     paste0("08M: Cluster ", 1:4),
+                     paste0("12M: Cluster ", 1:4))
+
+ggVennDiagram(VennData, order.set.by = "name", relative_height = 0.35)
+
+c6V1 <- ggVennDiagram(VennData[c(1, 6:9)], label_alpha = 0,
+              label = "count", edge_lty = 1, edge_size = 0.5,
+              category.names = c("Original","Cluster 1", 
+                                 "Cluster 2","Cluster 3", "Cluster 4")) +
+  scale_fill_gradientn(colours = c('grey75', "white", 'white'),
+                       values = c(0, .Machine$double.eps, 1)) +
+  theme(legend.position = "none", plot.margin=grid::unit(c(0,0,0,0), "mm")) +
+  labs(title = "Originally in Cluster 1 (6m-infant)")
+
+c6V2 <- ggVennDiagram(VennData[c(2, 6:9)], label_alpha = 0,
+                      label = "count", edge_lty = 1, edge_size = 0.5,
+                      category.names = c("6M: Cluster 2","8M: Cluster 1", 
+                                         "8M: Cluster 2","8M: Cluster 3", "8M: Cluster 4")) +
+  scale_fill_gradientn(colours = c('grey75', "white", 'white'),
+                       values = c(0, .Machine$double.eps, 1)) +
+  theme(legend.position = "none")
+
+grid.arrange(c6V1, c6V1, c6V1, c6V1, c6V1)
