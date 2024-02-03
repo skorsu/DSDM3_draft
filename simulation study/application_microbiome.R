@@ -1,12 +1,12 @@
 ### Required Library
+library(Rcpp)
 library(tidyverse)
 library(stringr)
+library(salso)
 library(foreach)
 library(doParallel)
 library(mclustcomp)
 library(ggplot2)
-library(forcats)
-library(phyloseq)
 library(gridExtra)
 
 library(ggVennDiagram)
@@ -24,28 +24,12 @@ library(ggcorrplot)
 library(pheatmap)
 library(gridExtra)
 
-# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
-
-## Functions -------------------------------------------------------------------
-### https://stackoverflow.com/a/49832231
-ColourPalleteMulti <- function(df, group, subgroup){
-  
-  # Find how many colour categories to create and the number of colours in each
-  categories <- aggregate(as.formula(paste(subgroup, group, sep="~" )), df, function(x) length(unique(x)))
-  category.start <- (scales::hue_pal(l = 100)(nrow(categories))) # Set the top of the colour pallete
-  category.end  <- (scales::hue_pal(l = 40)(nrow(categories))) # set the bottom
-  
-  # Build Colour pallette
-  colours <- unlist(lapply(1:nrow(categories),
-                           function(i){
-                             colorRampPalette(colors = c(category.start[i], category.end[i]))(categories[i,2])}))
-  return(colours)
-}
+sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ## Import the data -------------------------------------------------------------
-# path <- "/Users/kevinkvp/Desktop/Annika/"
-path <- "/Users/kevin-imac/Desktop/Annika/"
+path <- "/Users/kevinkvp/Desktop/Annika/"
+# path <- "/Users/kevin-imac/Desktop/Annika/"
 
 ### 6 and 8 Months
 ni68 <- read.csv(paste0(path, "Nicaragua_6mo_8mo_genus.csv"))
@@ -133,150 +117,31 @@ difftime(Sys.time(), start_ova)
 saveRDS(annikaZZ, paste0(path, "annikaZZ.RData"))
 
 ### Analyze --------------------------------------------------------------------
-annikaZZ[[1]]$time
-annikaZZ[[2]]$time
-annikaZZ[[3]]$time
-
-sapply(1:3, 
-       function(x){apply(annikaZZ[[x]]$result$ci_result, 1, 
-                         function(y){length(unique(y))})}) %>%
-  matplot(type = "l", ylim = c(1, 10), main = " ",
-          xlab = "Iteration (Thinning)", ylab = "Active Clusters")
-
-clusVI <- sapply(1:3, 
-                 function(x){as.numeric(salso(annikaZZ[[x]]$result$ci_result[-(1:500), ]))})
-clusBinder <- sapply(1:3, 
-                     function(x){as.numeric(salso(annikaZZ[[x]]$result$ci_result[-(1:500), ],
-                                                  loss = "binder"))})
-
-mclustcomp(clusVI[, 1], clusBinder[, 1]); table(VI = clusVI[, 1], Binder = clusBinder[, 1])
-mclustcomp(clusVI[, 2], clusBinder[, 2]); table(VI = clusVI[, 2], Binder = clusBinder[, 2])
-mclustcomp(clusVI[, 3], clusBinder[, 3]); table(VI = clusVI[, 3], Binder = clusBinder[, 3])
-
-table(clusBinder[, 1])
-table(clusBinder[, 2])
-table(clusBinder[, 3])
-
-### Use binder
-#### Visualization of the bacteria
-##### 6 Months
-relaTaxa06 <- dat06[, -(1:5)]/rowSums(dat06[, -(1:5)])
-taxa_index <- paste0("TX", str_pad(1:38, ceiling(log10(46)), pad = "0"))
-tt <- str_extract(colnames(relaTaxa06), pattern = regex("f__[:punct:]?[:alpha:]*[e]"))
-tt <- ifelse(substr(tt, 4, 4) == ".", substr(tt, 5, 100), substr(tt, 4, 100))
-taxa_name <- data.frame(k = substr(str_extract(colnames(relaTaxa06), pattern = regex("k__[:alpha:]*")), 4, 1000),
-                        p = substr(str_extract(colnames(relaTaxa06), pattern = regex("p__[:alpha:]*")), 4, 1000),
-                        c = substr(str_extract(colnames(relaTaxa06), pattern = regex("c__[:alpha:]*")), 4, 1000),
-                        o = substr(str_extract(colnames(relaTaxa06), pattern = regex("o__[:alpha:]*")), 4, 1000),
-                        f = tt,
-                        g = substr(str_extract(colnames(relaTaxa06), pattern = regex("g__[:alpha:]*")), 4, 1000))
-taxa_name[taxa_name == ""] <- NA
-
-plot_ticks <- ifelse(!is.na(taxa_name[, "g"]), taxa_name[, "g"], 
-                     ifelse(!is.na(taxa_name[, "f"]), taxa_name[, "f"], taxa_index))
-plot_tick <- c(taxa_index[1], 
-               (ifelse(plot_ticks == lag(plot_ticks), taxa_index, plot_ticks))[-1])
-colnames(relaTaxa06) <- plot_tick
-
-pheatmap(relaTaxa06[which(clusBinder[, 1] == 5), ], 
-         display_numbers = FALSE, color = colorRampPalette(c('white','maroon3'))(100), 
-         cluster_rows = FALSE, cluster_cols = FALSE,
-         show_rownames = FALSE, show_colnames = TRUE,
-         main = "Cluster 5: Proportion of the Taxa count")
-
-##### 8 Months
-relaTaxa08 <- dat08[, -(1:5)]/rowSums(dat08[, -(1:5)])
-colnames(relaTaxa08) <- plot_tick
-pheatmap(relaTaxa08[which(clusBinder[, 2] == 4), ], 
-         display_numbers = FALSE, color = colorRampPalette(c('white','maroon3'))(100), 
-         cluster_rows = FALSE, cluster_cols = FALSE,
-         show_rownames = FALSE, show_colnames = TRUE,
-         main = "Cluster 4: Proportion of the Taxa count")
-
-##### 12 Months
-relaTaxa12 <- dat12[, -(1:5)]/rowSums(dat12[, -(1:5)])
-colnames(relaTaxa12) <- plot_tick
-pheatmap(relaTaxa12[which(clusBinder[, 3] == 4), ], 
-         display_numbers = FALSE, color = colorRampPalette(c('white','maroon3'))(100), 
-         cluster_rows = FALSE, cluster_cols = FALSE,
-         show_rownames = FALSE, show_colnames = TRUE,
-         main = "Cluster 4: Proportion of the Taxa count")
-
-### Demographic: Nationality
-table(clus = clusBinder[, 1], dat06[, 1])
-table(clus = clusBinder[, 2], dat08[, 1])
-table(clus = clusBinder[, 3], dat12[, 1])
-
-### Demographic: Gender
-table(clus = clusBinder[, 1], dat06[, 3])
-table(clus = clusBinder[, 2], dat08[, 3])
-table(clus = clusBinder[, 3], dat12[, 3])
-
-### Demographic: Rice Bran
-dat06[, 5] <- factor(dat06[, 5], labels = c("Control", "Rice Bran", "Rice Bran"))
-dat08[, 5] <- factor(dat08[, 5], labels = c("Control", "Rice Bran", "Rice Bran"))
-table(clus = clusBinder[, 1], dat06[, 5])
-table(clus = clusBinder[, 2], dat08[, 5])
-table(clus = clusBinder[, 3], dat12[, 5])
-
-### Demographic: Nationality x Gender
-table(dat06[, 1], dat06[, 3], clus = clusBinder[, 1])
-table(dat08[, 1], dat08[, 3], clus = clusBinder[, 2])
-table(dat12[, 1], dat12[, 3], clus = clusBinder[, 3])
-
-### Demographic: Nationality x Rice Bran
-table(dat06[, 1], dat06[, 5], clus = clusBinder[, 1])
-table(dat08[, 1], dat08[, 5], clus = clusBinder[, 2])
-table(dat12[, 1], dat12[, 5], clus = clusBinder[, 3])
-
-### Visualzation ---------------------------------------------------------------
-#### Line plot: Change of the cluster
-c6 <- data.frame(obs = 1:90, clus6 = factor(clusBinder[, 1])) %>%
-  arrange(clus6) %>% 
-  mutate(index6 = 90:1)
-c8 <- data.frame(obs = 1:90, clus8 = factor(clusBinder[, 2])) %>%
-  arrange(clus8) %>% 
-  mutate(index8 = 90:1)
-c12 <- data.frame(obs = 1:90, clus12 = factor(clusBinder[, 3])) %>%
-  arrange(clus12) %>% 
-  mutate(index12 = 90:1)
-
-obsChange <- NULL
-for(i in 1:90){
-  
-  if(c6[which(c6$obs == i), "clus6"] != c8[which(c8$obs == i), "clus8"]){
-    obsChange <- rbind(obsChange,
-                       c(c8[which(c8$obs == i), "clus8"], c6[which(c6$obs == i), "index6"], c8[which(c8$obs == i), "index8"]))
-  }
-  
-}
-
-obsChange2 <- NULL
-for(i in 1:90){
-  
-  if(c8[which(c8$obs == i), "clus8"] != c12[which(c12$obs == i), "clus12"]){
-    obsChange2 <- rbind(obsChange2,
-                        c(c12[which(c12$obs == i), "clus12"], c8[which(c8$obs == i), "index8"], c12[which(c12$obs == i), "index12"]))
-  }
-  
-}
-
-ggplot() +
-  geom_text(data = c6, aes(x = rep(1, 90), y = index6, label = obs, color = clus6), size = 2.5) +
-  geom_text(data = c8, aes(x = rep(2, 90), y = index8, label = obs, color = clus8), size = 2.5) +
-  geom_text(data = c12, aes(x = rep(3, 90), y = index12, label = obs, color = clus12), size = 2.5) +
-  geom_segment(aes(x = rep(1.01, 77), y = obsChange[, 2], 
-                   xend = rep(1.99, 77), yend = obsChange[, 3],
-                   color = factor(obsChange[, 1])), alpha = 0.4, linetype = "dashed") +
-  geom_segment(aes(x = rep(2.01, 62), y = obsChange2[, 2], 
-                   xend = rep(2.99, 62), yend = obsChange2[, 3],
-                   color = factor(obsChange2[, 1])), alpha = 0.4, linetype = "dashed") +
-  theme_minimal() + 
-  theme(legend.position = "none", axis.ticks = element_blank(), axis.text.y = element_blank()) + 
-  scale_x_continuous(breaks = c(1, 2, 3), labels = c("6 months", "8 months", "12 months")) +
-  labs(x = "Timestamps", y = "", title = "The change of cluster behavior for each infants across three timestamps")
+annikaZZ <- readRDS(paste0(path, "annikaZZ.RData"))
+c(annikaZZ[[1]]$time, annikaZZ[[2]]$time, annikaZZ[[3]]$time)
 
 ### Stacked Bar chart: Relative Taxa
+#### First, detect the outlier
+datList <- list(dat06, dat08, dat12)
+
+registerDoParallel(5)
+foreach(t = 1:3) %dopar% {
+  
+  prop <- as.numeric(colMeans(datList[[t]][, -(1:5)]/rowSums(datList[[t]][, -(1:5)])))
+  which(prop %in% boxplot.stats(prop)$out)
+  
+}
+stopImplicitCluster()
+
+
+
+
+
+as.numeric(colMeans(dat06[, -(1:5)]/rowSums(dat06[, -(1:5)]))) %>% boxplot.stats() %>% .$out
+as.numeric(colMeans(dat08[, -(1:5)]/rowSums(dat08[, -(1:5)]))) %>% boxplot.stats() %>% .$out
+as.numeric(colMeans(dat12[, -(1:5)]/rowSums(dat12[, -(1:5)]))) %>% boxplot.stats() %>% .$out
+
+
 taxon <- taxa_name[, c("p", "g")]
 phylums <- unique(taxon[, "p"])[-1]
 taxon$p[! (taxon$p %in% phylums)] <- "Others"
@@ -417,6 +282,148 @@ dat12ggPlot <- foreach(t = 1:4) %dopar% {
 stopImplicitCluster()
 
 grid.arrange(grobs = dat12ggPlot)
+
+
+
+sapply(1:3, 
+       function(x){apply(annikaZZ[[x]]$result$ci_result, 1, 
+                         function(y){length(unique(y))})}) %>%
+  matplot(type = "l", ylim = c(1, 10), main = " ",
+          xlab = "Iteration (Thinning)", ylab = "Active Clusters")
+
+clusVI <- sapply(1:3, 
+                 function(x){as.numeric(salso(annikaZZ[[x]]$result$ci_result[-(1:500), ]))})
+clusBinder <- sapply(1:3, 
+                     function(x){as.numeric(salso(annikaZZ[[x]]$result$ci_result[-(1:500), ],
+                                                  loss = "binder"))})
+
+mclustcomp(clusVI[, 1], clusBinder[, 1]); table(VI = clusVI[, 1], Binder = clusBinder[, 1])
+mclustcomp(clusVI[, 2], clusBinder[, 2]); table(VI = clusVI[, 2], Binder = clusBinder[, 2])
+mclustcomp(clusVI[, 3], clusBinder[, 3]); table(VI = clusVI[, 3], Binder = clusBinder[, 3])
+
+table(clusBinder[, 1])
+table(clusBinder[, 2])
+table(clusBinder[, 3])
+
+### Use binder
+#### Visualization of the bacteria
+##### 6 Months
+relaTaxa06 <- dat06[, -(1:5)]/rowSums(dat06[, -(1:5)])
+taxa_index <- paste0("TX", str_pad(1:38, ceiling(log10(46)), pad = "0"))
+tt <- str_extract(colnames(relaTaxa06), pattern = regex("f__[:punct:]?[:alpha:]*[e]"))
+tt <- ifelse(substr(tt, 4, 4) == ".", substr(tt, 5, 100), substr(tt, 4, 100))
+taxa_name <- data.frame(k = substr(str_extract(colnames(relaTaxa06), pattern = regex("k__[:alpha:]*")), 4, 1000),
+                        p = substr(str_extract(colnames(relaTaxa06), pattern = regex("p__[:alpha:]*")), 4, 1000),
+                        c = substr(str_extract(colnames(relaTaxa06), pattern = regex("c__[:alpha:]*")), 4, 1000),
+                        o = substr(str_extract(colnames(relaTaxa06), pattern = regex("o__[:alpha:]*")), 4, 1000),
+                        f = tt,
+                        g = substr(str_extract(colnames(relaTaxa06), pattern = regex("g__[:alpha:]*")), 4, 1000))
+taxa_name[taxa_name == ""] <- NA
+
+plot_ticks <- ifelse(!is.na(taxa_name[, "g"]), taxa_name[, "g"], 
+                     ifelse(!is.na(taxa_name[, "f"]), taxa_name[, "f"], taxa_index))
+plot_tick <- c(taxa_index[1], 
+               (ifelse(plot_ticks == lag(plot_ticks), taxa_index, plot_ticks))[-1])
+colnames(relaTaxa06) <- plot_tick
+
+pheatmap(relaTaxa06[which(clusBinder[, 1] == 5), ], 
+         display_numbers = FALSE, color = colorRampPalette(c('white','maroon3'))(100), 
+         cluster_rows = FALSE, cluster_cols = FALSE,
+         show_rownames = FALSE, show_colnames = TRUE,
+         main = "Cluster 5: Proportion of the Taxa count")
+
+##### 8 Months
+relaTaxa08 <- dat08[, -(1:5)]/rowSums(dat08[, -(1:5)])
+colnames(relaTaxa08) <- plot_tick
+pheatmap(relaTaxa08[which(clusBinder[, 2] == 4), ], 
+         display_numbers = FALSE, color = colorRampPalette(c('white','maroon3'))(100), 
+         cluster_rows = FALSE, cluster_cols = FALSE,
+         show_rownames = FALSE, show_colnames = TRUE,
+         main = "Cluster 4: Proportion of the Taxa count")
+
+##### 12 Months
+relaTaxa12 <- dat12[, -(1:5)]/rowSums(dat12[, -(1:5)])
+colnames(relaTaxa12) <- plot_tick
+pheatmap(relaTaxa12[which(clusBinder[, 3] == 4), ], 
+         display_numbers = FALSE, color = colorRampPalette(c('white','maroon3'))(100), 
+         cluster_rows = FALSE, cluster_cols = FALSE,
+         show_rownames = FALSE, show_colnames = TRUE,
+         main = "Cluster 4: Proportion of the Taxa count")
+
+### Demographic: Nationality
+table(clus = clusBinder[, 1], dat06[, 1])
+table(clus = clusBinder[, 2], dat08[, 1])
+table(clus = clusBinder[, 3], dat12[, 1])
+
+### Demographic: Gender
+table(clus = clusBinder[, 1], dat06[, 3])
+table(clus = clusBinder[, 2], dat08[, 3])
+table(clus = clusBinder[, 3], dat12[, 3])
+
+### Demographic: Rice Bran
+dat06[, 5] <- factor(dat06[, 5], labels = c("Control", "Rice Bran", "Rice Bran"))
+dat08[, 5] <- factor(dat08[, 5], labels = c("Control", "Rice Bran", "Rice Bran"))
+table(clus = clusBinder[, 1], dat06[, 5])
+table(clus = clusBinder[, 2], dat08[, 5])
+table(clus = clusBinder[, 3], dat12[, 5])
+
+### Demographic: Nationality x Gender
+table(dat06[, 1], dat06[, 3], clus = clusBinder[, 1])
+table(dat08[, 1], dat08[, 3], clus = clusBinder[, 2])
+table(dat12[, 1], dat12[, 3], clus = clusBinder[, 3])
+
+### Demographic: Nationality x Rice Bran
+table(dat06[, 1], dat06[, 5], clus = clusBinder[, 1])
+table(dat08[, 1], dat08[, 5], clus = clusBinder[, 2])
+table(dat12[, 1], dat12[, 5], clus = clusBinder[, 3])
+
+### Visualzation ---------------------------------------------------------------
+#### Line plot: Change of the cluster
+c6 <- data.frame(obs = 1:90, clus6 = factor(clusBinder[, 1])) %>%
+  arrange(clus6) %>% 
+  mutate(index6 = 90:1)
+c8 <- data.frame(obs = 1:90, clus8 = factor(clusBinder[, 2])) %>%
+  arrange(clus8) %>% 
+  mutate(index8 = 90:1)
+c12 <- data.frame(obs = 1:90, clus12 = factor(clusBinder[, 3])) %>%
+  arrange(clus12) %>% 
+  mutate(index12 = 90:1)
+
+obsChange <- NULL
+for(i in 1:90){
+  
+  if(c6[which(c6$obs == i), "clus6"] != c8[which(c8$obs == i), "clus8"]){
+    obsChange <- rbind(obsChange,
+                       c(c8[which(c8$obs == i), "clus8"], c6[which(c6$obs == i), "index6"], c8[which(c8$obs == i), "index8"]))
+  }
+  
+}
+
+obsChange2 <- NULL
+for(i in 1:90){
+  
+  if(c8[which(c8$obs == i), "clus8"] != c12[which(c12$obs == i), "clus12"]){
+    obsChange2 <- rbind(obsChange2,
+                        c(c12[which(c12$obs == i), "clus12"], c8[which(c8$obs == i), "index8"], c12[which(c12$obs == i), "index12"]))
+  }
+  
+}
+
+ggplot() +
+  geom_text(data = c6, aes(x = rep(1, 90), y = index6, label = obs, color = clus6), size = 2.5) +
+  geom_text(data = c8, aes(x = rep(2, 90), y = index8, label = obs, color = clus8), size = 2.5) +
+  geom_text(data = c12, aes(x = rep(3, 90), y = index12, label = obs, color = clus12), size = 2.5) +
+  geom_segment(aes(x = rep(1.01, 77), y = obsChange[, 2], 
+                   xend = rep(1.99, 77), yend = obsChange[, 3],
+                   color = factor(obsChange[, 1])), alpha = 0.4, linetype = "dashed") +
+  geom_segment(aes(x = rep(2.01, 62), y = obsChange2[, 2], 
+                   xend = rep(2.99, 62), yend = obsChange2[, 3],
+                   color = factor(obsChange2[, 1])), alpha = 0.4, linetype = "dashed") +
+  theme_minimal() + 
+  theme(legend.position = "none", axis.ticks = element_blank(), axis.text.y = element_blank()) + 
+  scale_x_continuous(breaks = c(1, 2, 3), labels = c("6 months", "8 months", "12 months")) +
+  labs(x = "Timestamps", y = "", title = "The change of cluster behavior for each infants across three timestamps")
+
 
 ### Venn Diagram
 VennData <- vector("list", 13)
