@@ -24,12 +24,12 @@ library(ggcorrplot)
 library(pheatmap)
 library(gridExtra)
 
-sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
-# sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
+# sourceCpp("/Users/kevinkvp/Desktop/Github Repo/ClusterZI/src/clusterZI.cpp")
+sourceCpp("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/src/clusterZI.cpp")
 
 ## Import the data -------------------------------------------------------------
-path <- "/Users/kevinkvp/Desktop/Annika/"
-# path <- "/Users/kevin-imac/Desktop/Annika/"
+# path <- "/Users/kevinkvp/Desktop/Annika/"
+path <- "/Users/kevin-imac/Desktop/Annika/"
 
 ### 6 and 8 Months
 ni68 <- read.csv(paste0(path, "Nicaragua_6mo_8mo_genus.csv"))
@@ -119,70 +119,364 @@ saveRDS(annikaZZ, paste0(path, "annikaZZ.RData"))
 ### Analyze --------------------------------------------------------------------
 annikaZZ <- readRDS(paste0(path, "annikaZZ.RData"))
 c(annikaZZ[[1]]$time, annikaZZ[[2]]$time, annikaZZ[[3]]$time)
+clusBinder <- sapply(1:3, 
+                     function(x){as.numeric(salso(annikaZZ[[x]]$result$ci_result[-(1:500), ],
+                                                  loss = "binder"))})
+table(clusBinder[, 1])
+table(clusBinder[, 2])
+table(clusBinder[, 3])
+
+obsID <- c(str_extract(dat06[1:45, 2], "[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}"), 
+           str_extract(dat06[-(1:45), 2], "^[:digit:]+"))
 
 ### Stacked Bar chart: Relative Taxa
-#### First, detect the outlier
+#### First, define the bacteria that will show in the plot, while the rest will represents as Other ...
+
 datList <- list(dat06, dat08, dat12)
 
 registerDoParallel(5)
-foreach(t = 1:3) %dopar% {
+impTaxa <- foreach(t = 1:3) %dopar% {
   
   prop <- as.numeric(colMeans(datList[[t]][, -(1:5)]/rowSums(datList[[t]][, -(1:5)])))
   which(prop %in% boxplot.stats(prop)$out)
   
 }
 stopImplicitCluster()
+impTaxa <- union(impTaxa[[1]], union(impTaxa[[2]], impTaxa[[3]]))
 
+#### str_match_all(colnames(dat06[-(1:5)]), "[:alpha:]{1}\\_{2}\\.?[:alpha:]+")
+#### Go for the phylum and genus
+taxaName <- cbind(str_match(colnames(dat06[-(1:5)]), "p\\_{2}\\.?[:alpha:]+") %>%
+  str_match("[:upper:]{1}[:alpha:]+"), 
+  str_match(colnames(dat06[-(1:5)]), "g\\_{2}\\.?[:alpha:]+") %>%
+  str_match("[:upper:]{1}[:alpha:]+"))
 
+impTaxaInd <- rep(FALSE, 38)
+impTaxaInd[impTaxa] <- TRUE
 
+#### Get the column name, group the other taxa
+showName <- data.frame(taxaName, impTaxaInd) %>%
+  replace_na(list(X1 = "Bacteria", X2 = "Other")) %>%
+  mutate(showName = ifelse(impTaxaInd, X2, 
+                           ifelse(X1 == "Bacteria", "Others", paste0("Other ", X1)))) %>%
+  .$showName
 
-
-as.numeric(colMeans(dat06[, -(1:5)]/rowSums(dat06[, -(1:5)]))) %>% boxplot.stats() %>% .$out
-as.numeric(colMeans(dat08[, -(1:5)]/rowSums(dat08[, -(1:5)]))) %>% boxplot.stats() %>% .$out
-as.numeric(colMeans(dat12[, -(1:5)]/rowSums(dat12[, -(1:5)]))) %>% boxplot.stats() %>% .$out
-
-
-taxon <- taxa_name[, c("p", "g")]
-phylums <- unique(taxon[, "p"])[-1]
-taxon$p[! (taxon$p %in% phylums)] <- "Others"
-taxon$g[! (taxon$p %in% phylums)] <- "Others"
-
-taxon$g[taxon$p == phylums[1] & taxon$g != "Bifidobacterium"] <- "Other Bifidobacterium"
-taxon$g[taxon$p == phylums[1] & is.na(taxon$g)] <- "Other Bifidobacterium"
-
-taxon$g[taxon$p == phylums[2] & !(taxon$g %in% c("Bacteroides", "Prevotella"))] <- "Other Bacteroidetes"
-taxon$g[taxon$p == phylums[2] & is.na(taxon$g)] <- "Other Bacteroidetes"
-
-taxon$g[taxon$p == phylums[3] & !(taxon$g %in% taxon$g[c(16, 30, 36, 38)])] <- "Other Firmicutes"
-taxon$g[27] <- "Ruminococcus"
-taxon$g[taxon$p == phylums[3] & is.na(taxon$g)] <- "Other Firmicutes"
-
-obsID <- c(str_extract(dat06[1:45, 2], "^[:alpha:]+\\.[:alpha:]+\\.[:digit:]+"),
-           str_extract(dat06[-(1:45), 2], "^[:digit:]{7}"))
-
+#### Calculate the relative Taxa count
+##### 6-Month Data
 registerDoParallel(5)
-dat06Plot <- foreach(t = 1:90, .combine = "rbind") %dopar% {
+dat06rela <- foreach(t = 1:90, .combine = "rbind") %dopar% {
   
-  data.frame(taxon, ID = rep(obsID[t], 38), 
+  data.frame(showName, ID = rep(obsID[t], 38), 
+             clus = rep(paste0("Cluster ", clusBinder[t, 1]), 38),
              taxa = as.numeric(dat06[t, -(1:5)])) %>%
-    group_by(ID, p, g) %>%
-    summarise(sum_taxa = sum(taxa)) %>%
+    group_by(ID, clus, showName) %>%
+    summarise(taxa = sum(taxa)) %>%
     ungroup() %>%
-    mutate(prop_taxa = sum_taxa/sum(sum_taxa)) %>%
-    dplyr::select(-sum_taxa)
+    mutate(relaTaxa = taxa/sum(taxa)) %>%
+    dplyr::select(-taxa)
   
 }
 stopImplicitCluster()
+dat06rela$showName <- factor(dat06rela$showName,
+                             levels = c("Bifidobacterium", "Other Actinobacteria",
+                                        "Bacteroides", "Prevotella", "Other Bacteroidetes",
+                                        "Faecalibacterium", "Megasphaera", "Ruminococcus", 
+                                        "Streptococcus", "Veillonella", "Other Firmicutes", 
+                                        "Others"))
 
-dat06Plot$g <- factor(dat06Plot$g,
-                      levels = c("Bifidobacterium", "Other Bifidobacterium",
-                                 "Bacteroides", "Other Bacteroidetes", "Prevotella",
-                                 "Faecalibacterium", "Megasphaera", "Other Firmicutes",
-                                 "Ruminococcus", "Streptococcus", "Veillonella", 
-                                 "Others"))
-colours <- c("lightsalmon", "papayawhip", "lightskyblue", "slategray1", "#3C6D00",
-             "darkseagreen4", "olivedrab", "darkseagreen1", "palegreen3", "seagreen3", 
-             "yellowgreen", "azure2")
+colours <- c("#A4C639", "#BAC394", "#DDA661", "#BD8B46", "#FFD197",
+             "#BC6D62", "#DE6A5D", "#DE998B", "#FF6558", "#FFC6B8", 
+             "#FFE4DA", "#E5E5E5")
+
+dat06rela %>%
+  as.data.frame() %>%
+  ggplot(aes(x = ID, y = relaTaxa, fill = factor(showName))) +
+  geom_bar(position = "stack", stat="identity") +
+  scale_fill_manual("", values = colours) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5), 
+        legend.position = "bottom") +  # Vertical x-axis tick labels
+  guides(fill = guide_legend(nrow=2, byrow=TRUE)) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(y = "Relative abundance", title = "6-Month Infants", x = "Sample") +
+  facet_grid(~clus, scales = "free_x")
+
+##### 8-Month Data
+registerDoParallel(5)
+dat08rela <- foreach(t = 1:90, .combine = "rbind") %dopar% {
+  
+  data.frame(showName, ID = rep(obsID[t], 38), 
+             clus = rep(paste0("Cluster ", clusBinder[t, 2]), 38),
+             taxa = as.numeric(dat08[t, -(1:5)])) %>%
+    group_by(ID, clus, showName) %>%
+    summarise(taxa = sum(taxa)) %>%
+    ungroup() %>%
+    mutate(relaTaxa = taxa/sum(taxa)) %>%
+    dplyr::select(-taxa)
+  
+}
+stopImplicitCluster()
+dat08rela$showName <- factor(dat08rela$showName,
+                             levels = c("Bifidobacterium", "Other Actinobacteria",
+                                        "Bacteroides", "Prevotella", "Other Bacteroidetes",
+                                        "Faecalibacterium", "Megasphaera", "Ruminococcus", 
+                                        "Streptococcus", "Veillonella", "Other Firmicutes", 
+                                        "Others"))
+
+dat08rela %>%
+  as.data.frame() %>%
+  ggplot(aes(x = ID, y = relaTaxa, fill = factor(showName))) +
+  geom_bar(position = "stack", stat="identity") +
+  scale_fill_manual("", values = colours) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5), 
+        legend.position = "bottom") +  # Vertical x-axis tick labels
+  guides(fill = guide_legend(nrow=2, byrow=TRUE)) +  # Vertical x-axis tick labels
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(y = "Relative abundance", title = "8-Month Infants", x = "Sample") +
+  facet_grid(~clus, scales = "free_x")
+
+##### 12-Month Data
+registerDoParallel(5)
+dat12rela <- foreach(t = 1:90, .combine = "rbind") %dopar% {
+  
+  data.frame(showName, ID = rep(obsID[t], 38), 
+             clus = rep(paste0("Cluster ", clusBinder[t, 3]), 38),
+             taxa = as.numeric(dat12[t, -(1:5)])) %>%
+    group_by(ID, clus, showName) %>%
+    summarise(taxa = sum(taxa)) %>%
+    ungroup() %>%
+    mutate(relaTaxa = taxa/sum(taxa)) %>%
+    dplyr::select(-taxa)
+  
+}
+stopImplicitCluster()
+dat12rela$showName <- factor(dat12rela$showName,
+                             levels = c("Bifidobacterium", "Other Actinobacteria",
+                                        "Bacteroides", "Prevotella", "Other Bacteroidetes",
+                                        "Faecalibacterium", "Megasphaera", "Ruminococcus", 
+                                        "Streptococcus", "Veillonella", "Other Firmicutes", 
+                                        "Others"))
+
+dat12rela %>%
+  as.data.frame() %>%
+  ggplot(aes(x = ID, y = relaTaxa, fill = factor(showName))) +
+  geom_bar(position = "stack", stat="identity") +
+  scale_fill_manual("", values = colours) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5), 
+        legend.position = "bottom") +  # Vertical x-axis tick labels
+  guides(fill = guide_legend(nrow=2, byrow=TRUE)) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(y = "Relative abundance", title = "12-Month Infants", x = "Sample") +
+  facet_grid(~clus, scales = "free_x")
+
+
+dat06rela %>%
+  dplyr::select(-clus) %>%
+  pivot_wider(names_from = showName, values_from = relaTaxa) %>%
+  mutate(clus = clusBinder[, 1]) %>%
+  group_by(clus) %>%
+  summarise(meanBifidobacterium = mean(Bifidobacterium),
+            meanBacteroides = mean(Bacteroides),
+            meanPrevotella = mean(Prevotella))
+
+dat08rela %>%
+  dplyr::select(-clus) %>%
+  pivot_wider(names_from = showName, values_from = relaTaxa) %>%
+  mutate(clus = clusBinder[, 2]) %>%
+  group_by(clus) %>%
+  summarise(meanBifidobacterium = mean(Bifidobacterium),
+            meanBacteroides = mean(Bacteroides),
+            meanPrevotella = mean(Prevotella))
+
+dat12rela %>%
+  dplyr::select(-clus) %>%
+  pivot_wider(names_from = showName, values_from = relaTaxa) %>%
+  mutate(clus = clusBinder[, 3]) %>%
+  group_by(clus) %>%
+  summarise(meanBifidobacterium = mean(Bifidobacterium),
+            meanBacteroides = mean(Bacteroides),
+            meanPrevotella = mean(Prevotella))
+
+#### Reindex by using the mean Bifidobacterium
+clusBinderN <- matrix(NA, nrow = 90, ncol = 3)
+##### 6-Month
+clusBinderN[which(clusBinder[, 1] == 4), 1] <- 1
+clusBinderN[which(clusBinder[, 1] == 3), 1] <- 2
+clusBinderN[which(clusBinder[, 1] == 5), 1] <- 3
+clusBinderN[which(clusBinder[, 1] == 1), 1] <- 4
+clusBinderN[which(clusBinder[, 1] == 2), 1] <- 5
+##### 8-Month
+clusBinderN[which(clusBinder[, 2] == 2), 2] <- 1
+clusBinderN[which(clusBinder[, 2] == 4), 2] <- 2
+clusBinderN[which(clusBinder[, 2] == 3), 2] <- 3
+clusBinderN[which(clusBinder[, 2] == 1), 2] <- 4
+##### 12-Month
+clusBinderN[which(clusBinder[, 3] == 1), 3] <- 1
+clusBinderN[which(clusBinder[, 3] == 2), 3] <- 2
+clusBinderN[which(clusBinder[, 3] == 3), 3] <- 3
+clusBinderN[which(clusBinder[, 3] == 4), 3] <- 4
+
+#### Calculate the relative Taxa count with adjusted cluster index
+##### 6-Month Data
+registerDoParallel(5)
+dat06Nrela <- foreach(t = 1:90, .combine = "rbind") %dopar% {
+  
+  data.frame(showName, ID = rep(obsID[t], 38), 
+             clus = rep(paste0("Cluster ", clusBinderN[t, 1]), 38),
+             taxa = as.numeric(dat06[t, -(1:5)])) %>%
+    group_by(ID, clus, showName) %>%
+    summarise(taxa = sum(taxa)) %>%
+    ungroup() %>%
+    mutate(relaTaxa = taxa/sum(taxa)) %>%
+    dplyr::select(-taxa)
+  
+}
+stopImplicitCluster()
+dat06Nrela$showName <- factor(dat06Nrela$showName,
+                              levels = c("Bifidobacterium", "Other Actinobacteria",
+                                        "Bacteroides", "Prevotella", "Other Bacteroidetes",
+                                        "Faecalibacterium", "Megasphaera", "Ruminococcus", 
+                                        "Streptococcus", "Veillonella", "Other Firmicutes", 
+                                        "Others"))
+
+colours <- c("#A4C639", "#BAC394", "#DDA661", "#BD8B46", "#FFD197",
+             "#BC6D62", "#DE6A5D", "#DE998B", "#FF6558", "#FFC6B8", 
+             "#FFE4DA", "#E5E5E5")
+
+dat06Nrela %>%
+  as.data.frame() %>%
+  ggplot(aes(x = ID, y = relaTaxa, fill = factor(showName))) +
+  geom_bar(position = "stack", stat="identity") +
+  scale_fill_manual("", values = colours) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5), 
+        legend.position = "bottom") +  # Vertical x-axis tick labels
+  guides(fill = guide_legend(nrow=2, byrow=TRUE)) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(y = "Relative abundance", title = "6-Month Infants", x = "Sample") +
+  facet_grid(~clus, scales = "free_x")
+
+##### 8-Month Data
+registerDoParallel(5)
+dat08Nrela <- foreach(t = 1:90, .combine = "rbind") %dopar% {
+  
+  data.frame(showName, ID = rep(obsID[t], 38), 
+             clus = rep(paste0("Cluster ", clusBinderN[t, 2]), 38),
+             taxa = as.numeric(dat08[t, -(1:5)])) %>%
+    group_by(ID, clus, showName) %>%
+    summarise(taxa = sum(taxa)) %>%
+    ungroup() %>%
+    mutate(relaTaxa = taxa/sum(taxa)) %>%
+    dplyr::select(-taxa)
+  
+}
+stopImplicitCluster()
+dat08Nrela$showName <- factor(dat08Nrela$showName,
+                             levels = c("Bifidobacterium", "Other Actinobacteria",
+                                        "Bacteroides", "Prevotella", "Other Bacteroidetes",
+                                        "Faecalibacterium", "Megasphaera", "Ruminococcus", 
+                                        "Streptococcus", "Veillonella", "Other Firmicutes", 
+                                        "Others"))
+
+dat08Nrela %>%
+  as.data.frame() %>%
+  ggplot(aes(x = ID, y = relaTaxa, fill = factor(showName))) +
+  geom_bar(position = "stack", stat="identity") +
+  scale_fill_manual("", values = colours) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5), 
+        legend.position = "bottom") +  # Vertical x-axis tick labels
+  guides(fill = guide_legend(nrow=2, byrow=TRUE)) +  # Vertical x-axis tick labels
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(y = "Relative abundance", title = "8-Month Infants", x = "Sample") +
+  facet_grid(~clus, scales = "free_x")
+
+##### 12-Month Data
+registerDoParallel(5)
+dat12Nrela <- foreach(t = 1:90, .combine = "rbind") %dopar% {
+  
+  data.frame(showName, ID = rep(obsID[t], 38), 
+             clus = rep(paste0("Cluster ", clusBinderN[t, 3]), 38),
+             taxa = as.numeric(dat12[t, -(1:5)])) %>%
+    group_by(ID, clus, showName) %>%
+    summarise(taxa = sum(taxa)) %>%
+    ungroup() %>%
+    mutate(relaTaxa = taxa/sum(taxa)) %>%
+    dplyr::select(-taxa)
+  
+}
+stopImplicitCluster()
+dat12Nrela$showName <- factor(dat12Nrela$showName,
+                             levels = c("Bifidobacterium", "Other Actinobacteria",
+                                        "Bacteroides", "Prevotella", "Other Bacteroidetes",
+                                        "Faecalibacterium", "Megasphaera", "Ruminococcus", 
+                                        "Streptococcus", "Veillonella", "Other Firmicutes", 
+                                        "Others"))
+
+dat12Nrela %>%
+  as.data.frame() %>%
+  ggplot(aes(x = ID, y = relaTaxa, fill = factor(showName))) +
+  geom_bar(position = "stack", stat="identity") +
+  scale_fill_manual("", values = colours) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5), 
+        legend.position = "bottom") +  # Vertical x-axis tick labels
+  guides(fill = guide_legend(nrow=2, byrow=TRUE)) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(y = "Relative abundance", title = "12-Month Infants", x = "Sample") +
+  facet_grid(~clus, scales = "free_x")
+
+#### Line Plot
+c06 <- data.frame(obs = 1:90, clus6 = factor(clusBinderN[, 1])) %>%
+  arrange(clus6) %>% 
+  mutate(index6 = 90:1)
+c08 <- data.frame(obs = 1:90, clus8 = factor(clusBinderN[, 2])) %>%
+  arrange(clus8) %>% 
+  mutate(index8 = 90:1)
+c12 <- data.frame(obs = 1:90, clus12 = factor(clusBinderN[, 3])) %>%
+  arrange(clus12) %>% 
+  mutate(index12 = 90:1)
+
+obsChange <- NULL
+for(i in 1:90){
+  
+  if(c06[which(c06$obs == i), "clus6"] != c08[which(c08$obs == i), "clus8"]){
+    obsChange <- rbind(obsChange,
+                       c(c08[which(c08$obs == i), "clus8"], c06[which(c06$obs == i), "index6"], c08[which(c08$obs == i), "index8"]))
+  }
+  
+}
+
+obsChange2 <- NULL
+for(i in 1:90){
+  
+  if(c08[which(c08$obs == i), "clus8"] != c12[which(c12$obs == i), "clus12"]){
+    obsChange2 <- rbind(obsChange2,
+                        c(c12[which(c12$obs == i), "clus12"], c08[which(c08$obs == i), "index8"], c12[which(c12$obs == i), "index12"]))
+  }
+  
+}
+
+ggplot() +
+  geom_text(data = c06, aes(x = rep(1, 90), y = index6, label = obs, color = clus6), size = 2.5) +
+  geom_text(data = c08, aes(x = rep(2, 90), y = index8, label = obs, color = clus8), size = 2.5) +
+  geom_text(data = c12, aes(x = rep(3, 90), y = index12, label = obs, color = clus12), size = 2.5) +
+  geom_segment(aes(x = rep(1.01, 55), y = obsChange[, 2], 
+                   xend = rep(1.99, 55), yend = obsChange[, 3],
+                   color = factor(obsChange[, 1])), alpha = 0.4, linetype = "dashed") +
+  geom_segment(aes(x = rep(2.01, 71), y = obsChange2[, 2], 
+                   xend = rep(2.99, 71), yend = obsChange2[, 3],
+                   color = factor(obsChange2[, 1])), alpha = 0.4, linetype = "dashed") +
+  theme_minimal() + 
+  theme(legend.position = "none", axis.ticks = element_blank(), axis.text.y = element_blank()) + 
+  scale_x_continuous(breaks = c(1, 2, 3), labels = c("6 months", "8 months", "12 months")) +
+  labs(x = "Timestamps", y = "", title = "The change of cluster behavior for each infants across three timestamps")
+
+### ----------------------------------------------------------------------------
+
+
 
 registerDoParallel(5)
 dat06ggPlot <- foreach(t = 1:5) %dopar% {
@@ -293,9 +587,6 @@ sapply(1:3,
 
 clusVI <- sapply(1:3, 
                  function(x){as.numeric(salso(annikaZZ[[x]]$result$ci_result[-(1:500), ]))})
-clusBinder <- sapply(1:3, 
-                     function(x){as.numeric(salso(annikaZZ[[x]]$result$ci_result[-(1:500), ],
-                                                  loss = "binder"))})
 
 mclustcomp(clusVI[, 1], clusBinder[, 1]); table(VI = clusVI[, 1], Binder = clusBinder[, 1])
 mclustcomp(clusVI[, 2], clusBinder[, 2]); table(VI = clusVI[, 2], Binder = clusBinder[, 2])
