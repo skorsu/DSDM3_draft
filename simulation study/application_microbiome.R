@@ -303,18 +303,18 @@ dat12rela %>%
 clusBinderN <- matrix(NA, nrow = 90, ncol = 3)
 ##### 6-Month
 clusBinderN[which(clusBinder[, 1] == 4), 1] <- 1
-clusBinderN[which(clusBinder[, 1] == 3), 1] <- 2
-clusBinderN[which(clusBinder[, 1] == 5), 1] <- 3
-clusBinderN[which(clusBinder[, 1] == 1), 1] <- 4
-clusBinderN[which(clusBinder[, 1] == 2), 1] <- 5
+clusBinderN[which(clusBinder[, 1] == 2), 1] <- 2
+clusBinderN[which(clusBinder[, 1] == 1), 1] <- 3
+clusBinderN[which(clusBinder[, 1] == 3), 1] <- 4
+clusBinderN[which(clusBinder[, 1] == 5), 1] <- 5
 ##### 8-Month
 clusBinderN[which(clusBinder[, 2] == 2), 2] <- 1
-clusBinderN[which(clusBinder[, 2] == 4), 2] <- 2
+clusBinderN[which(clusBinder[, 2] == 1), 2] <- 2
 clusBinderN[which(clusBinder[, 2] == 3), 2] <- 3
-clusBinderN[which(clusBinder[, 2] == 1), 2] <- 4
+clusBinderN[which(clusBinder[, 2] == 4), 2] <- 4
 ##### 12-Month
-clusBinderN[which(clusBinder[, 3] == 1), 3] <- 1
-clusBinderN[which(clusBinder[, 3] == 2), 3] <- 2
+clusBinderN[which(clusBinder[, 3] == 2), 3] <- 1
+clusBinderN[which(clusBinder[, 3] == 1), 3] <- 2
 clusBinderN[which(clusBinder[, 3] == 3), 3] <- 3
 clusBinderN[which(clusBinder[, 3] == 4), 3] <- 4
 
@@ -459,16 +459,18 @@ for(i in 1:90){
   
 }
 
+dim(obsChange2)
+
 ggplot() +
   geom_text(data = c06, aes(x = rep(1, 90), y = index6, label = obs, color = clus6), size = 2.5) +
   geom_text(data = c08, aes(x = rep(2, 90), y = index8, label = obs, color = clus8), size = 2.5) +
   geom_text(data = c12, aes(x = rep(3, 90), y = index12, label = obs, color = clus12), size = 2.5) +
-  geom_segment(aes(x = rep(1.01, 55), y = obsChange[, 2], 
-                   xend = rep(1.99, 55), yend = obsChange[, 3],
+  geom_segment(aes(x = rep(1.01, 47), y = obsChange[, 2], 
+                   xend = rep(1.99, 47), yend = obsChange[, 3],
                    color = factor(obsChange[, 1])), alpha = 0.4, linetype = "dashed") +
-  geom_segment(aes(x = rep(2.01, 71), y = obsChange2[, 2], 
-                   xend = rep(2.99, 71), yend = obsChange2[, 3],
-                   color = factor(obsChange2[, 1])), alpha = 0.4, linetype = "dashed") +
+  geom_segment(aes(x = rep(2.01, 62), y = obsChange2[, 2], 
+                  xend = rep(2.99, 62), yend = obsChange2[, 3],
+                  color = factor(obsChange2[, 1])), alpha = 0.4, linetype = "dashed") +
   theme_minimal() + 
   theme(legend.position = "none", axis.ticks = element_blank(), axis.text.y = element_blank()) + 
   scale_x_continuous(breaks = c(1, 2, 3), labels = c("6 months", "8 months", "12 months")) +
