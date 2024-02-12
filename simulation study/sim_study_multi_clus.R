@@ -232,83 +232,30 @@ difftime(Sys.time(), start_ova)
 saveRDS(resultDsD, paste0(save_path, case_name, "_DsD.RData"))
 
 ### Begin the analysis ---------------------------------------------------------
-
-
-
-
-
-
-
-sapply(1:nData, function(x){resultZZ[[x]]$time}) %>% meanSD()
-
-sapply(1:nData, 
-       function(x){apply(resultZZ[[x]]$result$ci_result, 1, 
-                         function(y){length(unique(y))})}) %>%
-  matplot(type = "l", ylim = c(1, 10), main = "ZIDM-ZIDM",
-          xlab = "Iteration (Thinning)", ylab = "Active Clusters")
-
-sapply(1:nData, 
-       function(x){apply(resultZZ[[x]]$result$ci_result, 1, 
-                         function(y){length(unique(y))})}) %>%
-  colMeans() %>% meanSD()
-
-actual_clus <- sapply(1:nData, function(x){dat[[x]]$clus})
-
-viZZ <- sapply(1:nData,
-               function(x){as.numeric(salso(resultZZ[[x]]$result$ci_result[-(1:500), ]))})
-apply(viZZ, 2, function(x){length(unique(x))}) %>% meanSD()
-sapply(1:nData, 
-       function(x){mclustcomp(viZZ[, x], actual_clus[, x])[1, 2]}) %>% meanSD()
-
-bdZZ <- sapply(1:nData,
-               function(x){as.numeric(salso(resultZZ[[x]]$result$ci_result[-(1:500), ], loss = binder()))})
-apply(bdZZ, 2, function(x){length(unique(x))}) %>% meanSD()
-sapply(1:nData, 
-       function(x){mclustcomp(bdZZ[, x], actual_clus[, x])[1, 2]}) %>% meanSD()
-
-##: ----------------------------------------------------------------------------
-
-
-
-
-
-
-#### (If needed) Load the result -----------------------------------------------
-# save_path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/simulation study/result_1224/"
-# case_name <- "easiest_case"
-
-save_path <- "/Users/kevin-imac/Desktop/result_cluster/"
-case_name <- "more_difficult_case"
 nData <- 20
-
 dat <- readRDS(paste0(save_path, case_name, "_simDat.RData")) ## Data
-
 resultZZ <- readRDS(paste0(save_path, case_name, "_ZZ.RData")) ## ZIDM-ZIDM
 resultDZ <- readRDS(paste0(save_path, case_name, "_DZ.RData")) ## DM-ZIDM
 resultDD <- readRDS(paste0(save_path, case_name, "_DD.RData")) ## DM-DM
 resultDsD <- readRDS(paste0(save_path, case_name, "_DsD.RData")) ## DM-sDM
-resultDP <- readRDS(paste0(save_path, case_name, "_DP_new.RData")) ## DP
-resultMFM <- readRDS(paste0(save_path, case_name, "_MFM_new.RData")) ## MFM
+actual_clus <- sapply(1:nData, function(x){dat[[x]]$clus})
 
-
-#### Analyze: Computational Time -----------------------------------------------
-
-## resultDZ <- lapply(1:nData, function(x){resultDZ[[x]][[9]]})
-test <- list(resultZZ, resultDZ, resultDsD, resultDP, resultMFM)
+### Computational Time
+test <- list(resultZZ, resultDZ, resultDsD)
 length(test)
 sapply(1:length(test), 
        function(x){sapply(1:nData, function(y){test[[x]][[y]]$time})}) %>%
-  `colnames<-` (c("ZIDM-ZIDM", "DM-ZIDM", "DM-sDM", "DP", "MFM")) %>%
+  `colnames<-` (c("ZIDM-ZIDM", "DM-ZIDM", "DM-sDM")) %>%
   apply(2, meanSD)
 
-### DM-DM
+### Computational Time: DM-DM
 sapply(1:nData, 
        function(x){sapply(1:9, function(y){resultDD[[x]][[y]]$time})}) %>%
   colSums() %>%
   meanSD()
 
-#### Number of active cluster via MCMC -----------------------------------------
-##### ZIDM-ZIDM
+### Number of active cluster via MCMC
+#### ZIDM-ZIDM
 sapply(1:nData, 
        function(x){apply(resultZZ[[x]]$result$ci_result, 1, function(y){length(unique(y))})}) %>%
   colMeans() %>%
@@ -316,7 +263,7 @@ sapply(1:nData,
 
 sapply(1:nData, 
        function(x){apply(resultZZ[[x]]$result$ci_result, 1, function(y){length(unique(y))})}) %>%
-  matplot(type = "l", ylim = c(1, 10), main = "ZIDM-ZIDM: Difficult Level = 3",
+  matplot(type = "l", ylim = c(1, 10), main = "ZIDM-ZIDM: Actual Cluster = 5",
           xlab = "Iteration (Thinning)", ylab = "Active Clusters")
 
 ##### DM-ZIDM
@@ -327,7 +274,7 @@ sapply(1:nData,
 
 sapply(1:nData, 
        function(x){apply(resultDZ[[x]]$result$ci_result, 1, function(y){length(unique(y))})}) %>%
-  matplot(type = "l", ylim = c(1, 10), main = "DM-ZIDM: Difficult Level = 3",
+  matplot(type = "l", ylim = c(1, 10), main = "DM-ZIDM: Actual Cluster = 5",
           xlab = "Iteration (Thinning)", ylab = "Active Clusters")
 
 ##### DM-sDM
@@ -338,50 +285,16 @@ sapply(1:nData,
 
 sapply(1:nData, 
        function(x){apply(resultDsD[[x]]$result, 1, function(y){length(unique(y))})}) %>%
-  matplot(type = "l", ylim = c(1, 10), main = "DM-sDM: Difficult Level = 3",
+  matplot(type = "l", ylim = c(1, 10), main = "DM-sDM: Actual Cluster = 5",
           xlab = "Iteration (Thinning)", ylab = "Active Clusters")
 
-##### DP
-sapply(1:nData, 
-       function(x){apply(resultDP[[x]]$result, 1, function(y){max(y) - min(y) + 1})}) %>%
-  colMeans() %>%
-  meanSD()
-
-sapply(1:nData, 
-       function(x){apply(resultDP[[x]]$result, 1, function(y){max(y) - min(y) + 1})}) %>%
-  matplot(type = "l", ylim = c(1, 50), main = "DP: Difficult Level = 3 (with 100,000 iterations)",
-          xlab = "Iteration (Thinning)", ylab = "Active Clusters")
-
-##### MFM
-sapply(1:nData, 
-       function(x){apply(resultMFM[[x]]$result, 1, function(y){max(y) - min(y) + 1})}) %>%
-  colMeans() %>%
-  meanSD()
-
-sapply(1:nData, 
-       function(x){apply(resultMFM[[x]]$result, 1, function(y){max(y) - min(y) + 1})}) %>%
-  matplot(type = "l", ylim = c(1, 50), main = "MFM: Difficult Level = 3 (with 100,000 iterations)",
-          xlab = "Iteration (Thinning)", ylab = "Active Clusters")
-
-
-#### Loss: VI ------------------------------------------------------------------
-actual_clus <- sapply(1:nData, function(x){dat$clus[[x]]})
-
-##### ZIDM-ZIDM
+### Loss: VI
+#### ZIDM-ZIDM
 viZZ <- sapply(1:nData,
                function(x){as.numeric(salso(resultZZ[[x]]$result$ci_result[-(1:500), ]))})
 apply(viZZ, 2, function(x){length(unique(x))}) %>% meanSD()
 sapply(1:nData, 
        function(x){mclustcomp(viZZ[, x], actual_clus[, x])[1, 2]}) %>% meanSD()
-
-table(apply(viZZ, 2, function(x){length(unique(x))}))
-table(viZZ[, 2], actual_clus[, 2])
-table(viZZ[, 3], actual_clus[, 3])
-table(viZZ[, 10], actual_clus[, 10])
-table(viZZ[, 12], actual_clus[, 12])
-table(viZZ[, 15], actual_clus[, 15])
-table(viZZ[, 20], actual_clus[, 20])
-which(apply(viZZ, 2, function(x){length(unique(x))}) != 1)
 
 ##### DM-ZIDM
 viDZ <- sapply(1:nData,
@@ -397,36 +310,13 @@ apply(viDsD, 2, function(x){length(unique(x))}) %>% meanSD()
 sapply(1:nData, 
        function(x){mclustcomp(viDsD[, x], actual_clus[, x])[1, 2]}) %>% meanSD()
 
-##### DP
-viDP <- sapply(1:nData,
-               function(x){as.numeric(salso(resultDP[[x]]$result[-(1:500), ]))})
-apply(viDP, 2, function(x){length(unique(x))}) %>% meanSD()
-sapply(1:nData, 
-       function(x){mclustcomp(viDP[, x], actual_clus[, x])[1, 2]}) %>% meanSD()
-
-##### MFM
-viMFM <- sapply(1:nData,
-                function(x){as.numeric(salso(resultMFM[[x]]$result[-(1:500), ]))})
-apply(viMFM, 2, function(x){length(unique(x))}) %>% meanSD()
-sapply(1:nData, 
-       function(x){mclustcomp(viMFM[, x], actual_clus[, x])[1, 2]}) %>% meanSD()
-
-#### Loss: binder --------------------------------------------------------------
+#### Loss: binder 
 ##### ZIDM-ZIDM
 bdZZ <- sapply(1:nData,
                function(x){as.numeric(salso(resultZZ[[x]]$result$ci_result[-(1:500), ], loss = binder()))})
 apply(bdZZ, 2, function(x){length(unique(x))}) %>% meanSD()
 sapply(1:nData, 
        function(x){mclustcomp(bdZZ[, x], actual_clus[, x])[1, 2]}) %>% meanSD()
-
-which(apply(bdZZ, 2, function(x){length(unique(x))}) == 1)
-
-for(i in 1:20){
-  if(! (i %in% c(4, 7))){
-    print(paste0("i: ", i))
-    print(table(bdZZ[, i], actual_clus[, i]))
-  }
-}
 
 ##### DM-ZIDM
 bdDZ <- sapply(1:nData,
@@ -441,6 +331,49 @@ bdDsD <- sapply(1:nData,
 apply(bdDsD, 2, function(x){length(unique(x))}) %>% meanSD()
 sapply(1:nData, 
        function(x){mclustcomp(bdDsD[, x], actual_clus[, x])[1, 2]}) %>% meanSD()
+
+##: ----------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+#### Loss: VI ------------------------------------------------------------------
+
+
+
+table(apply(viZZ, 2, function(x){length(unique(x))}))
+table(viZZ[, 2], actual_clus[, 2])
+table(viZZ[, 3], actual_clus[, 3])
+table(viZZ[, 10], actual_clus[, 10])
+table(viZZ[, 12], actual_clus[, 12])
+table(viZZ[, 15], actual_clus[, 15])
+table(viZZ[, 20], actual_clus[, 20])
+which(apply(viZZ, 2, function(x){length(unique(x))}) != 1)
+
+
+
+##### DP
+viDP <- sapply(1:nData,
+               function(x){as.numeric(salso(resultDP[[x]]$result[-(1:500), ]))})
+apply(viDP, 2, function(x){length(unique(x))}) %>% meanSD()
+sapply(1:nData, 
+       function(x){mclustcomp(viDP[, x], actual_clus[, x])[1, 2]}) %>% meanSD()
+
+##### MFM
+viMFM <- sapply(1:nData,
+                function(x){as.numeric(salso(resultMFM[[x]]$result[-(1:500), ]))})
+apply(viMFM, 2, function(x){length(unique(x))}) %>% meanSD()
+sapply(1:nData, 
+       function(x){mclustcomp(viMFM[, x], actual_clus[, x])[1, 2]}) %>% meanSD()
+
+
 
 ##### DP
 bdDP <- sapply(1:nData,
