@@ -4,7 +4,7 @@ library(foreach)
 library(doParallel)
 
 ### Change the settings --------------------------------------------------------
-case_name <- "diffindex_3_K_5"
+case_name <- "diffindex_3_K_2"
 nData <- 20
 
 ### Import the data ------------------------------------------------------------
@@ -17,7 +17,7 @@ dat <- readRDS(paste0(path, "ClusterZI/Manuscript/Data/", case_name, "_simDat.RD
 dat_J <- ncol(dat[[1]]$dat) 
 dat_n <- nrow(dat[[1]]$dat) 
 
-save_path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/Manuscript/Result/Simulation Study/"
+save_path <- paste0(path, "ClusterZI/Manuscript/Result/Simulation Study/")
 sourceCpp(paste0(path, "ClusterZI/src/clusterZI.cpp"))
 
 ### Run the models -------------------------------------------------------------
