@@ -101,18 +101,31 @@ t(data.frame(apply(timeMat/60, 2, meanSD, dplace = 2), actveMCMC)) %>%
 #### Post-processing
 aClus <- sapply(1:nData, function(x){dat[[x]]$clus})
 loss_type <- c("VI", "binder")
+
+##### ZIDM-ZIDM
 clusZZ <- suppressWarnings({lapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(salso(result_list$ZZ[[x]]$result$ci_result, loss = loss_type[a]))})})})
 apply(sapply(1:2, function(x){apply(clusZZ[[x]], 2, uniqueClus)}), 2, meanSD, dplace = 2) ### Active Cluster
 apply(sapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(mclustcomp(clusZZ[[a]][, x], aClus[, x], type = "adjrand")[2])})}), 2, meanSD, dplace = 4)
 
+##### DM-ZIDM
+clusDZ <- suppressWarnings({lapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(salso(result_list$DZ[[x]]$result$ci_result, loss = loss_type[a]))})})})
+apply(sapply(1:2, function(x){apply(clusDZ[[x]], 2, uniqueClus)}), 2, meanSD, dplace = 2) ### Active Cluster
+apply(sapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(mclustcomp(clusDZ[[a]][, x], aClus[, x], type = "adjrand")[2])})}), 2, meanSD, dplace = 4)
 
+##### DM-sDM
+clusDsD <- suppressWarnings({lapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(salso(result_list$DsD[[x]]$result, loss = loss_type[a]))})})})
+apply(sapply(1:2, function(x){apply(clusDsD[[x]], 2, uniqueClus)}), 2, meanSD, dplace = 2) ### Active Cluster
+apply(sapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(mclustcomp(clusDsD[[a]][, x], aClus[, x], type = "adjrand")[2])})}), 2, meanSD, dplace = 4)
 
+#### DTMM
+clusDsD <- suppressWarnings({lapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(salso(result_list$DsD[[x]]$result, loss = loss_type[a]))})})})
+apply(sapply(1:2, function(x){apply(clusDsD[[x]], 2, uniqueClus)}), 2, meanSD, dplace = 2) ### Active Cluster
+apply(sapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(mclustcomp(clusDsD[[a]][, x], aClus[, x], type = "adjrand")[2])})}), 2, meanSD, dplace = 4)
 
+table(salso(result_list$DTMM_no_structure[[1]]$result), aClus[, 1])
+table(salso(t(result_list$DZ[[1]]$result$ci_result)), aClus[, 1])
 
-
-
-
-
+dim(result_list$DTMM_no_structure[[1]]$result)
 
 
 
