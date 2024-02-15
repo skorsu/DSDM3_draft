@@ -49,7 +49,7 @@ adjDTMM <- function(Y, tree, tau_vec = 10 ^ seq(-1, 4, 0.5), nu_vec = 1,
 set.seed(3124, kind = "L'Ecuyer-CMRG")
 start_ova <- Sys.time()
 registerDoParallel(5)
-resultZZ <- foreach(t = 1:nData) %dopar% {
+resultDTMM <- foreach(t = 1:nData) %dopar% {
   
   start_time <- Sys.time()
   clus_result <- adjDTMM(dat[[t]]$dat, 
@@ -61,7 +61,7 @@ resultZZ <- foreach(t = 1:nData) %dopar% {
 }
 stopImplicitCluster()
 difftime(Sys.time(), start_ova)
-saveRDS(resultZZ, paste0(save_path, case_name, "_DTMM_no_structure.RData"))
+saveRDS(resultDTMM, paste0(save_path, case_name, "_DTMM_no_structure.RData"))
 
 ################################################################################
 
