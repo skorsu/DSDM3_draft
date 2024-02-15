@@ -56,7 +56,7 @@ resultDTMM <- foreach(t = 1:nData) %dopar% {
                          tree = read.tree(text = paste("(", paste(1:50, collapse = ", "), ");")), 
                          init_c = rep(1, 100), mcmc_iter = 100000)
   tot_time <- difftime(Sys.time(), start_time, units = "secs")
-  list(time = tot_time, result = clus_result$post_c[, (1:1000) * 100])
+  list(time = tot_time, result = t(clus_result$post_c[, (1:1000) * 100]))
   
 }
 stopImplicitCluster()
