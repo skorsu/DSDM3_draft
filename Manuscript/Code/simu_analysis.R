@@ -8,6 +8,7 @@ library(ggplot2)
 library(gridExtra)
 library(reshape2)
 library(mclustcomp)
+library(Rcpp)
 
 ### User-defined Functions -----------------------------------------------------
 meanSD <- function(x, dplace = 5){
@@ -21,7 +22,7 @@ uniqueClus <- function(clus_assign){
 }
 
 ### Change the settings --------------------------------------------------------
-case_name <- "diffindex_3_K_5"
+case_name <- "diffindex_3_K_2"
 nData <- 20
 
 ### Import the data and result -------------------------------------------------
@@ -29,6 +30,8 @@ path <- "/Users/kevin-imac/Desktop/Github - Repo/"
 if(! file.exists(path)){
   path <- "/Users/kevinkvp/Desktop/Github Repo/"
 }
+
+sourceCpp(paste0(path, "ClusterZI/src/clusterZI.cpp"))
 
 dat <- readRDS(paste0(path, "ClusterZI/Manuscript/Data/", case_name, "_simDat.RData"))
 result_path <- paste0(path, "ClusterZI/Manuscript/Result/Simulation Study/",
@@ -53,7 +56,7 @@ mcmcZZ <- sapply(1:nData, function(x){apply(result_list$ZZ[[x]]$result$ci_result
        title = "Active clusters via MCMC for the ZIDM-ZIDM model") +
   theme_bw() +
   theme(legend.position = "none") +
-  scale_y_continuous(breaks = seq(5, 30, 5), limits = c(0, 30))
+  scale_y_continuous(breaks = seq(2, 20, 2), limits = c(0, 20))
 
 ##### DM-ZIDM
 mcmcDZ <- sapply(1:nData, function(x){apply(result_list$DZ[[x]]$result$ci_result, 1, uniqueClus)}) %>%
@@ -65,7 +68,7 @@ mcmcDZ <- sapply(1:nData, function(x){apply(result_list$DZ[[x]]$result$ci_result
        title = "Active clusters via MCMC for the DM-ZIDM model") +
   theme_bw() +
   theme(legend.position = "none") +
-  scale_y_continuous(breaks = seq(5, 30, 5), limits = c(0, 30))
+  scale_y_continuous(breaks = seq(2, 20, 2), limits = c(0, 20))
 
 ##### DTMM
 mcmcDTMM <- sapply(1:nData, function(x){apply(result_list$DTMM_no_structure[[x]]$result, 1, uniqueClus)}) %>%
@@ -77,7 +80,7 @@ mcmcDTMM <- sapply(1:nData, function(x){apply(result_list$DTMM_no_structure[[x]]
        title = "Active clusters via MCMC for the DTMM model") +
   theme_bw() +
   theme(legend.position = "none") +
-  scale_y_continuous(breaks = seq(5, 30, 5), limits = c(0, 30))
+  scale_y_continuous(breaks = seq(2, 20, 2), limits = c(0, 20))
 
 grid.arrange(mcmcZZ, mcmcDZ, mcmcDTMM)
 
@@ -103,32 +106,79 @@ aClus <- sapply(1:nData, function(x){dat[[x]]$clus})
 loss_type <- c("VI", "binder")
 
 ##### ZIDM-ZIDM
-clusZZ <- suppressWarnings({lapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(salso(result_list$ZZ[[x]]$result$ci_result, loss = loss_type[a]))})})})
-apply(sapply(1:2, function(x){apply(clusZZ[[x]], 2, uniqueClus)}), 2, meanSD, dplace = 2) ### Active Cluster
-apply(sapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(mclustcomp(clusZZ[[a]][, x], aClus[, x], type = "adjrand")[2])})}), 2, meanSD, dplace = 4)
+clusZZ <- suppressWarnings({lapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(salso(result_list$ZZ[[x]]$result$ci_result[-(1:500), ], loss = loss_type[a]))})})})
+activeZZ <- sapply(1:2, function(x){apply(clusZZ[[x]], 2, uniqueClus)})
+ariZZ <- sapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(mclustcomp(clusZZ[[a]][, x], aClus[, x], type = "adjrand")[2])})})
+apply(activeZZ, 2, meanSD, dplace = 2) ### Active Cluster
+apply(ariZZ, 2, meanSD, dplace = 4)
 
 ##### DM-ZIDM
-clusDZ <- suppressWarnings({lapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(salso(result_list$DZ[[x]]$result$ci_result, loss = loss_type[a]))})})})
-apply(sapply(1:2, function(x){apply(clusDZ[[x]], 2, uniqueClus)}), 2, meanSD, dplace = 2) ### Active Cluster
-apply(sapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(mclustcomp(clusDZ[[a]][, x], aClus[, x], type = "adjrand")[2])})}), 2, meanSD, dplace = 4)
+clusDZ <- suppressWarnings({lapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(salso(result_list$DZ[[x]]$result$ci_result[-(1:500), ], loss = loss_type[a]))})})})
+activeDZ <- sapply(1:2, function(x){apply(clusDZ[[x]], 2, uniqueClus)})
+ariDZ <- sapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(mclustcomp(clusDZ[[a]][, x], aClus[, x], type = "adjrand")[2])})})
+apply(activeDZ, 2, meanSD, dplace = 2) ### Active Cluster
+apply(ariDZ, 2, meanSD, dplace = 4)
 
 ##### DM-sDM
-clusDsD <- suppressWarnings({lapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(salso(result_list$DsD[[x]]$result, loss = loss_type[a]))})})})
-apply(sapply(1:2, function(x){apply(clusDsD[[x]], 2, uniqueClus)}), 2, meanSD, dplace = 2) ### Active Cluster
-apply(sapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(mclustcomp(clusDsD[[a]][, x], aClus[, x], type = "adjrand")[2])})}), 2, meanSD, dplace = 4)
+clusDsD <- suppressWarnings({lapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(salso(result_list$DsD[[x]]$result[-(1:500), ], loss = loss_type[a]))})})})
+activeDSD <- sapply(1:2, function(x){apply(clusDsD[[x]], 2, uniqueClus)})
+ariDsD <- sapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(mclustcomp(clusDsD[[a]][, x], aClus[, x], type = "adjrand")[2])})})
+apply(activeDSD, 2, meanSD, dplace = 2) ### Active Cluster
+apply(ariDsD, 2, meanSD, dplace = 4)
 
 #### DTMM
-clusDsD <- suppressWarnings({lapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(salso(result_list$DsD[[x]]$result, loss = loss_type[a]))})})})
-apply(sapply(1:2, function(x){apply(clusDsD[[x]], 2, uniqueClus)}), 2, meanSD, dplace = 2) ### Active Cluster
-apply(sapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(mclustcomp(clusDsD[[a]][, x], aClus[, x], type = "adjrand")[2])})}), 2, meanSD, dplace = 4)
+clusDTMM <- suppressWarnings({lapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(salso(result_list$DTMM_no_structure[[x]]$result[-(1:500), ], loss = loss_type[a]))})})})
+activeDTMM <- sapply(1:2, function(x){apply(clusDTMM[[x]], 2, uniqueClus)})
+ariDTMM <- sapply(1:2, function(a){sapply(1:nData, function(x){as.numeric(mclustcomp(clusDTMM[[a]][, x], aClus[, x], type = "adjrand")[2])})})
+apply(activeDTMM, 2, meanSD, dplace = 2) ### Active Cluster
+apply(ariDTMM, 2, meanSD, dplace = 4)
 
-table(salso(result_list$DTMM_no_structure[[1]]$result), aClus[, 1])
-table(salso(t(result_list$DZ[[1]]$result$ci_result)), aClus[, 1])
+#### Create the boxplot for the adjusted Rand index
+fullmod_name <- c("ZIDM-ZIDM", "DM-ZIDM", "DM-sDM", "DTMM")
+ari_list <- list(ariZZ, ariDZ, ariDsD, ariDTMM)
 
-dim(result_list$DTMM_no_structure[[1]]$result)
+registerDoParallel(5)
+boxplotDat <- foreach(t = 1:4, .combine = "rbind") %dopar% {
+  rbind(data.frame(adjRI = ari_list[[t]][, 1], mod = fullmod_name[t], lossF = loss_type[1]),
+        data.frame(adjRI = ari_list[[t]][, 2], mod = fullmod_name[t], lossF = loss_type[2]))
+}
+stopImplicitCluster()
 
+boxplotDat$mod <- factor(boxplotDat$mod, levels = fullmod_name)
+boxplotDat$lossF <- factor(boxplotDat$lossF, levels = loss_type)
 
+ggplot(boxplotDat, aes(x = mod, y = adjRI)) +
+  geom_boxplot() +
+  facet_grid(. ~ lossF) +
+  theme_bw() +
+  labs(x = "Model", y = "Adjusted Rand Index", 
+       title = "The boxplot of the adjusted Rand index for each models and loss functions.")
 
+rbind(data.frame(adjRI = ariZZ[, 1], mod = fullmod_name[1], lossF = loss_type[1]),
+      data.frame(adjRI = ariZZ[, 2], mod = fullmod_name[1], lossF = loss_type[2])) %>%
+  ggplot(aes(x = lossF, y = adjRI)) +
+  geom_boxplot()
 
+### DM-DM
+#### Calculate the log-likelihood for each k
+registerDoParallel(5)
+bicCalc <- foreach(t = 1:nData) %:%
+  foreach(k = 1:9) %dopar% {
+    clusK <- sapply(1:9, function(x){salso(result_list[["DD"]][[t]][[x]]$result[-(1:500), ])})
+    ll <- logmar(z = dat[[t]]$dat, atrisk = matrix(1, ncol = 50, nrow = 50), 
+                 beta_mat = matrix(0, ncol = 50, nrow = 10))
+    (-2 * sum(ll[cbind(1:50, clusK[, k])])) + (((k + 1) * 50) * log(50))
+  }
+stopImplicitCluster()
 
+optClusIndex <- apply(sapply(1:20, function(x){bicCalc[[x]]}), 2, which.min)
 
+registerDoParallel(5)
+DDresult <- foreach(t = 1:nData, .combine = "rbind") %dopar% {
+  clusVI <- as.numeric(salso(result_list[["DD"]][[t]][[optClusIndex[t]]]$result[-(1:500), ]))
+  clusBD <- as.numeric(salso(result_list[["DD"]][[t]][[optClusIndex[t]]]$result[-(1:500), ],
+                             loss = "binder"))
+  c(as.numeric(mclustcomp(clusVI, aClus[, t], type = "adjrand")[2]),
+    as.numeric(mclustcomp(clusBD, aClus[, t], type = "adjrand")[2]))
+}
+stopImplicitCluster()
