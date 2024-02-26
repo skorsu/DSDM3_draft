@@ -9,6 +9,9 @@ library(gridExtra)
 library(reshape2)
 library(mclustcomp)
 library(Rcpp)
+library(cluster)
+library(ecodist)
+library(coda.base)
 
 ### User-defined Functions -----------------------------------------------------
 meanSD <- function(x, dplace = 5){
@@ -153,12 +156,6 @@ ggplot(boxplotDat, aes(x = mod, y = adjRI)) +
   theme_bw() +
   labs(x = "Model", y = "Adjusted Rand Index", 
        title = "The boxplot of the adjusted Rand index for each models and loss functions.")
-
-rbind(data.frame(adjRI = ariZZ[, 1], mod = fullmod_name[1], lossF = loss_type[1]),
-      data.frame(adjRI = ariZZ[, 2], mod = fullmod_name[1], lossF = loss_type[2])) %>%
-  ggplot(aes(x = lossF, y = adjRI)) +
-  geom_boxplot()
-
 ### DM-DM
 #### Calculate the log-likelihood for each k
 registerDoParallel(5)
@@ -182,3 +179,19 @@ DDresult <- foreach(t = 1:nData, .combine = "rbind") %dopar% {
     as.numeric(mclustcomp(clusBD, aClus[, t], type = "adjrand")[2]))
 }
 stopImplicitCluster()
+
+### Distance-based Methods -----------------------------------------------------
+#### PAM: Bray-Curtis
+registerDoParallel(5)
+pamBC <- foreach(t = 1:nData) %dopar% {
+  silBC <- sapply(2:10, function(x){mean(silhouette(pam(bcdist(dat[[t]]$dat), x)$clustering, bcdist(dat[[t]]$dat))[, 3])})
+  K <- which.max(silBC) + 1
+  list(K = K, clus = pam(bcdist(dat[[t]]$dat), K)$clustering) 
+}
+stopImplicitCluster()
+as.numeric(mclustcomp(pamBC[[1]]$clus, aClus[, 1], type = "adjrand")[2])
+
+
+
+pam(dist(dat[[1]]$dat, "aitchison"), 2)
+
