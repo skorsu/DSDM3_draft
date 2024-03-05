@@ -2,6 +2,7 @@
 library(readxl)
 library(stringr)
 library(tidyverse)
+library(lubridate)
 
 library(salso)
 library(foreach)
@@ -31,22 +32,27 @@ if(! file.exists(path)){
   path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/Manuscript/"
 }
 
+datpath <- "/Users/kevin-imac/Desktop/Annika/"
+if(! file.exists(path)){
+  datpath <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/Manuscript/"
+}
+
 ### Additional Data
-addml <- read_excel(paste0(path, "Data/Application/Mali_RB Metadata.xlsx"))
-addni <- read_excel(paste0(path, "Data/Application/Nicaragua_RB Metadata.xlsx"))
+addml <- read_excel(paste0(datpath, "Data/Mali_RB Metadata.xlsx"))
+addni <- read_excel(paste0(datpath, "Data/Nicaragua_RB Metadata.xlsx"))
 
 ### Result
 annikaZZ <- readRDS(paste0(path, "Result/microbiome_result.RData"))
 
 ### Data: 6 and 8 Months
-ni68 <- read.csv(paste0(path, "Data/Application/Nicaragua_6mo_8mo_genus.csv"))
-ml68 <- read.csv(paste0(path, "Data/Application/Mali_6mo_8mo_genus.csv"))
+ni68 <- read.csv(paste0(datpath, "Data/Nicaragua_6mo_8mo_genus.csv"))
+ml68 <- read.csv(paste0(datpath, "Data/Mali_6mo_8mo_genus.csv"))
 
 ### Data: 12 Months
-ni12 <- read.csv(paste0(path, "Data/Application/Nicaragua_12mo_Metadata_csv.csv"))
-ml12 <- read.csv(paste0(path, "Data/Application/Mali_12mo_Metadata_csv.csv"))
+ni12 <- read.csv(paste0(datpath, "Data/Nicaragua_12mo_Metadata_csv.csv"))
+ml12 <- read.csv(paste0(datpath, "Data/Mali_12mo_Metadata_csv.csv"))
 
-## Retrived the infant ID in the analysis --------------------------------------
+## Retrieve the infant ID in the analysis --------------------------------------
 ni06 <- ni68 %>% filter(Age..months. == 6)
 ni08 <- ni68 %>% filter(Age..months. == 8)
 
@@ -99,35 +105,265 @@ identical(colnames(dat12[, -(1:5)]), colnames(dat08[, -(1:5)]))
 obsID <- c(str_extract(dat06[1:45, 2], "[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}"), 
            str_extract(dat06[-(1:45), 2], "^[:digit:]+"))
 
+## Cluster Assignment ----------------------------------------------------------
+clusBinder <- sapply(1:3, 
+                     function(x){as.numeric(salso(annikaZZ[[x]]$result$ci_result[-(1:500), ],
+                                                  loss = "binder"))})
+#### Reindex by using the mean Bifidobacterium
+clusBinderN <- matrix(NA, nrow = 90, ncol = 3)
+##### 6-Month
+clusBinderN[which(clusBinder[, 1] == 4), 1] <- 1
+clusBinderN[which(clusBinder[, 1] == 3), 1] <- 2
+clusBinderN[which(clusBinder[, 1] == 5), 1] <- 3
+clusBinderN[which(clusBinder[, 1] == 1), 1] <- 4
+clusBinderN[which(clusBinder[, 1] == 2), 1] <- 5
+##### 8-Month
+clusBinderN[which(clusBinder[, 2] == 2), 2] <- 1
+clusBinderN[which(clusBinder[, 2] == 4), 2] <- 2
+clusBinderN[which(clusBinder[, 2] == 3), 2] <- 3
+clusBinderN[which(clusBinder[, 2] == 1), 2] <- 4
+##### 12-Month
+clusBinderN[which(clusBinder[, 3] == 1), 3] <- 1
+clusBinderN[which(clusBinder[, 3] == 2), 3] <- 2
+clusBinderN[which(clusBinder[, 3] == 4), 3] <- 3
+clusBinderN[which(clusBinder[, 3] == 3), 3] <- 4
+
+clusObs <- data.frame(ChildID = gsub("\\.", "-", obsID), clusBinderN)
+
 ## Cleaning the additional data ------------------------------------------------
-#### (!) Breast Feeding is all yes.
-addml %>%
+addInfo <- function(colNI, colMI){
+  
+  ### Nicaraguan
+  niInfo <- addni %>%
+    filter(Child_ID %in% gsub("\\.", "-", obsID)) %>%
+    arrange(Child_ID) %>%
+    filter(`Monthly_Visit#` %in% c("6 MO", "8 MO", "12 MO")) %>%
+    dplyr::select(Child_ID, `Monthly_Visit#`, sym(colNI)) %>%
+    pivot_wider(names_from = `Monthly_Visit#`, 
+                values_from = sym(colNI))
+  
+  ### Malian
+  mlInfo <- addml %>%
+    filter(Child_ID %in% obsID) %>%
+    arrange(Child_ID) %>%
+    filter(`Monthly_Visit#` %in% c("6MO", "8MO", "12MO")) %>%
+    dplyr::select(Child_ID, `Monthly_Visit#`, sym(colMI)) %>%
+    pivot_wider(names_from = `Monthly_Visit#`, 
+                values_from = sym(colMI))
+  
+  colnames(niInfo)[2:4] <- c("6MO", "8MO", "12MO")
+  
+  rbind(niInfo, mlInfo)
+  
+}
+
+## Diarrhea (in the past 14 days) ----------------------------------------------
+
+### Nicaraguan -- The data already provide the information about this
+### Mali -- We need to convert. Today_Date - Diarrhea_Episode_Date_End <= 14 days -> Yes 
+diaData <- addml %>%
   filter(Child_ID %in% obsID) %>%
   arrange(Child_ID) %>%
   filter(`Monthly_Visit#` %in% c("6MO", "8MO", "12MO")) %>%
-  dplyr::select(Child_ID, `Monthly_Visit#`)
+  dplyr::select(Child_ID, `Monthly_Visit#`, Diarrhea_Episode, Today_Date, Diarrhea_Episode_Date_End) %>%
+  transmute(Child_ID, `Monthly_Visit#`, 
+            Diarrhea_Episode_Past_14_Days_3 = ifelse(Diarrhea_Episode == "YES", 
+                                                     ifelse(Today_Date - Diarrhea_Episode_Date_End <= 14, "YES", "NO"), Diarrhea_Episode)) %>%
+  pivot_wider(names_from = `Monthly_Visit#`, 
+              values_from = Diarrhea_Episode_Past_14_Days_3) %>%
+  `colnames<-`(c("ChildID", "M6", "M8", "M12")) %>%
+  mutate(M6 = factor(str_to_sentence(M6)), M8 = factor(str_to_sentence(M8)), 
+         M12 = factor(str_to_sentence(M12)), Nationality = "ML") %>%
+  rbind(addni %>%
+          filter(Child_ID %in% gsub("\\.", "-", obsID)) %>%
+          arrange(Child_ID) %>%
+          filter(`Monthly_Visit#` %in% c("6 MO", "8 MO", "12 MO")) %>%
+          dplyr::select(Child_ID, `Monthly_Visit#`, Diarrhea_Episode_Past_14_Days_3) %>%
+          pivot_wider(names_from = `Monthly_Visit#`, 
+                      values_from = Diarrhea_Episode_Past_14_Days_3) %>%
+          `colnames<-`(c("ChildID", "M6", "M8", "M12")) %>%
+          mutate(M6 = factor(str_to_sentence(M6)), M8 = factor(str_to_sentence(M8)), 
+                 M12 = factor(str_to_sentence(M12)), Nationality = "NI"))
+  
+diaData %>%
+  pivot_longer(c(M6, M8, M12), names_to = "Month", values_to = "Diarrhea") %>%
+  group_by(Nationality, Month, Diarrhea) %>%
+  summarise(n = n()) %>%
+  mutate(prop = ifelse(Nationality == "ML", n/42, n/45)) %>%
+  ggplot(aes(x = factor(Month, levels = c("M6", "M8", "M12"), label = c("6 Month", "8 Month", "12 Month")), 
+             y = prop, fill = factor(Diarrhea, levels = c(NA, "Yes", "No")))) +
+  geom_bar(position = "stack", stat = "identity") +
+  facet_grid(. ~ Nationality) +
+  scale_fill_manual("Diarrhea", values = c("aquamarine3", "coral2"), na.value = "grey90") +
+  theme_bw() +
+  labs(x = "Timestamp")
+  
+diaClus <- inner_join(diaData, clusObs)
+table(diaClus$M6, diaClus$X1)
+table(diaClus$M8, diaClus$X2)
+table(diaClus$M12, diaClus$X3)
 
-addml$Vegetables
-
-addni %>%
-  filter(Child_ID %in% gsub("\\.", "-", obsID)) %>%
+## Breast Milk -----------------------------------------------------------------
+breastData <- addml %>%
+  filter(Child_ID %in% obsID) %>%
   arrange(Child_ID) %>%
-  filter(`Monthly_Visit#` %in% c("6 MO", "8 MO", "12 MO")) %>%
-  dplyr::select(Child_ID, `Monthly_Visit#`, Cow_milk_5.2) %>%
-  mutate(cowMilk = ifelse(Cow_milk_5.2 == "NEVER", "NO", "YES")) %>%
-  dplyr::select(-Cow_milk_5.2) %>%
-  pivot_wider(names_from = `Monthly_Visit#`, values_from = cowMilk)
+  filter(`Monthly_Visit#` %in% c("6MO", "8MO", "12MO")) %>%
+  dplyr::select(Child_ID, `Monthly_Visit#`, Breastfed_Yesterday) %>%
+  pivot_wider(names_from = `Monthly_Visit#`, 
+              values_from = Breastfed_Yesterday) %>%
+  `colnames<-`(c("ChildID", "M6", "M8", "M12")) %>%
+  mutate(M6 = factor(str_to_sentence(M6)), M8 = factor(str_to_sentence(M8)), 
+         M12 = factor(str_to_sentence(M12)), Nationality = "ML") %>%
+  rbind(addni %>%
+          filter(Child_ID %in% gsub("\\.", "-", obsID)) %>%
+          arrange(Child_ID) %>%
+          filter(`Monthly_Visit#` %in% c("6 MO", "8 MO", "12 MO")) %>%
+          dplyr::select(Child_ID, `Monthly_Visit#`, Breastfed_Yesterday_4.1) %>%
+          pivot_wider(names_from = `Monthly_Visit#`, 
+                      values_from = Breastfed_Yesterday_4.1) %>%
+          `colnames<-`(c("ChildID", "M6", "M8", "M12")) %>%
+          mutate(M6 = factor(str_to_sentence(M6)), M8 = factor(str_to_sentence(M8)), 
+                 M12 = factor(str_to_sentence(M12)), Nationality = "NI"))
+
+breastData %>%
+  pivot_longer(c(M6, M8, M12), names_to = "Month", values_to = "BreastMilk") %>%
+  group_by(Nationality, Month, BreastMilk) %>%
+  summarise(n = n()) %>%
+  mutate(prop = ifelse(Nationality == "ML", n/42, n/45)) %>%
+  ggplot(aes(x = factor(Month, levels = c("M6", "M8", "M12"), label = c("6 Month", "8 Month", "12 Month")), 
+             y = prop, fill = factor(BreastMilk, levels = c(NA, "Yes", "No")))) +
+  geom_bar(position = "stack", stat = "identity") +
+  facet_grid(. ~ Nationality) +
+  scale_fill_manual("Diarrhea", values = c("aquamarine3", "coral2"), na.value = "grey90") +
+  theme_bw() +
+  labs(x = "Timestamp")
+
+breastClus <- inner_join(breastData, clusObs)
+breastClus %>%
+  mutate(X1 = factor(X1), X2 = factor(X2), X3 = factor(X3)) %>%
+  pivot_longer(c(M6, M8, M12), names_to = "Month", values_to = "BreastMilk") %>%
+  mutate(Cluster = ifelse(Month == "M6", X1, ifelse(Month == "M8", X2, X3))) %>%
+  group_by(Month, Cluster, BreastMilk) %>%
+  summarise(n = n()) %>%
+  mutate(sum = sum(n)) %>%
+  mutate(prop = n/sum) %>%
+  ggplot(aes(x = Cluster, 
+             y = prop, fill = factor(BreastMilk, levels = c(NA, "Yes", "No")))) +
+  geom_bar(position = "stack", stat = "identity") +
+  facet_wrap(. ~ factor(Month, levels = c("M6", "M8", "M12"), label = c("6 Month", "8 Month", "12 Month")),
+             scales = "free_x") +
+  scale_fill_manual("Breast Milk", values = c("aquamarine3", "coral2"), na.value = "grey90") +
+  theme_bw() +
+  labs(x = "Cluster", y = "Proportion", title = "Breast Milk by Cluster")
+
+## -----------------------------------------------------------------------------
+table(diaData$Nationality)
+  
 
 
+
+
+
+
+
+### Breast Milk
+addData <- addInfo(colNI = "Breastfed_Yesterday_4.1", colMI = "Breastfed_Yesterday")
+addClus <- inner_join(addData, clusObs)
+table(addClus$X1, addClus$`6MO`)
+table(addClus$X2, addClus$`8MO`)
+
+### Cow Milk
+addData <- addInfo(colNI = "Cow_milk_5.2", colMI = "Cow_milk")
+addData$`6MO` <- ifelse(addData$`6MO` %in% c("NEVER", "No", "NO", "USED TO CONSUME, BUT NOT NOW"), "NO", "YES")
+addData$`8MO` <- ifelse(addData$`8MO` %in% c("NEVER", "No", "NO", "USED TO CONSUME, BUT NOT NOW"), "NO", "YES")
+
+addClus <- inner_join(addData, clusObs)
+table(addClus$X1, addClus$`6MO`)
+table(addClus$X2, addClus$`8MO`)
+
+### Rice cereal
+addData <- addInfo(colNI = "Rice_cereal_5.3", colMI = "Rice")
+addData$`6MO` <- ifelse(addData$`6MO` %in% c("NEVER", "No", "NO", "USED TO CONSUME, BUT NOT NOW"), "NO", "YES")
+addData$`8MO` <- ifelse(addData$`8MO` %in% c("NEVER", "No", "NO", "USED TO CONSUME, BUT NOT NOW"), "NO", "YES")
+
+addClus <- inner_join(addData, clusObs)
+table(addClus$X1, addClus$`6MO`)
+table(addClus$X2, addClus$`8MO`)
+
+### Fruits Natural Juices
+addData <- addInfo(colNI = "Fruits_Natural_Juices_5.4", colMI = "Fruits_Natural_Juices")
+addData$`6MO` <- ifelse(addData$`6MO` %in% c("NEVER", "No", "NO", "USED TO CONSUME, BUT NOT NOW"), "NO", "YES")
+addData$`8MO` <- ifelse(addData$`8MO` %in% c("NEVER", "No", "NO", "USED TO CONSUME, BUT NOT NOW"), "NO", "YES")
+
+addClus <- inner_join(addData, clusObs)
+table(addClus$X1, addClus$`6MO`)
+table(addClus$X2, addClus$`8MO`)
+
+### Vegetables
+addData <- addInfo(colNI = "Vegetables_5.5", colMI = "Vegetables")
+addData$`6MO` <- ifelse(addData$`6MO` %in% c("NEVER", "No", "NO", "USED TO CONSUME, BUT NOT NOW"), "NO", "YES")
+addData$`8MO` <- ifelse(addData$`8MO` %in% c("NEVER", "No", "NO", "USED TO CONSUME, BUT NOT NOW"), "NO", "YES")
+
+addClus <- inner_join(addData, clusObs)
+table(addClus$X1, addClus$`6MO`)
+table(addClus$X2, addClus$`8MO`)
+
+### Height
+addData <- addInfo(colNI = "Height_12", colMI = "Height")
+addClus <- inner_join(addData, clusObs)
+data.frame(ID = addClus$Child_ID, Month = "6 Month", 
+           Height = as.numeric(addClus$`6MO`), cluster = addClus$X1) %>%
+  rbind(data.frame(ID = addClus$Child_ID, Month = "8 Month", 
+                   Height = as.numeric(addClus$`8MO`), cluster = addClus$X2)) %>%
+  drop_na() %>%
+  ggplot(aes(group = cluster, y = Height)) +
+  geom_boxplot() +
+  facet_grid(. ~ Month)
+
+
+table(addClus$X1, addClus$`6MO`)
+table(addClus$X2, addClus$`8MO`)
+
+
+
+## -----------------------------------------------------------------------------
+
+> colnames(addni)
+[1] "Child_ID"                        "RICE_BRAN_OR_CONTROL"           
+[3] "Monthly_Visit#"                  "Diarrhea_Episode_Past_14_Days_3"
+[5] "Breastfed_Yesterday_4.1"         "If_No_when_child_stop_4.2"      
+[7] "Currently_using_bottle_4.3"      "Age_start_using_bottle_4.4"     
+[9] "Formula_5.1"                     "Cow_milk_5.2"                   
+[11] "Rice_cereal_5.3"                 "Fruits_Natural_Juices_5.4"      
+[13] "Vegetables_5.5"                  "Chicken_5.6"                    
+[15] "Gallo_Pinto_5.7"                 "Cheese_5.8"                     
+[17] "Soups_5.9"                       "Yogurt_5.10"                    
+[19] "Brown_Rice_RB_5.11"              "Receive_Antibiotics_6"          
+[21] "Weight_11"                       "Height_12"  
+
+> colnames(addml)
+[1] "Child_ID"                    "Interview_ID"               
+[3] "Today_Date"                  "RICE_BRAN_OR_CONTROL"       
+[5] "Monthly_Visit#"              "Providing_Information"      
+[7] "Diarrhea_Episode"            "Diarrhea_Episode_Date_Start"
+[9] "Diarrhea_Episode_Date_End"   "Diarrhea_Symptoms"          
+[11] "Breastfed_Yesterday"         "If_No_when_child_stop"      
+[13] "Millet"                      "Cow_milk"                   
+[15] "Rice"                        "Fruits_Natural_Juices"      
+[17] "Vegetables"                  "Chicken / fish / meat"      
+[19] "Maize"                       "Cowpea"                     
+[21] "Soups"                       "Eggs"                       
+[23] "Porridge"                    "Receive_Antibiotics"        
+[25] "Reason_Antibiotics"          "Antibiotic_Name"            
+[27] "Date_Started_Abx"            "How_Many_Days_Abx"          
+[29] "Weight"                      "Height"                     
+[31] "Comments"                    "Observations"  
 
 ### Analyze --------------------------------------------------------------------
 #### Computational Time 
 c(annikaZZ[[1]]$time, annikaZZ[[2]]$time, annikaZZ[[3]]$time)/60
 
-### Cluster Assignment
-clusBinder <- sapply(1:3, 
-                     function(x){as.numeric(salso(annikaZZ[[x]]$result$ci_result[-(1:500), ],
-                                                  loss = "binder"))})
+
 
 obsID <- c(str_extract(dat06[1:45, 2], "[:alpha:]{2}\\.[:alpha:]{2}\\.[:digit:]{2}"), 
            str_extract(dat06[-(1:45), 2], "^[:digit:]+"))
