@@ -130,6 +130,25 @@ clusBinderN[which(clusBinder[, 3] == 3), 3] <- 4
 
 clusObs <- data.frame(ChildID = gsub("\\.", "-", obsID), clusBinderN)
 
+### Interested Aspect
+colnames(addml)
+colnames(addni)
+
+### Check: Availability of the data in the additional dataset.
+addml$Today_Date
+addni
+
+
+
+
+
+
+
+
+
+
+
+
 ## Cleaning the additional data ------------------------------------------------
 addInfo <- function(colNI, colMI){
   
