@@ -3,6 +3,7 @@ library(readxl)
 library(stringr)
 library(tidyverse)
 library(lubridate)
+library(VennDiagram)
 
 library(salso)
 library(foreach)
@@ -131,8 +132,133 @@ clusBinderN[which(clusBinder[, 3] == 3), 3] <- 4
 clusObs <- data.frame(ChildID = gsub("\\.", "-", obsID), clusBinderN)
 
 ### Interested Aspect
+mlVar <- str_replace_all(colnames(addml), "\\_", " ")[-c(1:6, 31, 32)]
+ngVar <- str_replace_all(str_extract(colnames(addni), "\\S*(?=\\_[:digit:])"), "\\_", " ")[-(1:3)]
+
+vennCol <- venn.diagram(list(Malian = mlVar, Nicaraguan = ngVar), filename = NULL)
+
+vennCol[[5]]$label  <- paste(setdiff(mlVar, ngVar), collapse="\n")  
+vennCol[[6]]$label <- paste(setdiff(ngVar, mlVar)  , collapse="\n")  
+vennCol[[7]]$label <- paste(intersect(mlVar, ngVar), collapse="\n")
+
+grid.newpage()
+grid.draw(vennCol)
+
+### Transform the variables
+#### Diarrhea
+addml %>%
+  mutate(across(where(is.character), tolower)) %>%
+  dplyr::select(Today_Date, Diarrhea_Episode_Date_Start, Diarrhea_Episode_Date_End, Diarrhea_Episode) %>%
+  mutate(Diarrhea = ifelse(Diarrhea_Episode == "yes", 
+                           ifelse(difftime(Today_Date, Diarrhea_Episode_Date_End) <= 14, "yes", "no"), 
+                           Diarrhea_Episode)) %>%
+  view()
+
+
+addni %>%
+  dplyr::select(Diarrhea_Episode_Past_14_Days_3) %>%
+  
+
+#### GR
+##### ML: rice, maize, cowpea, porridge
+##### NI: rice cereal, Gallo Pinto, Brown Rice
+
 colnames(addml)
+addml %>%
+  mutate(across(where(is.character), tolower)) %>%
+  dplyr::select(Rice, Maize, Cowpea, Porridge) %>%
+  rowwise %>% 
+  mutate(null_message_GR = as.integer(all(c(Rice, Maize, Cowpea, Porridge) %in% NA)) > 0) %>%
+  mutate(allNo_GR = all(c(Rice, Maize, Cowpea, Porridge) %in% "no")) %>%
+  mutate(GR = ifelse(null_message_GR == TRUE, NA, ifelse(allNo_GR == TRUE, "no", "yes"))) %>%
+  view()
+
 colnames(addni)
+
+table(factor(addni$Rice_cereal_5.3))
+table(factor(addni$Gallo_Pinto_5.7))
+table(factor(addni$Brown_Rice_RB_5.11))
+
+addni %>%
+  mutate(across(where(is.character), tolower)) %>% 
+  dplyr::select(Rice_cereal_5.3, Gallo_Pinto_5.7) %>%
+  rowwise %>% 
+  mutate(null_message_GR= as.integer(all(c(Rice_cereal_5.3, Gallo_Pinto_5.7) %in% NA)) > 0) %>%
+  mutate(allNo_GR = all(c(Rice_cereal_5.3, Gallo_Pinto_5.7) %in% c("used to consume, but not now", "never"))) %>%
+  mutate(GR = ifelse(null_message_GR == TRUE, NA, ifelse(allNo_GR == TRUE, "no", "yes"))) %>%
+  view()
+
+#### Protein
+##### ML: Chicken/fish/meat, Eggs
+##### NI: Chicken, Cheese, and Yogurt
+
+colnames(addml)
+addml %>%
+  mutate(across(where(is.character), tolower)) %>%
+  dplyr::select(`Chicken / fish / meat`, Eggs) %>%
+  rowwise %>% 
+  mutate(null_message_PR = as.integer(all(c(`Chicken / fish / meat`, Eggs) %in% NA)) > 0) %>%
+  mutate(allNo_PR = all(c(`Chicken / fish / meat`, Eggs) %in% "no")) %>%
+  mutate(Protein = ifelse(null_message_PR == TRUE, NA, ifelse(allNo_PR == TRUE, "no", "yes"))) %>%
+  view()
+
+colnames(addni)
+
+table(factor(addni$Chicken_5.6))
+table(factor(addni$Cheese_5.8))
+table(factor(addni$Yogurt_5.10))
+
+addni %>%
+  mutate(across(where(is.character), tolower)) %>% 
+  dplyr::select(Chicken_5.6, Cheese_5.8, Yogurt_5.10) %>%
+  rowwise %>% 
+  mutate(null_message_PR = as.integer(all(c(Chicken_5.6, Cheese_5.8, Yogurt_5.10) %in% NA)) > 0) %>%
+  mutate(allNo_PR = all(c(Chicken_5.6, Cheese_5.8, Yogurt_5.10) %in% c("used to consume, but not now", "never"))) %>%
+  mutate(Protein = ifelse(null_message_PR == TRUE, NA, ifelse(allNo_PR == TRUE, "no", "yes"))) %>%
+  view()
+
+#### Combine the dataset
+rbind(addml %>%
+        mutate(across(where(is.character), tolower)) %>%
+        mutate(Diarrhea = ifelse(Diarrhea_Episode == "yes", 
+                                 ifelse(difftime(Today_Date, Diarrhea_Episode_Date_End) <= 14, "yes", "no"), 
+                                 Diarrhea_Episode)) %>%
+        rowwise %>% 
+        mutate(null_message_GR = as.integer(all(c(Rice, Maize, Cowpea, Porridge) %in% NA)) > 0) %>%
+        mutate(allNo_GR = all(c(Rice, Maize, Cowpea, Porridge) %in% "no")) %>%
+        mutate(GR = ifelse(null_message_GR == TRUE, NA, ifelse(allNo_GR == TRUE, "no", "yes"))) %>%
+        mutate(null_message_PR = as.integer(all(c(`Chicken / fish / meat`, Eggs) %in% NA)) > 0) %>%
+        mutate(allNo_PR = all(c(`Chicken / fish / meat`, Eggs) %in% "no")) %>%
+        mutate(Protein = ifelse(null_message_PR == TRUE, NA, ifelse(allNo_PR == TRUE, "no", "yes"))) %>%
+        dplyr::select(Child_ID, Month =`Monthly_Visit#`, Breastfed = Breastfed_Yesterday, Cow_milk, 
+                      Fruits_Natural_Juices, Vegetables, Soups, Antibiotics = Receive_Antibiotics, 
+                      Weight, Height, Diarrhea, GR, Protein) %>%
+        mutate(Month = toupper(Month)) %>%
+        mutate(Nationality = "ML"),
+      
+      addni %>%
+        mutate(across(where(is.character), tolower)) %>%
+        rowwise %>% 
+        mutate(null_message_GR= as.integer(all(c(Rice_cereal_5.3, Gallo_Pinto_5.7) %in% NA)) > 0) %>%
+        mutate(allNo_GR = all(c(Rice_cereal_5.3, Gallo_Pinto_5.7) %in% c("used to consume, but not now", "never"))) %>%
+        mutate(GR = ifelse(null_message_GR == TRUE, NA, ifelse(allNo_GR == TRUE, "no", "yes"))) %>%
+        mutate(null_message_PR = as.integer(all(c(Chicken_5.6, Cheese_5.8, Yogurt_5.10) %in% NA)) > 0) %>%
+        mutate(allNo_PR = all(c(Chicken_5.6, Cheese_5.8, Yogurt_5.10) %in% c("used to consume, but not now", "never"))) %>%
+        mutate(Protein = ifelse(null_message_PR == TRUE, NA, ifelse(allNo_PR == TRUE, "no", "yes"))) %>%
+        dplyr::select(Child_ID, Month =`Monthly_Visit#`, Breastfed = Breastfed_Yesterday_4.1, Cow_milk = Cow_milk_5.2,
+                      Fruits_Natural_Juices = Fruits_Natural_Juices_5.4, Vegetables = Vegetables_5.5,
+                      Soups = Soups_5.9, Antibiotics = Receive_Antibiotics_6, 
+                      Weight = Weight_11, Height = Height_12,
+                      Diarrhea = Diarrhea_Episode_Past_14_Days_3, GR, Protein) %>% 
+        mutate(Cow_milk = ifelse(is.na(Cow_milk), NA, ifelse(Cow_milk %in% c("used to consume, but not now", "never"), "no", "yes")),
+               Fruits_Natural_Juices = ifelse(is.na(Fruits_Natural_Juices), NA, ifelse(Fruits_Natural_Juices %in% c("used to consume, but not now", "never"), "no", "yes")),
+               Vegetables = ifelse(is.na(Vegetables), NA, ifelse(Vegetables %in% c("used to consume, but not now", "never"), "no", "yes")),
+               Soups = ifelse(is.na(Soups), NA, ifelse(Soups %in% c("used to consume, but not now", "never"), "no", "yes"))) %>%
+        mutate(Child_ID = toupper(Child_ID), Month = str_replace_all(toupper(Month), " ", "")) %>%
+        mutate(Nationality = "NI")) -> addInfo
+
+view(addInfo)
+
 
 ### Check: Availability of the data in the additional dataset.
 addml$Today_Date
