@@ -587,6 +587,7 @@ Rcpp::List mod(unsigned int iter, unsigned int Kmax, unsigned int nbeta_split,
   
   arma::umat ci_result(z.n_rows, iter/thin, arma::fill::value(Kmax + 1));
   arma::cube beta_result(Kmax, z.n_cols, iter/thin, arma::fill::value(0));
+  arma::cube atrisk_result(z.n_rows, z.n_cols, iter/thin, arma::fill::value(0));
   arma::vec sm_status(iter, arma::fill::value(-2));
   arma::vec sm_accept(iter, arma::fill::value(-2));
   
@@ -607,7 +608,6 @@ Rcpp::List mod(unsigned int iter, unsigned int Kmax, unsigned int nbeta_split,
                 theta, mu, s2, launch_iter, r0c, r1c);
     
     // record the result
-    
     atrisk_init = atrisk_mcmc;
     arma::mat beta_final = sm_sum["beta_result"];
     beta_init = beta_final;
@@ -621,6 +621,7 @@ Rcpp::List mod(unsigned int iter, unsigned int Kmax, unsigned int nbeta_split,
     
     if(((t + 1) - (floor((t + 1)/thin) * thin)) == 0){
       std::cout << "Iter: " << (t+1) << " - Done!" << std::endl;
+      atrisk_result.slice(save_col) = atrisk_init;
       beta_result.slice(save_col) = beta_final;
       ci_result.col(save_col) = ci_final;
       save_col += 1;
