@@ -632,6 +632,7 @@ Rcpp::List mod(unsigned int iter, unsigned int Kmax, unsigned int nbeta_split,
   Rcpp::List result;
   result["ci_result"] = ci_result.t();
   result["beta_result"] = beta_result;
+  result["atrisk_result"] = atrisk_result;
   result["sm_status"] = sm_status;
   result["sm_accept"] = sm_accept;
   return result;
