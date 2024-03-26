@@ -121,46 +121,302 @@ sapply(1:3, function(x){apply(annikaZZ[[x]]$result$ci_result, 1, function(y){len
 
 table(salso_clus[, 1], dat06[, 1])
 
+### Group Taxa: ----------------------------------------------------------------
+
+datList <- list(dat06, dat08, dat12)
+
+registerDoParallel(5)
+impTaxa <- foreach(t = 1:3) %dopar% {
+  
+  prop <- as.numeric(colMeans(datList[[t]][, -(1:5)]/rowSums(datList[[t]][, -(1:5)])))
+  which(prop %in% boxplot.stats(prop)$out)
+  
+}
+stopImplicitCluster()
+impTaxa <- union(impTaxa[[1]], union(impTaxa[[2]], impTaxa[[3]]))
+
+#### str_match_all(colnames(dat06[-(1:5)]), "[:alpha:]{1}\\_{2}\\.?[:alpha:]+")
+#### Go for the phylum and genus
+taxaName <- cbind(str_match(colnames(dat06[-(1:5)]), "p\\_{2}\\.?[:alpha:]+") %>%
+                    str_match("[:upper:]{1}[:alpha:]+"), 
+                  str_match(colnames(dat06[-(1:5)]), "g\\_{2}\\.?[:alpha:]+") %>%
+                    str_match("[:upper:]{1}[:alpha:]+"))
+
+impTaxaInd <- rep(FALSE, 38)
+impTaxaInd[impTaxa] <- TRUE
+
+#### Get the column name, group the other taxa
+showName <- data.frame(taxaName, impTaxaInd) %>%
+  replace_na(list(X1 = "Bacteria", X2 = "Other")) %>%
+  mutate(showName = ifelse(impTaxaInd, X2, 
+                           ifelse(X1 == "Bacteria", "Others", paste0("Other ", X1)))) %>%
+  .$showName
+
+showName <- factor(showName,
+                   levels = c("Bifidobacterium", "Other Actinobacteria",
+                              "Bacteroides", "Prevotella", "Other Bacteroidetes",
+                              "Faecalibacterium", "Megasphaera", "Ruminococcus", 
+                              "Streptococcus", "Veillonella", "Other Firmicutes", 
+                              "Others"),
+                   labels = c("Bifidobacterium", "Other_Actinobacteria",
+                              "Bacteroides", "Prevotella", "Other_Bacteroidetes",
+                              "Faecalibacterium", "Megasphaera", "Ruminococcus", 
+                              "Streptococcus", "Veillonella", "Other_Firmicutes", 
+                              "Others"))
+
 ### Estimates: -----------------------------------------------------------------
-#### Get the beta for the observation (hyperparameters)
-bet1 <- matrix(NA, nrow = 1000, ncol = 38)
-for(i in 1:1000){
-  ci <- annikaZZ[[1]]$result$ci_result[i, 1] + 1
-  bet1[i, ] <- annikaZZ[[1]]$result$beta_result[ci, , i]
-}
-atrisk <- t(annikaZZ[[1]]$result$atrisk_result[1, , ])
+#### Check the convergence
 
-#### 
-zi <- as.numeric(dat06[1, -(1:5)])
-incV <- which(atrisk[1, ] == 1)
-bet1[1, ]
-expBeta <- exp(bet1[1, incV])
-rdirichlet(1, expBeta)
 
-sum(rdirichlet(1, expBeta))
 
-rmultinom(1, sum(zi), rdirichlet(1, expBeta))
-sum(zi[incV])
-sum(zi)
+#### Calculate the estimate relative abundance for each observations
+datList <- list(dat06, dat08, dat12)
+obsID <- c(str_replace_all(str_extract(dat08$ID[1:45], "^([:alpha:]{2}\\.){2}[:digit:]{2}"), "\\.", "\\-"),
+           str_extract(dat08$ID[-(1:45)], "^[:digit:]{7}"))
+bactList <- c("Bifidobacterium", "Other_Actinobacteria", "Bacteroides", 
+              "Prevotella", "Other_Bacteroidetes", "Faecalibacterium", 
+              "Megasphaera", "Ruminococcus", "Streptococcus", "Veillonella", 
+              "Other_Firmicutes", "Others")
+colours <- c("#A4C639", "#BAC394", "#DDA661", "#BD8B46", "#FFD197",
+             "#BC6D62", "#DE6A5D", "#DE998B", "#FF6558", "#FFC6B8", 
+             "#FFE4DA", "#E5E5E5")
 
-est_prob <- matrix(0, nrow = 1000, ncol = 38)
-for(i in 1:1000){
+relaPlot <- function(timestamp_index, actual_month){
   
-  ### Data space via at-risk
-  incVar <- which(atrisk[i, ] == 1)
-  exp_beta <- exp(bet1[i, incVar])
-  collapse_prob <- rdirichlet(1, exp_beta)
-  est_prob[i, incVar] <- collapse_prob
+  ### Get the estimated relative abundance
+  set.seed(1415, kind = "L'Ecuyer-CMRG")
+  registerDoParallel(5)
+  estiRela <- foreach(i = 1:90, .combine = "rbind") %dopar% {
+    
+    beteVec <- matrix(NA, nrow = 1000, ncol = 38)
+    
+    for(t in 1:1000){
+      ### Beta vector
+      ci <- annikaZZ[[timestamp_index]]$result$ci_result[t, i] + 1
+      beteVec[t, ] <- annikaZZ[[timestamp_index]]$result$beta_result[ci, ,t]
+    }
+    
+    atriskBetaE <- exp(beteVec) * t(annikaZZ[[timestamp_index]]$result$atrisk_result[i, , ])
+    colMeans(rdirichlet(1000, colMeans(atriskBetaE[-(1:500), ])))
+  }
+  stopImplicitCluster()
+  
+  ### Group the bacteria
+  actualDat <- datList[[timestamp_index]]
+  estiRelaGroup <- matrix(NA, nrow = 90, ncol = 12)
+  actualRela <- actualDat[, -(1:5)]/rowSums(actualDat[, -(1:5)])
+  actualRelaGroup <- matrix(NA, nrow = 90, ncol = 12)
+  
+  for(i in 1:length(bactList)){
+    index <- which(showName == bactList[i])
+    if(length(index) == 1){
+      estiRelaGroup[, i] <- estiRela[, which(showName == bactList[i])]
+      actualRelaGroup[, i] <- actualRela[, which(showName == bactList[i])]
+    } else {
+      estiRelaGroup[, i] <- rowSums(estiRela[, which(showName == bactList[i])])
+      actualRelaGroup[, i] <- rowSums(actualRela[, which(showName == bactList[i])])
+    }
+  }
+  
+  colnames(estiRelaGroup) <- bactList
+  colnames(actualRelaGroup) <- bactList
+  
+  ### Actual
+  actual_title <- paste0(actual_month, " Infants: Actual Relative Abundance")
+  actPlot <- data.frame(actualRelaGroup) %>%
+    mutate(id = obsID, Cluster = paste0("Cluster ", salso_clus[, timestamp_index])) %>%
+    pivot_longer(!c(id, Cluster), names_to = "Bacteria", values_to = "Prop") %>%
+    ggplot(aes(fill = factor(Bacteria, levels = c("Bifidobacterium", "Other_Actinobacteria",
+                                                  "Bacteroides", "Prevotella", "Other_Bacteroidetes",
+                                                  "Faecalibacterium", "Megasphaera", "Ruminococcus", 
+                                                  "Streptococcus", "Veillonella", "Other_Firmicutes", 
+                                                  "Others"),
+                             labels = c("Bifidobacterium", "Other Actinobacteria",
+                                        "Bacteroides", "Prevotella", "Other Bacteroidetes",
+                                        "Faecalibacterium", "Megasphaera", "Ruminococcus", 
+                                        "Streptococcus", "Veillonella", "Other Firmicutes", 
+                                        "Others")), y = Prop, x = id)) + 
+    geom_bar(position="fill", stat = "identity") +
+    scale_fill_manual("", values = colours) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5), legend.position = "bottom") +
+    guides(fill = guide_legend(nrow = 2, byrow = TRUE)) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    labs(y = "Relative Abundance", title = actual_title, x = "Sample") +
+    facet_grid(~Cluster, scales = "free_x")
+  
+  ### Estimate
+  estimate_title <- paste0(actual_month, " Infants: Estimated Relative Abundance")
+  estPlot <- data.frame(estiRelaGroup) %>%
+    mutate(id = obsID, Cluster = paste0("Cluster ", salso_clus[, timestamp_index])) %>%
+    pivot_longer(!c(id, Cluster), names_to = "Bacteria", values_to = "Prop") %>%
+    ggplot(aes(fill = factor(Bacteria, levels = c("Bifidobacterium", "Other_Actinobacteria",
+                                                  "Bacteroides", "Prevotella", "Other_Bacteroidetes",
+                                                  "Faecalibacterium", "Megasphaera", "Ruminococcus", 
+                                                  "Streptococcus", "Veillonella", "Other_Firmicutes", 
+                                                  "Others"),
+                             labels = c("Bifidobacterium", "Other Actinobacteria",
+                                        "Bacteroides", "Prevotella", "Other Bacteroidetes",
+                                        "Faecalibacterium", "Megasphaera", "Ruminococcus", 
+                                        "Streptococcus", "Veillonella", "Other Firmicutes", 
+                                        "Others")), y = Prop, x = id)) + 
+    geom_bar(position="fill", stat = "identity") +
+    scale_fill_manual("", values = colours) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5), legend.position = "bottom") +
+    guides(fill = guide_legend(nrow = 2, byrow = TRUE)) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    labs(y = "Estimated Relative Abundance", title = estimate_title, x = "Sample") +
+    facet_grid(~Cluster, scales = "free_x")
+  
+  list(estiRelaGroup = estiRelaGroup, 
+       actualRelaGroup = actualRelaGroup, plot = grid.arrange(actPlot, estPlot))
   
 }
 
-colnames(est_prob) <- paste0("TAXA", 1:38)
-
-plot(est_prob[, 10], type = "l")
-
-annikaZZ[[1]]$result$beta_result[1, , 1]
+mo6plot <- relaPlot(timestamp_index = 1, actual_month = "6-Month")
+mo8plot <- relaPlot(timestamp_index = 2, actual_month = "8-Month")
+mo12plot <- relaPlot(timestamp_index = 3, actual_month = "12-Month")
 
 
+### Draft: ---------------------------------------------------------------------
+###### Plot
+
+relaPlot(3, "12-Month")
+
+set.seed(1415, kind = "L'Ecuyer-CMRG")
+registerDoParallel(5)
+estiRela <- foreach(i = 1:90, .combine = "rbind") %dopar% {
+  
+  beteVec <- matrix(NA, nrow = 1000, ncol = 38)
+  
+  for(t in 1:1000){
+    ### Beta vector
+    ci <- annikaZZ[[1]]$result$ci_result[t, i] + 1
+    beteVec[t, ] <- annikaZZ[[1]]$result$beta_result[ci, ,t]
+  }
+  
+  atriskBetaE <- exp(beteVec) * t(annikaZZ[[1]]$result$atrisk_result[i, , ])
+  colMeans(rdirichlet(1000, colMeans(atriskBetaE[-(1:500), ])))
+}
+stopImplicitCluster()
+
+### Collapse to the important taxa
+obsID <- c(str_replace_all(str_extract(dat08$ID[1:45], "^([:alpha:]{2}\\.){2}[:digit:]{2}"), "\\.", "\\-"),
+           str_extract(dat08$ID[-(1:45)], "^[:digit:]{7}"))
+bactList <- c("Bifidobacterium", "Other_Actinobacteria", "Bacteroides", 
+              "Prevotella", "Other_Bacteroidetes", "Faecalibacterium", 
+              "Megasphaera", "Ruminococcus", "Streptococcus", "Veillonella", 
+              "Other_Firmicutes", "Others")
+
+estiRelaGroup <- matrix(NA, nrow = 90, ncol = 12)
+actualRela <- dat06[, -(1:5)]/rowSums(dat06[, -(1:5)])
+actualRelaGroup <- matrix(NA, nrow = 90, ncol = 12)
+
+for(i in 1:length(bactList)){
+  index <- which(showName == bactList[i])
+  if(length(index) == 1){
+    estiRelaGroup[, i] <- estiRela[, which(showName == bactList[i])]
+    actualRelaGroup[, i] <- actualRela[, which(showName == bactList[i])]
+  } else {
+    estiRelaGroup[, i] <- rowSums(estiRela[, which(showName == bactList[i])])
+    actualRelaGroup[, i] <- rowSums(actualRela[, which(showName == bactList[i])])
+  }
+}
+
+colnames(estiRelaGroup) <- bactList
+colnames(actualRelaGroup) <- bactList
+
+colours <- c("#A4C639", "#BAC394", "#DDA661", "#BD8B46", "#FFD197",
+             "#BC6D62", "#DE6A5D", "#DE998B", "#FF6558", "#FFC6B8", 
+             "#FFE4DA", "#E5E5E5")
+
+### Actual
+actPlot <- data.frame(actualRelaGroup) %>%
+  mutate(id = obsID, Cluster = paste0("Cluster ", salso_clus[, 1])) %>%
+  pivot_longer(!c(id, Cluster), names_to = "Bacteria", values_to = "Prop") %>%
+  ggplot(aes(fill = factor(Bacteria, levels = c("Bifidobacterium", "Other_Actinobacteria",
+                                                "Bacteroides", "Prevotella", "Other_Bacteroidetes",
+                                                "Faecalibacterium", "Megasphaera", "Ruminococcus", 
+                                                "Streptococcus", "Veillonella", "Other_Firmicutes", 
+                                                "Others"),
+                           labels = c("Bifidobacterium", "Other Actinobacteria",
+                                      "Bacteroides", "Prevotella", "Other Bacteroidetes",
+                                      "Faecalibacterium", "Megasphaera", "Ruminococcus", 
+                                      "Streptococcus", "Veillonella", "Other Firmicutes", 
+                                      "Others")), y = Prop, x = id)) + 
+  geom_bar(position="fill", stat = "identity") +
+  scale_fill_manual("", values = colours) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5), legend.position = "bottom") +
+  guides(fill = guide_legend(nrow = 2, byrow = TRUE)) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(y = "Relative Abundance", title = "6-Month Infants: Actual Relative Abundance", x = "Sample") +
+  facet_grid(~Cluster, scales = "free_x")
+
+
+### Estimate
+estPlot <- data.frame(estiRelaGroup) %>%
+  mutate(id = obsID, Cluster = paste0("Cluster ", salso_clus[, 1])) %>%
+  pivot_longer(!c(id, Cluster), names_to = "Bacteria", values_to = "Prop") %>%
+  ggplot(aes(fill = factor(Bacteria, levels = c("Bifidobacterium", "Other_Actinobacteria",
+                                                "Bacteroides", "Prevotella", "Other_Bacteroidetes",
+                                                "Faecalibacterium", "Megasphaera", "Ruminococcus", 
+                                                "Streptococcus", "Veillonella", "Other_Firmicutes", 
+                                                "Others"),
+                           labels = c("Bifidobacterium", "Other Actinobacteria",
+                                      "Bacteroides", "Prevotella", "Other Bacteroidetes",
+                                      "Faecalibacterium", "Megasphaera", "Ruminococcus", 
+                                      "Streptococcus", "Veillonella", "Other Firmicutes", 
+                                      "Others")), y = Prop, x = id)) + 
+  geom_bar(position="fill", stat = "identity") +
+  scale_fill_manual("", values = colours) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5), legend.position = "bottom") +
+  guides(fill = guide_legend(nrow = 2, byrow = TRUE)) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(y = "Estimated Relative Abundance", title = "6-Month Infants: Estimated Relative Abundance", x = "Sample") +
+  facet_grid(~Cluster, scales = "free_x")
+
+grid.arrange(actPlot, estPlot)
+
+######
+
+dat06rela %>%
+  as.data.frame() %>%
+  ggplot(aes(x = ID, y = relaTaxa, fill = factor(showName))) +
+  geom_bar(position = "stack", stat="identity") +
+  scale_fill_manual("", values = colours) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5), 
+        legend.position = "bottom") +  # Vertical x-axis tick labels
+  guides(fill = guide_legend(nrow=2, byrow=TRUE)) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(y = "Relative abundance", title = "6-Month Infants", x = "Sample") +
+  facet_grid(~clus, scales = "free_x")
+
+data.frame(est_prob_group, iter = 1:1000) %>%
+  pivot_longer(!iter, names_to = "Bacteria", values_to = "Prop") %>%
+  ggplot(aes(x = iter, y = Prop, 
+             color = factor(Bacteria, levels = c("Bifidobacterium", "Other_Actinobacteria",
+                                                 "Bacteroides", "Prevotella", "Other_Bacteroidetes",
+                                                 "Faecalibacterium", "Megasphaera", "Ruminococcus", 
+                                                 "Streptococcus", "Veillonella", "Other_Firmicutes", 
+                                                 "Others"),
+                            labels = c("Bifidobacterium", "Other Actinobacteria",
+                                       "Bacteroides", "Prevotella", "Other Bacteroidetes",
+                                       "Faecalibacterium", "Megasphaera", "Ruminococcus", 
+                                       "Streptococcus", "Veillonella", "Other Firmicutes", 
+                                       "Others")))) +
+  geom_line() +
+  theme_minimal() +
+  theme(legend.position = "bottom",
+        legend.box = "vertical", legend.margin = margin(),
+        legend.title = element_blank()) + 
+  scale_color_manual(values = c("#A4C639", "#BAC394", "#DDA661", "#BD8B46", "#FFD197",
+                                "#BC6D62", "#DE6A5D", "#DE998B", "#FF6558", "#FFC6B8", 
+                                "#FFE4DA", "#E5E5E5")) +
+  labs(x = "Thinned Iteration", y = "Relative Abundance")
 
 
 
@@ -194,6 +450,11 @@ annikaZZ[[1]]$result$beta_result[1, , 1]
 
 
 
+
+
+
+
+# ------------------------------------------------------------------------------
 ### Analyze --------------------------------------------------------------------
 #### Computational Time 
 c(annikaZZ[[1]]$time, annikaZZ[[2]]$time, annikaZZ[[3]]$time)/60
