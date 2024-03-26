@@ -27,6 +27,13 @@ library(ggcorrplot)
 library(pheatmap)
 library(gridExtra)
 
+### User-defined Functions -----------------------------------------------------
+meanSD <- function(x, dplace = 3){
+  mm <- round(mean(x), digits = dplace)
+  ss <- round(sd(x), digits = dplace)
+  paste0(mm, " (", ss, ")")
+}
+
 ### Import the data and result -------------------------------------------------
 path <- "/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/Manuscript/"
 if(! file.exists(path)){
@@ -34,8 +41,8 @@ if(! file.exists(path)){
 }
 
 datpath <- "/Users/kevin-imac/Desktop/Annika/"
-if(! file.exists(path)){
-  datpath <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/Manuscript/"
+if(! file.exists(datpath)){
+  datpath <- "/Users/kevinkvp/Desktop/Annika/Application/"
 }
 
 ### Additional Data
@@ -327,7 +334,6 @@ oneAddPlot(Breastfed, "Breast Milk")
 oneAddPlot(Cow_milk, "Cow Milk")
 oneAddPlot(Fruits_Natural_Juices, "Natural Juice")
 oneAddPlot(Vegetables, "Vegetables")
-oneAddPlot(Breastfed, "Breast Milk")
 oneAddPlot(Soups, "Soups")
 oneAddPlot(Antibiotics, "Antibiotics")
 oneAddPlot(Diarrhea, "Diarrhea")
@@ -397,14 +403,15 @@ alpPlot(clusBinderN, 1e-323, Simpson_Index, "Simpson Index")
 alpPlot(clusBinderN, 1e-323, Inverse_Simpson_Index, "Inverse Simpson Index")
 alpPlot(clusBinderN, 1e-323, Shannon, "Shannon")
 
-
 rbind(alpCalc(dat06, clusBinderN[, 1], "6 Month"),
       alpCalc(dat08, clusBinderN[, 2], "8 Month"),
       alpCalc(dat12, clusBinderN[, 3], "12 Month")) %>%
   dplyr::select(-Child_ID) %>%
   group_by(Month, Cluster) %>%
-  summarise(across(everything(), mean)) %>%
-  arrange(Month)
+  summarise(across(everything(), meanSD)) %>%
+  arrange(Month) %>%
+  xtable() %>%
+  print(include.rownames = FALSE)
 
 ### ----------------------------------------------------------------------------
 
