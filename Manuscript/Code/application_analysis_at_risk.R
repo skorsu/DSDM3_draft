@@ -278,6 +278,34 @@ mo6plot <- relaPlot(timestamp_index = 1, actual_month = "6-Month")
 mo8plot <- relaPlot(timestamp_index = 2, actual_month = "8-Month")
 mo12plot <- relaPlot(timestamp_index = 3, actual_month = "12-Month")
 
+###
+
+data.frame(dat06[, c(1, 3, 5)], cluster = salso_clus[, 1]) %>%
+  group_by(cluster, country) %>%
+  summarise(n = n()) %>%
+  mutate(prop = n/sum(n)) %>%
+  ggplot(aes(x = factor(cluster, labels = paste0("Cluster", 1:3)), y = prop, fill = country)) +
+  geom_bar(position="fill", stat = "identity") +
+  theme_bw() +
+  theme(legend.position = "bottom") +
+  guides(fill = guide_legend(nrow = 1, byrow = TRUE)) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(x = " ", y = "Proportion", 
+       title = "6-Month: Proportion of the infant by their nationality")
+
+data.frame(dat06[, c(1, 3, 5)], cluster = salso_clus[, 1]) %>%
+  group_by(cluster, country) %>%
+  summarise(n = n()) %>%
+  mutate(prop = n/sum(n)) %>%
+  ggplot(aes(x = factor(cluster, labels = paste0("Cluster", 1:3)), y = prop, fill = country)) +
+  geom_bar(position="fill", stat = "identity") +
+  theme_bw() +
+  theme(legend.position = "bottom") +
+  guides(fill = guide_legend(nrow = 1, byrow = TRUE)) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(x = " ", y = "Proportion", 
+       title = "6-Month: Proportion of the infant by their nationality")
+
 
 ### Draft: ---------------------------------------------------------------------
 ###### Plot
