@@ -138,7 +138,7 @@ addDat <- rbind(addml %>%
         mutate(Child_ID = toupper(Child_ID), Month = str_replace_all(toupper(Month), " ", "")) %>%
         mutate(Nationality = "NI"))
 
-## Cluster from salso: ---------------------------------------------------------
+### Cluster from salso: --------------------------------------------------------
 salso_clus <- sapply(1:3, 
                      function(x){as.numeric(salso(annikaZZ[[x]]$result$ci_result[-(1:500), ]))})
 
@@ -156,10 +156,6 @@ sapply(1:3, function(x){apply(annikaZZ[[x]]$result$ci_result, 1, function(y){len
        color = "Timestamp", title = "Active clusters over MCMC iterations for each timestamp") +
   scale_y_continuous(limits = c(1, 10), breaks = seq(1, 10, 1)) +
   theme(legend.position = "bottom", legend.box = "horizontal")
-
-### Need to add: gender, nationality, rice bran
-
-table(salso_clus[, 1], dat06[, 1])
 
 ### Group Taxa: ----------------------------------------------------------------
 
@@ -319,35 +315,80 @@ mo6plot <- relaPlot(timestamp_index = 1, actual_month = "6-Month")
 mo8plot <- relaPlot(timestamp_index = 2, actual_month = "8-Month")
 mo12plot <- relaPlot(timestamp_index = 3, actual_month = "12-Month")
 
-### Average Relative Abundance: ------------------------------------------------
+### Table: Relative Taxa: ------------------------------------------------------
+#### Bacteria of interest: c("Bifidobacterium", "Bacteroides", "Prevotella", "Streptococcus")
+list(mo6plot$actualRelaGroup, mo8plot$actualRelaGroup, mo12plot$actualRelaGroup)
+
+reindexFn <- function(listDat, matClus, bactSort){
+  
+  clusMat <- matrix(NA, ncol = 3, nrow = 90)
+  
+  for(t in 1:3){
+    reindex_cluster <- data.frame(listDat[[t]], Cluster = matClus[, t]) %>%
+      group_by(Cluster) %>%
+      summarise(meanInt = mean({{bactSort}})) %>%
+      arrange(-meanInt) %>%
+      .$Cluster
+    
+    k <- length(reindex_cluster)
+    for(i in 1:k){
+      clusMat[which(matClus[, t] == reindex_cluster[i]), t] <- i
+    }
+    
+  }
+  
+  clusMat
+    
+}
+
+newClus <- reindexFn(list(mo6plot$actualRelaGroup, mo8plot$actualRelaGroup, mo12plot$actualRelaGroup),
+                     salso_clus, Bifidobacterium)
+
+### Cluster Size: --------------------------------------------------------------
+rbind(c(as.numeric(table(newClus[, 1])), rep(NA, 2)),
+      as.numeric(table(newClus[, 2])),
+      as.numeric(table(newClus[, 3]))) %>%
+  `rownames<-`(c("6-Month", "8-Month", "12-Month")) %>%
+  `colnames<-`(paste0("Cluster ", 1:5)) %>%
+  xtable()
+
+### Average Relative Abundance (Visualization): --------------------------------
 heatPlotAVG <- function(relaPlotObj, cluster_assign, monthLab){
   
   k <- length(unique(cluster_assign))
   meanEst <- matrix(NA, nrow = k, ncol = 12)
+  meanSDEst <- matrix(NA, nrow = k, ncol = 12)
   meanAct <- matrix(NA, nrow = k, ncol = 12)
+  meanSDAct <- matrix(NA, nrow = k, ncol = 12)
   bactName <- colnames(relaPlotObj$actualRelaGroup)
   
   for(i in 1:k){
     
-    meanAct[i, ] <- data.frame(Cluster = cluster_assign, relaPlotObj$actualRelaGroup) %>%
+    actPop <- data.frame(Cluster = cluster_assign, relaPlotObj$actualRelaGroup) %>%
       dplyr::filter(Cluster == i) %>%
-      dplyr::select(-Cluster) %>%
-      colMeans()
+      dplyr::select(-Cluster)
+    meanAct[i, ] <- colMeans(actPop)
+    meanSDAct[i, ] <- apply(actPop, 2, meanSD)
     
-    meanEst[i, ] <- data.frame(Cluster = cluster_assign, relaPlotObj$estiRelaGroup) %>%
+    EstPop <- data.frame(Cluster = cluster_assign, relaPlotObj$estiRelaGroup) %>%
       dplyr::filter(Cluster == i) %>%
-      dplyr::select(-Cluster) %>%
-      colMeans()
+      dplyr::select(-Cluster)
+    meanEst[i, ] <- colMeans(EstPop)
+    meanSDEst[i, ] <- apply(EstPop, 2, meanSD)
     
   }
   
   actTitle <- paste0(monthLab, ": Actual Average relative abundance")
   estTitle <- paste0(monthLab, ": Estimated Average relative abundance")
   
-  actHeat <- t(meanAct) %>%
+  actHeat <- inner_join(t(meanAct) %>%
     `colnames<-`(paste0("Cluster_", 1:k)) %>%
     data.frame(Bact = bactName) %>%
-    pivot_longer(!Bact) %>%
+    pivot_longer(!Bact, values_to = "prop_col"),
+    t(meanSDAct) %>%
+      `colnames<-`(paste0("Cluster_", 1:k)) %>%
+      data.frame(Bact = bactName) %>%
+      pivot_longer(!Bact, values_to = "prop_print")) %>%
     ggplot(aes(x = factor(name, levels = paste0("Cluster_", 1:k), 
                           labels = paste0("Cluster ", 1:k)), 
                y = forcats::fct_rev(factor(Bact, levels = c("Bifidobacterium", "Other_Actinobacteria",
@@ -359,19 +400,23 @@ heatPlotAVG <- function(relaPlotObj, cluster_assign, monthLab){
                                                       "Bacteroides", "Prevotella", "Other Bacteroidetes",
                                                       "Faecalibacterium", "Megasphaera", "Ruminococcus", 
                                                       "Streptococcus", "Veillonella", "Other Firmicutes", 
-                                                      "Others"))), fill = value)) +
+                                                      "Others"))), fill = prop_col, label = prop_print)) +
     geom_tile() +
-    geom_text(aes(label = round(value, 3)), color = "black") +
+    geom_text(color = "black") +
     scale_fill_gradient(limits = c(0, 1), low = "white", high = "darkgreen") +
     theme_minimal() +
     theme(legend.position = "bottom") +
     labs(x = " ", y = "Bacteria", title = actTitle, 
          fill = "Average Relative Abundance")
   
-  estHeat <- t(meanEst) %>%
-    `colnames<-`(paste0("Cluster_", 1:k)) %>%
-    data.frame(Bact = bactName) %>%
-    pivot_longer(!Bact) %>%
+  estHeat <- inner_join(t(meanEst) %>%
+                          `colnames<-`(paste0("Cluster_", 1:k)) %>%
+                          data.frame(Bact = bactName) %>%
+                          pivot_longer(!Bact, values_to = "prop_col"),
+                        t(meanSDEst) %>%
+                          `colnames<-`(paste0("Cluster_", 1:k)) %>%
+                          data.frame(Bact = bactName) %>%
+                          pivot_longer(!Bact, values_to = "prop_print")) %>%
     ggplot(aes(x = factor(name, levels = paste0("Cluster_", 1:k), 
                           labels = paste0("Cluster ", 1:k)), 
                y = forcats::fct_rev(factor(Bact, levels = c("Bifidobacterium", "Other_Actinobacteria",
@@ -383,9 +428,9 @@ heatPlotAVG <- function(relaPlotObj, cluster_assign, monthLab){
                                                       "Bacteroides", "Prevotella", "Other Bacteroidetes",
                                                       "Faecalibacterium", "Megasphaera", "Ruminococcus", 
                                                       "Streptococcus", "Veillonella", "Other Firmicutes", 
-                                                      "Others"))), fill = value)) +
+                                                      "Others"))), fill = prop_col, label = prop_print)) +
     geom_tile() +
-    geom_text(aes(label = round(value, 3)), color = "black") +
+    geom_text(color = "black") +
     scale_fill_gradient(limits = c(0, 1), low = "white", high = "darkgreen") +
     theme_minimal() +
     theme(legend.position = "bottom") +
@@ -396,9 +441,9 @@ heatPlotAVG <- function(relaPlotObj, cluster_assign, monthLab){
   
 }
 
-grid.arrange(grobs = heatPlotAVG(mo6plot, salso_clus[, 1], "6-Month"))
-grid.arrange(grobs = heatPlotAVG(mo8plot, salso_clus[, 2], "8-Month"))
-grid.arrange(grobs = heatPlotAVG(mo12plot, salso_clus[, 3], "12-Month"))
+grid.arrange(grobs = heatPlotAVG(mo6plot, newClus[, 1], "6-Month"))
+grid.arrange(grobs = heatPlotAVG(mo8plot, newClus[, 2], "8-Month"))
+grid.arrange(grobs = heatPlotAVG(mo12plot, newClus[, 3], "12-Month"))
 
 ### Descriptive Statistic Plot: ------------------------------------------------
 descPlot <- function(descDat_type, intVar, capt, monthLab, g1level = "yes", g2level = "no", 
@@ -432,7 +477,7 @@ plotData <- function(monthabbv, monthLabel, monthDat, monthCluster){
     mutate(Group = str_to_title(Group))
   
   plotList <- list(descPlot(descDat, Sex, "Sex", monthLabel, "M", "F", "Male", "Female", "lightblue", "lightpink"),
-                   descPlot(descDat, country, "Nationality", monthLabel, "NI", "ML", "Nicaraguan", "Malian", "darkblue", "green"),
+                   descPlot(descDat, country, "Nationality", monthLabel, "NI", "ML", "Nicaraguan", "Malian", "darkblue", "lightgreen"),
                    descPlot(descDat, Group, "Group", monthLabel, "Rice Bran", "Control", "Rice Bran", "Control"),
                    descPlot(descDat, Breastfed, "Breastfed", monthLabel),
                    descPlot(descDat, Cow_milk, "Cow milk", monthLabel),
@@ -444,55 +489,98 @@ plotData <- function(monthabbv, monthLabel, monthDat, monthCluster){
                    descPlot(descDat, GR, "Grains and Legumes", monthLabel),
                    descPlot(descDat, Protein, "Protein", monthLabel))
   
-  grid.arrange(grobs = plotList)
+  plotList
   
 }
 
-plotData("6MO", "6-Month", dat06, salso_clus[, 1])
-plotData("8MO", "8-Month", dat08, salso_clus[, 2])
-plotData("12MO", "12-Month", dat12, salso_clus[, 3])
+plot6mo <- plotData("6MO", "6-Month", dat06, newClus[, 1])
+plot8mo <- plotData("8MO", "8-Month", dat08, newClus[, 2])
+plot12mo <- plotData("12MO", "12-Month", dat12, newClus[, 3])
+
+i <- 2
+grid.arrange(grobs = list(plot6mo[[i]], plot8mo[[i]], plot12mo[[i]]))
+
+grid.arrange(grobs = list(plot6mo[[1]], plot8mo[[1]], plot12mo[[1]],
+                          plot6mo[[2]], plot8mo[[2]], plot12mo[[2]],
+                          plot6mo[[3]], plot8mo[[3]], plot12mo[[3]]))
 
 ### Alpha-Diversity: -----------------------------------------------------------
+alphaSumm <- function(relaPlotObj, cluster_assign, moLabel){
+  
+  ### Calculate the Alpha Diversity
+  #### Richness
+  actualRich <- as.numeric(rowSums(relaPlotObj$actualRelaUngroup != 0))
+  estiRich <- as.numeric(rowSums(relaPlotObj$estiRelaUngroup != 0))
+  
+  #### Simpson
+  actualSS <- as.numeric(1 - rowSums(relaPlotObj$actualRelaUngroup^2))
+  estiSS <- as.numeric(1 - rowSums(relaPlotObj$estiRelaUngroup^2))
+  
+  #### Inverse Simpson
+  actualISS <- as.numeric(1/rowSums(relaPlotObj$actualRelaUngroup^2))
+  estiISS <- as.numeric(1/rowSums(relaPlotObj$estiRelaUngroup^2))
+  
+  #### Shannon
+  actualSN <- as.matrix(relaPlotObj$actualRelaUngroup)
+  actualSN[actualSN == 0] <- 1e-200
+  actualSN <- as.numeric(-rowSums(actualSN * log(actualSN)))
+  
+  estiSN <- as.matrix(relaPlotObj$estiRelaUngroup)
+  estiSN[estiSN == 0] <- 1e-200
+  estiSN <- as.numeric(-rowSums(estiSN * log(estiSN)))
+  
+  ### Plot
+  k <- length(unique(cluster_assign))
+  plotTitle = paste0(moLabel, ": Alpha Diversity")
+  
+  pplot <- rbind(data.frame(Actual = actualRich, Estimate = estiRich, cluster = cluster_assign) %>%
+                   pivot_longer(c(Actual, Estimate)) %>%
+                   mutate(Quantity = "Richness"),
+                 data.frame(Actual = actualSS, Estimate = estiSS, cluster = cluster_assign) %>%
+                   pivot_longer(c(Actual, Estimate)) %>%
+                   mutate(Quantity = "Simpson"),
+                 data.frame(Actual = actualISS, Estimate = estiISS, cluster = cluster_assign) %>%
+                   pivot_longer(c(Actual, Estimate)) %>%
+                   mutate(Quantity = "Inverse Simpson"),
+                 data.frame(Actual = actualSN, Estimate = estiSN, cluster = cluster_assign) %>%
+                   pivot_longer(c(Actual, Estimate)) %>%
+                   mutate(Quantity = "Shannon")) %>%
+    ggplot(aes(x = name, y = value, fill = factor(cluster, labels = paste0("Cluster ", 1:k)))) +
+    geom_boxplot() +
+    facet_grid(factor(Quantity, levels = c("Richness", "Shannon", "Simpson", "Inverse Simpson")) ~ ., scales = "free_y") +
+    theme_bw() +
+    theme(legend.position = "bottom") +
+    labs(x = " ", y = " ", fill = "Cluster", title = plotTitle)
+  
+  ### xtable
+  actualQ <- list(actualRich, actualSN, actualSS, actualISS)
+  estiQ <- list(estiRich, estiSN, estiSS, estiISS)
+  report_table_actual <- data.frame(matrix(NA, ncol = 4, nrow = k))
+  report_table_estimate <- data.frame(matrix(NA, ncol = 4, nrow = k))
+  
+  for(i in 1:k){
+    report_table_actual[i, ] <- sapply(1:4, function(y){meanSD(lapply(1:4, function(x){actualQ[[x]][which(cluster_assign == i)]})[[y]])})
+    report_table_estimate[i, ] <- sapply(1:4, function(y){meanSD(lapply(1:4, function(x){estiQ[[x]][which(cluster_assign == i)]})[[y]])})
+  }
+  
+  colnames(report_table_actual) <- c("Richness", "Shannon", "Simpson", "Inverse Simpson")
+  colnames(report_table_estimate) <- c("Richness", "Shannon", "Simpson", "Inverse Simpson")
+  rownames(report_table_actual) <- paste0("Cluster ", 1:k)
+  rownames(report_table_estimate) <- paste0("Cluster ", 1:k)
+  
+  printList <- list(report_table_actual, report_table_estimate)
+  attr(printList, "subheadings") <- c("Actual", "Estimate")
+  
+  xtableObj <- xtableList(printList)
+  
+  list(plot = pplot, xtable = xtableObj)
 
-### Rcichness
-actualRich <- as.numeric(rowSums(mo8plot$actualRelaUngroup != 0))
-estiRich <- as.numeric(rowSums(mo8plot$estiRelaUngroup != 0))
+}
 
-data.frame(actualRich, estiRich) %>%
-  pivot_longer(c(actualRich, estiRich)) %>%
-  ggplot(aes(x = name, y = value)) +
-  geom_boxplot()
-
-### Simpson
-actualSS <- as.numeric(1 - rowSums(mo8plot$actualRelaUngroup^2))
-estiSS <- as.numeric(1 - rowSums(mo8plot$estiRelaUngroup^2))
-
-data.frame(actualSS, estiSS) %>%
-  pivot_longer(c(actualSS, estiSS)) %>%
-  ggplot(aes(x = name, y = value)) +
-  geom_boxplot()
-
-### Inverse Simpson
-actualISS <- as.numeric(1/rowSums(mo8plot$actualRelaUngroup^2))
-estiISS <- as.numeric(1/rowSums(mo8plot$estiRelaUngroup^2))
-
-data.frame(actualISS, estiISS) %>%
-  pivot_longer(c(actualISS, estiISS)) %>%
-  ggplot(aes(x = name, y = value)) +
-  geom_boxplot()
-
-### Shannon
-actualSN <- as.matrix(mo8plot$actualRelaUngroup)
-actualSN[actualSN == 0] <- 1e-200
-actualSN <- as.numeric(-rowSums(actualSN * log(actualSN)))
-
-estiSN <- as.matrix(mo8plot$estiRelaUngroup)
-estiSN[estiSN == 0] <- 1e-200
-estiSN <- as.numeric(-rowSums(estiSN * log(estiSN)))
-
-data.frame(actualSN, estiSN) %>%
-  pivot_longer(c(actualSN, estiSN)) %>%
-  ggplot(aes(x = name, y = value)) +
-  geom_boxplot()
+alpha6mo <- alphaSumm(mo6plot, newClus[, 1], "6-Month")
+alpha8mo <- alphaSumm(mo8plot, newClus[, 2], "8-Month")
+alpha12mo <- alphaSumm(mo12plot, newClus[, 3], "12-Month")
+grid.arrange(grobs = list(alpha6mo$plot, alpha8mo$plot, alpha12mo$plot))
+print.xtableList(alpha6mo$xtable, booktabs = TRUE)
 
 ### ----------------------------------------------------------------------------
