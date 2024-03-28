@@ -76,18 +76,18 @@ dat12 <- dat12[, c(1:5, which(colnames(dat12[, -(1:5)]) %in% commomTaxa) + 5)]
 identical(colnames(dat06), colnames(dat08))
 identical(colnames(dat12[, -(1:5)]), colnames(dat08[, -(1:5)]))
 
-### Run the models -------------------------------------------------------------
-datList <- list(as.matrix(dat06[, -(1:5)]), as.matrix(dat08[, -(1:5)]), 
-                as.matrix(dat12[, -(1:5)]))
-
+### Run the models for sensitivity analysis ------------------------------------
 #### ZIDM-ZIDM
+nRepli <- 20
+nameResult <- "microbiome_result_at_risk_sensitivity_6mo.RData"
+
 set.seed(1415, kind = "L'Ecuyer-CMRG")
 start_ova <- Sys.time()
 registerDoParallel(5)
-resultZZ <- foreach(t = 1:3) %dopar% {
+resultZZ <- foreach(t = 1:nRepli) %dopar% {
   
   start_time <- Sys.time()
-  clus_result <- mod(iter = 100000, Kmax = 10, nbeta_split = 5, z = datList[[t]], 
+  clus_result <- mod(iter = 100000, Kmax = 10, nbeta_split = 5, z = as.matrix(dat06[, -(1:5)]), 
                      atrisk_init = matrix(1, ncol = 38, nrow = 90), 
                      beta_init = matrix(0, ncol = 38, nrow = 10), 
                      ci_init = rep(0, 90), theta = 1, mu = 0, s2 = 1, s2_MH = 1, 
@@ -100,7 +100,7 @@ resultZZ <- foreach(t = 1:3) %dopar% {
 stopImplicitCluster()
 difftime(Sys.time(), start_ova)
 
-saveRDS(resultZZ, paste0(path, "Manuscript/Result/microbiome_result_at_risk.RData"))
+saveRDS(resultZZ, paste0(path, "Manuscript/Result/", nameResult))
 
 
 

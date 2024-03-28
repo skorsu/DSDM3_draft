@@ -573,7 +573,7 @@ alphaSumm <- function(relaPlotObj, cluster_assign, moLabel){
   
   xtableObj <- xtableList(printList)
   
-  list(plot = pplot, xtable = xtableObj)
+  list(plot = pplot, xtable = xtableObj, actualQ = actualQ, estiQ = estiQ)
 
 }
 
@@ -582,5 +582,107 @@ alpha8mo <- alphaSumm(mo8plot, newClus[, 2], "8-Month")
 alpha12mo <- alphaSumm(mo12plot, newClus[, 3], "12-Month")
 grid.arrange(grobs = list(alpha6mo$plot, alpha8mo$plot, alpha12mo$plot))
 print.xtableList(alpha6mo$xtable, booktabs = TRUE)
+
+### Observations movement: -----------------------------------------------------
+obsMovement <- function(clusAssign){
+  
+  ### Get the bar separating each cluster
+  bar1 <- data.frame(x = rep(1, 3), y = 90 - as.numeric(cumsum(table(clusAssign[, 1]))))
+  bar2 <- data.frame(x = rep(2, 5), y = 90 - as.numeric(cumsum(table(clusAssign[, 2]))))
+  bar3 <- data.frame(x = rep(3, 5), y = 90 - as.numeric(cumsum(table(clusAssign[, 3]))))
+  
+  ### Get the observation index
+  c06 <- data.frame(obs = 1:90, clus6 = factor(clusAssign[, 1])) %>%
+    arrange(clus6) %>% 
+    mutate(index6 = 90:1)
+  c08 <- data.frame(obs = 1:90, clus8 = factor(clusAssign[, 2])) %>%
+    arrange(clus8) %>% 
+    mutate(index8 = 90:1)
+  c12 <- data.frame(obs = 1:90, clus12 = factor(clusAssign[, 3])) %>%
+    arrange(clus12) %>% 
+    mutate(index12 = 90:1)
+  
+  ### Get the linking line
+  obsChange <- NULL
+  for(i in 1:90){
+    
+    if(c06[which(c06$obs == i), "clus6"] != c08[which(c08$obs == i), "clus8"]){
+      obsChange <- rbind(obsChange,
+                         c(c08[which(c08$obs == i), "clus8"], c06[which(c06$obs == i), "index6"], c08[which(c08$obs == i), "index8"]))
+    }
+    
+  }
+  
+  obsChange2 <- NULL
+  for(i in 1:90){
+    
+    if(c08[which(c08$obs == i), "clus8"] != c12[which(c12$obs == i), "clus12"]){
+      obsChange2 <- rbind(obsChange2,
+                          c(c12[which(c12$obs == i), "clus12"], c08[which(c08$obs == i), "index8"], c12[which(c12$obs == i), "index12"]))
+    }
+    
+  }
+  
+  d1 <- dim(obsChange)[1]
+  d2 <- dim(obsChange2)[1]
+  
+  ggplot() +
+    geom_text(data = c06, aes(x = rep(1, 90), y = index6, label = obs, color = clus6), size = 4) +
+    geom_text(data = c08, aes(x = rep(2, 90), y = index8, label = obs, color = clus8), size = 4) +
+    geom_text(data = c12, aes(x = rep(3, 90), y = index12, label = obs, color = clus12), size = 4) +
+    geom_segment(aes(x = rep(1.01, d1), y = obsChange[, 2], 
+                     xend = rep(1.99, d1), yend = obsChange[, 3]),
+                 color = "grey50", alpha = 0.6, linewidth = 0.30) +
+    geom_segment(aes(x = rep(2.01, d2), y = obsChange2[, 2], 
+                     xend = rep(2.99, d2), yend = obsChange2[, 3]), 
+                 color = "grey50", alpha = 0.6, linewidth = 0.30) +
+    geom_segment(data = bar1, 
+                 aes(x = x - 0.05, y = y, xend = x + 0.05, yend = y), 
+                 alpha = 0.5, inherit.aes = FALSE) +
+    geom_segment(data = bar2, 
+                 aes(x = x - 0.05, y = y, xend = x + 0.05, yend = y), 
+                 alpha = 0.5, inherit.aes = FALSE) +
+    geom_segment(data = bar3, 
+                 aes(x = x - 0.05, y = y, xend = x + 0.05, yend = y), 
+                 alpha = 0.5, inherit.aes = FALSE) +
+    theme_minimal() + 
+    theme(legend.position = "none", axis.ticks = element_blank(), axis.text.y = element_blank()) + 
+    scale_x_continuous(breaks = c(1, 2, 3), labels = c("6 months", "8 months", "12 months")) +
+    labs(x = "Timestamps", y = "", title = "The change of cluster behavior for each infants across three timestamps")
+  
+  
+}
+
+#### Reindex based on the alpha diversity
+reindexFnA <- function(alphaList, matClus){
+  
+  clusMat <- matrix(NA, ncol = 3, nrow = 90)
+  
+  for(t in 1:3){
+    reindex_cluster <- data.frame(alp = alphaList[[t]], Cluster = matClus[, t]) %>%
+      group_by(Cluster) %>%
+      summarise(meanInt = mean(alp)) %>%
+      arrange(-meanInt) %>%
+      .$Cluster
+    
+    k <- length(reindex_cluster)
+    for(i in 1:k){
+      clusMat[which(matClus[, t] == reindex_cluster[i]), t] <- i
+    }
+    
+  }
+  
+  clusMat
+  
+}
+
+#### Bacteria of interest: c("Bifidobacterium", "Bacteroides", "Prevotella", "Streptococcus")
+reindexFn(list(mo6plot$actualRelaGroup, mo8plot$actualRelaGroup, mo12plot$actualRelaGroup),
+          salso_clus, Streptococcus) %>%
+  obsMovement()
+
+j <- 2
+reindexFnA(list(alpha6mo$actualQ[[j]], alpha8mo$actualQ[[j]], alpha12mo$actualQ[[j]]), newClus) %>%
+  obsMovement()
 
 ### ----------------------------------------------------------------------------
