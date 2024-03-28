@@ -310,7 +310,8 @@ relaPlot <- function(timestamp_index, actual_month){
     facet_grid(~Cluster, scales = "free_x")
   
   list(estiRelaGroup = estiRelaGroup, 
-       actualRelaGroup = actualRelaGroup, plot = grid.arrange(actPlot, estPlot))
+       actualRelaGroup = actualRelaGroup, plot = grid.arrange(actPlot, estPlot),
+       estiRelaUngroup = estiRela, actualRelaUngroup = actualRela)
   
 }
 
@@ -451,6 +452,47 @@ plotData("6MO", "6-Month", dat06, salso_clus[, 1])
 plotData("8MO", "8-Month", dat08, salso_clus[, 2])
 plotData("12MO", "12-Month", dat12, salso_clus[, 3])
 
+### Alpha-Diversity: -----------------------------------------------------------
 
+### Rcichness
+actualRich <- as.numeric(rowSums(mo8plot$actualRelaUngroup != 0))
+estiRich <- as.numeric(rowSums(mo8plot$estiRelaUngroup != 0))
+
+data.frame(actualRich, estiRich) %>%
+  pivot_longer(c(actualRich, estiRich)) %>%
+  ggplot(aes(x = name, y = value)) +
+  geom_boxplot()
+
+### Simpson
+actualSS <- as.numeric(1 - rowSums(mo8plot$actualRelaUngroup^2))
+estiSS <- as.numeric(1 - rowSums(mo8plot$estiRelaUngroup^2))
+
+data.frame(actualSS, estiSS) %>%
+  pivot_longer(c(actualSS, estiSS)) %>%
+  ggplot(aes(x = name, y = value)) +
+  geom_boxplot()
+
+### Inverse Simpson
+actualISS <- as.numeric(1/rowSums(mo8plot$actualRelaUngroup^2))
+estiISS <- as.numeric(1/rowSums(mo8plot$estiRelaUngroup^2))
+
+data.frame(actualISS, estiISS) %>%
+  pivot_longer(c(actualISS, estiISS)) %>%
+  ggplot(aes(x = name, y = value)) +
+  geom_boxplot()
+
+### Shannon
+actualSN <- as.matrix(mo8plot$actualRelaUngroup)
+actualSN[actualSN == 0] <- 1e-200
+actualSN <- as.numeric(-rowSums(actualSN * log(actualSN)))
+
+estiSN <- as.matrix(mo8plot$estiRelaUngroup)
+estiSN[estiSN == 0] <- 1e-200
+estiSN <- as.numeric(-rowSums(estiSN * log(estiSN)))
+
+data.frame(actualSN, estiSN) %>%
+  pivot_longer(c(actualSN, estiSN)) %>%
+  ggplot(aes(x = name, y = value)) +
+  geom_boxplot()
 
 ### ----------------------------------------------------------------------------
