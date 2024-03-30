@@ -104,6 +104,49 @@ dat12 <- dat12[, c(1:5, which(colnames(dat12[, -(1:5)]) %in% commomTaxa) + 5)]
 identical(colnames(dat06), colnames(dat08))
 identical(colnames(dat12[, -(1:5)]), colnames(dat08[, -(1:5)]))
 
+## Group Taxa: -----------------------------------------------------------------
+
+datList <- list(dat06, dat08, dat12)
+
+registerDoParallel(5)
+impTaxa <- foreach(t = 1:3) %dopar% {
+  
+  prop <- as.numeric(colMeans(datList[[t]][, -(1:5)]/rowSums(datList[[t]][, -(1:5)])))
+  which(prop %in% boxplot.stats(prop)$out)
+  
+}
+stopImplicitCluster()
+impTaxa <- union(impTaxa[[1]], union(impTaxa[[2]], impTaxa[[3]]))
+
+#### str_match_all(colnames(dat06[-(1:5)]), "[:alpha:]{1}\\_{2}\\.?[:alpha:]+")
+#### Go for the phylum and genus
+taxaName <- cbind(str_match(colnames(dat06[-(1:5)]), "p\\_{2}\\.?[:alpha:]+") %>%
+                    str_match("[:upper:]{1}[:alpha:]+"), 
+                  str_match(colnames(dat06[-(1:5)]), "g\\_{2}\\.?[:alpha:]+") %>%
+                    str_match("[:upper:]{1}[:alpha:]+"))
+
+impTaxaInd <- rep(FALSE, 38)
+impTaxaInd[impTaxa] <- TRUE
+
+#### Get the column name, group the other taxa
+showName <- data.frame(taxaName, impTaxaInd) %>%
+  replace_na(list(X1 = "Bacteria", X2 = "Other")) %>%
+  mutate(showName = ifelse(impTaxaInd, X2, 
+                           ifelse(X1 == "Bacteria", "Others", paste0("Other ", X1)))) %>%
+  .$showName
+
+showName <- factor(showName,
+                   levels = c("Bifidobacterium", "Other Actinobacteria",
+                              "Bacteroides", "Prevotella", "Other Bacteroidetes",
+                              "Faecalibacterium", "Megasphaera", "Ruminococcus", 
+                              "Streptococcus", "Veillonella", "Other Firmicutes", 
+                              "Others"),
+                   labels = c("Bifidobacterium", "Other_Actinobacteria",
+                              "Bacteroides", "Prevotella", "Other_Bacteroidetes",
+                              "Faecalibacterium", "Megasphaera", "Ruminococcus", 
+                              "Streptococcus", "Veillonella", "Other_Firmicutes", 
+                              "Others"))
+
 ## Additional Dataset: ---------------------------------------------------------
 addDat <- rbind(addml %>%
                   mutate(across(where(is.character), tolower)) %>%
@@ -174,39 +217,94 @@ rbind(activeList[[1]] %>%
 ### Result from salso function: ------------------------------------------------
 salsoList <- lapply(1:3, function(x){sapply(1:20, function(y){salso(resultList[[x]][[y]]$result$ci_result[-(1:500), ])})})
 timeStampIndex <- c("6-Month", "8-Month", "12-Month")
-lapply(1:3, function(x){apply(salsoList[[x]], 2, activeClus) %>%
+unListFreq <- lapply(1:3, function(x){apply(salsoList[[x]], 2, activeClus) %>%
     table() %>%
     as.data.frame() %>%
     `colnames<-`(c("nClus", "Freq")) %>%
-    mutate(Timestamp = timeStampIndex[x])})
+    mutate(Timestamp = timeStampIndex[x])}) %>%
+  bind_rows(.id = "column_label")
 
-sapply(1:20, function(x){salso(annika6M[[x]]$result$ci_result[-(1:500), ])}) %>%
-  apply(2, activeClus) %>%
-  table()
+unListFreq <- unListFreq[rep(1:12, unListFreq[, c("Freq")]), -c(1, 3)]
+unListFreq$Timestamp <- factor(unListFreq$Timestamp, levels = c("6-Month", "8-Month", "12-Month"))
+t(table(unListFreq)) %>%
+  xtable()
 
 ### Estimated Relative Abundance: ----------------------------------------------
+obsID <- c(str_replace_all(str_extract(dat08$ID[1:45], "^([:alpha:]{2}\\.){2}[:digit:]{2}"), "\\.", "\\-"),
+           str_extract(dat08$ID[-(1:45)], "^[:digit:]{7}"))
+bactList <- c("Bifidobacterium", "Other_Actinobacteria", "Bacteroides", 
+              "Prevotella", "Other_Bacteroidetes", "Faecalibacterium", 
+              "Megasphaera", "Ruminococcus", "Streptococcus", "Veillonella", 
+              "Other_Firmicutes", "Others")
+colours <- c("#A4C639", "#BAC394", "#DDA661", "#BD8B46", "#FFD197",
+             "#BC6D62", "#DE6A5D", "#DE998B", "#FF6558", "#FFC6B8", 
+             "#FFE4DA", "#E5E5E5")
 
+relaALLchain <- function(sensResult, monthLab){
+  
+  #### Create the beta vector
+  estProbALL <- lapply(1:20, function(y){
+    sapply(1:90, function(x){
+      bet_mat <- matrix(NA, ncol = 38, nrow = 1000)
+      for(i in 1:1000){
+        ci <- sensResult[[y]]$result$ci_result[i, x] + 1
+        bet_mat[i, ] <- sensResult[[y]]$result$beta_result[ci, , i]
+      }
+      hyper_param <- exp(bet_mat) * t(sensResult[[y]]$result$atrisk_result[x, , ])
+      colMeans(rdirichlet(1000, colMeans(hyper_param[-(1:500), ]))) 
+    }) %>% t()
+  })
 
-### Cluster from salso: --------------------------------------------------------
-salso_clus <- sapply(1:3, 
-                     function(x){as.numeric(salso(annikaZZ[[x]]$result$ci_result[-(1:500), ]))})
+  ### Group the bacteria
+  estiRelaGroupList <- lapply(1:20, function(x){
+    estiRelaGroup <- matrix(NA, nrow = 90, ncol = 12)
+    for(i in 1:length(bactList)){
+      index <- which(showName == bactList[i])
+      if(length(index) == 1){
+        estiRelaGroup[, i] <- estProbALL[[x]][, which(showName == bactList[i])]
+      } else {
+        estiRelaGroup[, i] <- rowSums(estProbALL[[x]][, which(showName == bactList[i])])
+      }
+    }
+    colnames(estiRelaGroup) <- bactList
+    estiRelaGroup
+  })
+  
+  titlePlot <- paste0(monthLab, ": Estimated relative abundance")
+  
+  lapply(1:90, function(y){sapply(1:20, function(x){estiRelaGroupList[[x]][y, ]}) %>%
+      t() %>%
+      as.data.frame() %>%
+      mutate(Chain = paste0("Chain ", 1:20)) %>%
+      mutate(Observation = obsID[y])}) %>%
+    bind_rows(.id = "column_label") %>%
+    dplyr::select(-column_label) %>%
+    pivot_longer(!(c(Chain, Observation)), names_to = "Bacteria", values_to = "Prop") %>%
+    ggplot(aes(fill = factor(Bacteria, levels = c("Bifidobacterium", "Other_Actinobacteria",
+                                                  "Bacteroides", "Prevotella", "Other_Bacteroidetes",
+                                                  "Faecalibacterium", "Megasphaera", "Ruminococcus", 
+                                                  "Streptococcus", "Veillonella", "Other_Firmicutes", 
+                                                  "Others"),
+                             labels = c("Bifidobacterium", "Other Actinobacteria",
+                                        "Bacteroides", "Prevotella", "Other Bacteroidetes",
+                                        "Faecalibacterium", "Megasphaera", "Ruminococcus", 
+                                        "Streptococcus", "Veillonella", "Other Firmicutes", 
+                                        "Others")), y = Prop, x = factor(Chain, levels = paste0("Chain ", 1:20)))) +
+    geom_bar(position = "fill", stat = "identity") +
+    scale_fill_manual("", values = colours) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5), legend.position = "bottom") +
+    guides(fill = guide_legend(nrow = 1, byrow = TRUE)) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    labs(y = "Estimated Relative Abundance", x = "Chain", 
+         title = titlePlot) +
+    facet_wrap(. ~ Observation)
+}
 
-sapply(1:3, function(x){apply(annikaZZ[[x]]$result$ci_result, 1, function(y){length(unique(y))})}) %>%
-  as.data.frame() %>%
-  `colnames<-`(c("6MO", "8MO", "12MO")) %>%
-  mutate(iter = 1:1000) %>%
-  pivot_longer(!(iter), names_to = "Month", values_to = "Cluster") %>%
-  ggplot(aes(x = iter, y = Cluster, 
-             color = factor(Month, levels = c("6MO", "8MO", "12MO"),
-                            labels = c("6 Month", "8 Month", "12 Month")))) +
-  geom_line() +
-  theme_minimal() +
-  labs(x = "Thinned Iteration", y = "Number of Active Clusters",
-       color = "Timestamp", title = "Active clusters over MCMC iterations for each timestamp") +
-  scale_y_continuous(limits = c(1, 10), breaks = seq(1, 10, 1)) +
-  theme(legend.position = "bottom", legend.box = "horizontal")
-
-
+set.seed(1)
+relaALLchain(annika6M, "6-Month")
+relaALLchain(annika8M, "8-Month")
+relaALLchain(annika12M, "12-Month")
 
 ### Group Taxa: ----------------------------------------------------------------
 
