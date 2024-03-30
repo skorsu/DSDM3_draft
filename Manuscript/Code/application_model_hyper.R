@@ -77,32 +77,41 @@ identical(colnames(dat06), colnames(dat08))
 identical(colnames(dat12[, -(1:5)]), colnames(dat08[, -(1:5)]))
 
 ### Run the models -------------------------------------------------------------
-#### Set of the hyperparameters
-setHyper <- list(c(nbeta_split = 10, theta = 1, mu = 0, s2 = 1, s2_MH = 1, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1),
+#### Set of the hyperparameters with a longer MCMC chains
+setHyper <- list(c(nbeta_split = 5, theta = 1, mu = 0, s2 = 1, s2_MH = 1, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1),
+                 c(nbeta_split = 10, theta = 1, mu = 0, s2 = 1, s2_MH = 1, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1),
                  c(nbeta_split = 1, theta = 1, mu = 0, s2 = 1, s2_MH = 1, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1),
                  c(nbeta_split = 5, theta = 10, mu = 0, s2 = 1, s2_MH = 1, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1),
                  c(nbeta_split = 5, theta = 0.1, mu = 0, s2 = 1, s2_MH = 1, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1),
                  c(nbeta_split = 5, theta = 1, mu = 0, s2 = 10, s2_MH = 1, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1),
                  c(nbeta_split = 5, theta = 1, mu = 0, s2 = 0.1, s2_MH = 1, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1),
                  c(nbeta_split = 5, theta = 1, mu = 0, s2 = 1, s2_MH = 10, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1),
-                 c(nbeta_split = 5, theta = 1, mu = 0, s2 = 1, s2_MH = 0.1, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1))
+                 c(nbeta_split = 5, theta = 1, mu = 0, s2 = 1, s2_MH = 0.1, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1),
+                 c(nbeta_split = 5, theta = 1, mu = 0, s2 = 1, s2_MH = 1, launch_iter = 10, r0g = 4, r1g = 1, r0c = 1, r1c = 1),
+                 c(nbeta_split = 5, theta = 1, mu = 0, s2 = 1, s2_MH = 1, launch_iter = 10, r0g = 9, r1g = 1, r0c = 1, r1c = 1),
+                 c(nbeta_split = 5, theta = 1, mu = 0, s2 = 1, s2_MH = 1, launch_iter = 10, r0g = 1, r1g = 4, r0c = 1, r1c = 1),
+                 c(nbeta_split = 5, theta = 1, mu = 0, s2 = 1, s2_MH = 1, launch_iter = 10, r0g = 1, r1g = 9, r0c = 1, r1c = 1),
+                 c(nbeta_split = 5, theta = 1, mu = 0, s2 = 1, s2_MH = 1, launch_iter = 10, r0g = 1, r1g = 1, r0c = 4, r1c = 1),
+                 c(nbeta_split = 5, theta = 1, mu = 0, s2 = 1, s2_MH = 1, launch_iter = 10, r0g = 1, r1g = 1, r0c = 9, r1c = 1),
+                 c(nbeta_split = 5, theta = 1, mu = 0, s2 = 1, s2_MH = 1, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 4),
+                 c(nbeta_split = 5, theta = 1, mu = 0, s2 = 1, s2_MH = 1, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 9),)
 
 
 #### ZIDM-ZIDM
 set.seed(1415, kind = "L'Ecuyer-CMRG")
 start_ova <- Sys.time()
 registerDoParallel(5)
-resultZZ <- foreach(h = 1:8) %:%
+resultZZ <- foreach(h = 1:17) %:%
   foreach(t = 1:15) %dopar% {
     hp <- setHyper[[h]]
     start_time <- Sys.time()
-    clus_result <- mod(iter = 100000, Kmax = 10, nbeta_split = setHyper[[h]]['nbeta_split'], 
+    clus_result <- mod(iter = 500000, Kmax = 10, nbeta_split = setHyper[[h]]['nbeta_split'], 
                        z = datList[[t]], atrisk_init = matrix(1, ncol = 38, nrow = 90), 
                        beta_init = matrix(0, ncol = 38, nrow = 10), 
                        ci_init = rep(0, 90), theta = setHyper[[h]]['theta'], mu = 0, 
                        s2 = setHyper[[h]]['s2'], s2_MH = setHyper[[h]]['s2_MH'], 
                        launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, 
-                       thin = 100)
+                       thin = 500)
     tot_time <- difftime(Sys.time(), start_time, units = "secs")
     list(time = tot_time, result = clus_result)
     
