@@ -2,6 +2,10 @@
 library(Rcpp)
 library(foreach)
 library(doParallel)
+library(stringr)
+library(tidyverse)
+library(salso)
+library(ggplot2)
 
 ### Import the data ------------------------------------------------------------
 path <- "/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/"
@@ -23,6 +27,17 @@ ml68 <- read.csv(paste0(datpath, "Data/Mali_6mo_8mo_genus.csv"))
 ### Data: 12 Months
 ni12 <- read.csv(paste0(datpath, "Data/Nicaragua_12mo_Metadata_csv.csv"))
 ml12 <- read.csv(paste0(datpath, "Data/Mali_12mo_Metadata_csv.csv"))
+
+### User-defined Functions -----------------------------------------------------
+meanSD <- function(x, dplace = 3){
+  mm <- round(mean(x), digits = dplace)
+  ss <- round(sd(x), digits = dplace)
+  paste0(mm, " (", ss, ")")
+}
+
+uniqueClus <- function(x){
+  length(unique(x))
+}
 
 ## Data Pre-processing ---------------------------------------------------------
 ### For each nationality, first split 6 and 8 from x68. Then, choose only the 
@@ -94,31 +109,44 @@ setHyper <- list(c(nbeta_split = 5, theta = 1, mu = 0, s2 = 1, s2_MH = 1, launch
                  c(nbeta_split = 5, theta = 1, mu = 0, s2 = 1, s2_MH = 1, launch_iter = 10, r0g = 1, r1g = 1, r0c = 4, r1c = 1),
                  c(nbeta_split = 5, theta = 1, mu = 0, s2 = 1, s2_MH = 1, launch_iter = 10, r0g = 1, r1g = 1, r0c = 9, r1c = 1),
                  c(nbeta_split = 5, theta = 1, mu = 0, s2 = 1, s2_MH = 1, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 4),
-                 c(nbeta_split = 5, theta = 1, mu = 0, s2 = 1, s2_MH = 1, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 9),)
+                 c(nbeta_split = 5, theta = 1, mu = 0, s2 = 1, s2_MH = 1, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 9))
 
+### Import the result ----------------------------------------------------------
+result6m <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_at_risk_6m_hyper.RData")) 
+lapply(1:17, function(y){sapply(1:3, function(x){apply(result6m[[y]][[x]]$result$ci_result, 1, uniqueClus)}) %>%
+    as.data.frame() %>%
+    `colnames<-`(paste0("Chain ", 1:3)) %>%
+    mutate(Iteration = 1:1000, Case = paste0("Case ", y))}) %>%
+  bind_rows(.id = NULL) %>%
+  pivot_longer(!c(Iteration, Case), names_to = "Chain", values_to = "Cluster") %>%
+  ggplot(aes(x = Iteration, y = Cluster, color = Chain)) +
+  geom_line() +
+  facet_wrap(factor(Case, levels = paste0("Case ", 1:17)) ~ .) +
+  theme_bw()
 
-#### ZIDM-ZIDM
-set.seed(1415, kind = "L'Ecuyer-CMRG")
+### Try the best set of hyperparameters with new variance: ---------------------
+### ZIDM-ZIDM 
+set.seed(1415, kind = "L'Ecuyer-CMRG") 
 start_ova <- Sys.time()
-registerDoParallel(5)
-resultZZ <- foreach(h = 1:17) %:%
-  foreach(t = 1:15) %dopar% {
-    hp <- setHyper[[h]]
+registerDoParallel(5) 
+resultZZ <- foreach(t = 1:5) %dopar% {
     start_time <- Sys.time()
-    clus_result <- mod(iter = 500000, Kmax = 10, nbeta_split = setHyper[[h]]['nbeta_split'], 
-                       z = datList[[t]], atrisk_init = matrix(1, ncol = 38, nrow = 90), 
-                       beta_init = matrix(0, ncol = 38, nrow = 10), 
-                       ci_init = rep(0, 90), theta = setHyper[[h]]['theta'], mu = 0, 
-                       s2 = setHyper[[h]]['s2'], s2_MH = setHyper[[h]]['s2_MH'], 
-                       launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, 
-                       thin = 500)
+    clus_result <- mod(iter = 100000, Kmax = 10, nbeta_split = 10,
+                       z = as.matrix(dat06[, -c(1:5)]), atrisk_init = matrix(1, ncol = 38, nrow = 90),
+                       beta_init = matrix(0, ncol = 38, nrow = 10),
+                       ci_init = rep(0, 90), theta = 1, mu = 0,
+                       s2 = 10, s2_MH = 10, launch_iter = 10, r0g = 4, r1g = 1, r0c = 1, r1c = 1,
+                       thin = 100)
     tot_time <- difftime(Sys.time(), start_time, units = "secs")
     list(time = tot_time, result = clus_result)
-    
+
   }
-stopImplicitCluster()
+stopImplicitCluster() 
 difftime(Sys.time(), start_ova)
-saveRDS(resultZZ, paste0(path, "Manuscript/Result/microbiome_result_at_risk_6m_hyper.RData"))
+
+apply(resultZZ[[1]]$result$ci_result, 1, uniqueClus)
+
+# saveRDS(resultZZ, paste0(path, "Manuscript/Result/microbiome_result_at_risk_6m_hyper.RData"))
 
 
 
