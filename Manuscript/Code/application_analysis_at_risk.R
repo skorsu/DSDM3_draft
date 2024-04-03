@@ -45,6 +45,7 @@ ml12 <- read.csv(paste0(datpath, "Data/Mali_12mo_Metadata_csv.csv"))
 
 ### Result with at-risk indicator
 annikaZZ <- readRDS(paste0(path, "Result/microbiome_result_at_risk.RData"))
+result6mo <- readRDS(paste0(path, "Result/microbiome_result_6m.RData"))
 
 ## Data Pre-processing ---------------------------------------------------------
 ### For each nationality, first split 6 and 8 from x68. Then, choose only the 
@@ -139,26 +140,23 @@ addDat <- rbind(addml %>%
         mutate(Nationality = "NI"))
 
 ### Cluster from salso: --------------------------------------------------------
-salso_clus <- sapply(1:3, 
-                     function(x){as.numeric(salso(annikaZZ[[x]]$result$ci_result[-(1:500), ]))})
+#### 6-month
+salso_clus <- matrix(NA, ncol = 3, nrow = 90)
+salso_clus[, 1] <- rbind(result6mo[[1]]$MCMC$result$ci_result[seq(5000, 10000, 100), ],
+                         result6mo[[2]]$MCMC$result$ci_result[seq(5000, 10000, 100), ],
+                         result6mo[[3]]$MCMC$result$ci_result[seq(5000, 10000, 100), ],
+                         result6mo[[4]]$MCMC$result$ci_result[seq(5000, 10000, 100), ],
+                         result6mo[[5]]$MCMC$result$ci_result[seq(5000, 10000, 100), ],
+                         result6mo[[6]]$MCMC$result$ci_result[seq(5000, 10000, 100), ],
+                         result6mo[[7]]$MCMC$result$ci_result[seq(5000, 10000, 100), ],
+                         result6mo[[8]]$MCMC$result$ci_result[seq(5000, 10000, 100), ]) %>%
+  salso() %>%
+  as.numeric()
 
-sapply(1:3, function(x){apply(annikaZZ[[x]]$result$ci_result, 1, function(y){length(unique(y))})}) %>%
-  as.data.frame() %>%
-  `colnames<-`(c("6MO", "8MO", "12MO")) %>%
-  mutate(iter = 1:1000) %>%
-  pivot_longer(!(iter), names_to = "Month", values_to = "Cluster") %>%
-  ggplot(aes(x = iter, y = Cluster, 
-             color = factor(Month, levels = c("6MO", "8MO", "12MO"),
-                            labels = c("6 Month", "8 Month", "12 Month")))) +
-  geom_line() +
-  theme_minimal() +
-  labs(x = "Thinned Iteration", y = "Number of Active Clusters",
-       color = "Timestamp", title = "Active clusters over MCMC iterations for each timestamp") +
-  scale_y_continuous(limits = c(1, 10), breaks = seq(1, 10, 1)) +
-  theme(legend.position = "bottom", legend.box = "horizontal")
+salso_clus[, 2:3] <- sapply(2:3, 
+                            function(x){as.numeric(salso(annikaZZ[[x]]$result$ci_result[-(1:500), ]))})
 
 ### Group Taxa: ----------------------------------------------------------------
-
 datList <- list(dat06, dat08, dat12)
 
 registerDoParallel(5)
@@ -201,12 +199,12 @@ showName <- factor(showName,
                               "Others"))
 
 ### Estimates: -----------------------------------------------------------------
-#### Check the convergence
-
+#### Obtain the beta matrix
+ci <- result6mo[[1]]$MCMC$result$ci_result[500, 1] + 1
+result6mo[[1]]$MCMC$result$beta_result[ci, , 500]
 
 
 #### Calculate the estimate relative abundance for each observations
-datList <- list(dat06, dat08, dat12)
 obsID <- c(str_replace_all(str_extract(dat08$ID[1:45], "^([:alpha:]{2}\\.){2}[:digit:]{2}"), "\\.", "\\-"),
            str_extract(dat08$ID[-(1:45)], "^[:digit:]{7}"))
 bactList <- c("Bifidobacterium", "Other_Actinobacteria", "Bacteroides", 
