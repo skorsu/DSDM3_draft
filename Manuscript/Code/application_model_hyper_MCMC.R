@@ -27,12 +27,13 @@ ni12 <- read.csv(paste0(datpath, "Data/Nicaragua_12mo_Metadata_csv.csv"))
 ml12 <- read.csv(paste0(datpath, "Data/Mali_12mo_Metadata_csv.csv"))
 
 ### Result
-result6mo <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_6m.RData"))
-result8mo <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_8m.RData"))
-# result01 <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_8m_oneClus.RData"))
-# result90 <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_8m_singleton.RData"))
-# result30 <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_8m_init30.RData"))
-# result60 <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_8m_init60.RData"))
+# result6mo <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_6m.RData"))
+# result8mo <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_8m.RData"))
+# result12mo <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_12m.RData"))
+result01 <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_12m_oneClus.RData"))
+result90 <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_12m_singleton.RData"))
+result30 <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_12m_init30.RData"))
+result60 <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_12m_init60.RData"))
 
 ### User-defined Functions -----------------------------------------------------
 meanSD <- function(x, dplace = 3){
@@ -46,8 +47,8 @@ uniqueClus <- function(x){
 }
 
 ### MCMC: Convergence ----------------------------------------------------------
-lapply(c(2, 3, 5, 7), function(x){data.frame(Cluster = apply(result8mo[[x]]$MCMC$result$ci_result, 1, uniqueClus),
-                                   Chain = paste0(result8mo[[x]]$init, ": Chain ", (x%%2) + 1),
+lapply(1:8, function(x){data.frame(Cluster = apply(result12mo[[x]]$MCMC$result$ci_result, 1, uniqueClus),
+                                   Chain = paste0(result12mo[[x]]$init, ": Chain ", (x%%2) + 1),
                                    Iteration = 1:10000)}) %>%
   bind_rows(.id = NULL) %>%
   ggplot(aes(x = Iteration, y = Cluster, color = Chain)) +
@@ -59,68 +60,68 @@ lapply(c(2, 3, 5, 7), function(x){data.frame(Cluster = apply(result8mo[[x]]$MCMC
 
 sapply(1:8, function(x){apply(result8mo[[x]]$MCMC$result$ci_result, 1, uniqueClus)})
 
-### salso: combine all chains --------------------------------------------------
-rbind(result8mo[[2]]$MCMC$result$ci_result[seq(8000, 10000, 10), ],
-      result8mo[[3]]$MCMC$result$ci_result[seq(8000, 10000, 10), ],
-      result8mo[[5]]$MCMC$result$ci_result[seq(8000, 10000, 10), ],
-      result8mo[[7]]$MCMC$result$ci_result[seq(8000, 10000, 10), ]) %>%
-  salso()
-
-salso(result8mo[[8]]$MCMC$result$ci_result[seq(6000, 10000, 100), ]) %>% table()
-
-# result8mo <- vector("list", length = 8)
-# result8mo[[1]] <- list(MCMC = result01[[3]], init = "One Cluster")
-# result8mo[[2]] <- list(MCMC = result01[[7]], init = "One Cluster")
-# result8mo[[3]] <- list(MCMC = result90[[5]], init = "Singleton")
-# result8mo[[4]] <- list(MCMC = result90[[7]], init = "Singleton")
-# result8mo[[5]] <- list(MCMC = result30[[3]], init = "30 Clusters")
-# result8mo[[6]] <- list(MCMC = result30[[6]], init = "30 Clusters")
-# result8mo[[7]] <- list(MCMC = result60[[6]], init = "60 Clusters")
-# result8mo[[8]] <- list(MCMC = result60[[7]], init = "60 Clusters")
-# saveRDS(result8mo, paste0(path, "Manuscript/Result/microbiome_result_8m.RData"))
+# ### salso: combine all chains --------------------------------------------------
+# rbind(result8mo[[2]]$MCMC$result$ci_result[seq(8000, 10000, 10), ],
+#       result8mo[[3]]$MCMC$result$ci_result[seq(8000, 10000, 10), ],
+#       result8mo[[5]]$MCMC$result$ci_result[seq(8000, 10000, 10), ],
+#       result8mo[[7]]$MCMC$result$ci_result[seq(8000, 10000, 10), ]) %>%
+#   salso()
 # 
+# salso(result8mo[[8]]$MCMC$result$ci_result[seq(6000, 10000, 100), ]) %>% table()
 # 
+# result12mo <- vector("list", length = 8)
+# result12mo[[1]] <- list(MCMC = result01[[4]], init = "One Cluster")
+# result12mo[[2]] <- list(MCMC = result01[[5]], init = "One Cluster")
+# result12mo[[3]] <- list(MCMC = result90[[2]], init = "Singleton")
+# result12mo[[4]] <- list(MCMC = result90[[6]], init = "Singleton")
+# result12mo[[5]] <- list(MCMC = result30[[1]], init = "30 Clusters")
+# result12mo[[6]] <- list(MCMC = result30[[7]], init = "30 Clusters")
+# result12mo[[7]] <- list(MCMC = result60[[2]], init = "60 Clusters")
+# result12mo[[8]] <- list(MCMC = result60[[5]], init = "60 Clusters")
+# saveRDS(result12mo, paste0(path, "Manuscript/Result/microbiome_result_12m.RData"))
+# # 
+# # 
+# # 
+# # 
+# sapply(1:7, function(x){apply(result01[[x]]$result$ci_result, 1, uniqueClus)})[10000, ]
+# sapply(c(4, 5), function(x){apply(result01[[x]]$result$ci_result, 1, uniqueClus)}) %>%
+#   as.data.frame() %>%
+#   mutate(Iteration = 1:10000) %>%
+#   pivot_longer(!c(Iteration), names_to = "Chain", values_to = "Cluster") %>%
+#   ggplot(aes(x = Iteration, y = Cluster, color = Chain)) +
+#   geom_line() +
+#   theme_bw() +
+#   labs(title = "One Cluster: nB = 1, r0g = 4, s2 = 1")
 # 
+# sapply(1:7, function(x){apply(result90[[x]]$result$ci_result, 1, uniqueClus)})[10000, ]
+# sapply(c(2, 6), function(x){apply(result90[[x]]$result$ci_result, 1, uniqueClus)}) %>%
+#   as.data.frame() %>%
+#   mutate(Iteration = 1:10000) %>%
+#   pivot_longer(!c(Iteration), names_to = "Chain", values_to = "Cluster") %>%
+#   ggplot(aes(x = Iteration, y = Cluster, color = Chain)) +
+#   geom_line() +
+#   theme_bw() +
+#   labs(title = "One Cluster: nB = 1, r0g = 4, s2 = 1")
 # 
-sapply(1:7, function(x){apply(result01[[x]]$result$ci_result, 1, uniqueClus)})[10000, ]
-sapply(c(3, 7), function(x){apply(result01[[x]]$result$ci_result, 1, uniqueClus)}) %>%
-  as.data.frame() %>%
-  mutate(Iteration = 1:10000) %>%
-  pivot_longer(!c(Iteration), names_to = "Chain", values_to = "Cluster") %>%
-  ggplot(aes(x = Iteration, y = Cluster, color = Chain)) +
-  geom_line() +
-  theme_bw() +
-  labs(title = "One Cluster: nB = 1, r0g = 4, s2 = 1")
-
-sapply(1:7, function(x){apply(result90[[x]]$result$ci_result, 1, uniqueClus)})[10000, ]
-sapply(c(5, 7), function(x){apply(result90[[x]]$result$ci_result, 1, uniqueClus)}) %>%
-  as.data.frame() %>%
-  mutate(Iteration = 1:10000) %>%
-  pivot_longer(!c(Iteration), names_to = "Chain", values_to = "Cluster") %>%
-  ggplot(aes(x = Iteration, y = Cluster, color = Chain)) +
-  geom_line() +
-  theme_bw() +
-  labs(title = "One Cluster: nB = 1, r0g = 4, s2 = 1")
-
-sapply(1:7, function(x){apply(result30[[x]]$result$ci_result, 1, uniqueClus)})[10000, ]
-sapply(c(3, 6), function(x){apply(result30[[x]]$result$ci_result, 1, uniqueClus)}) %>%
-  as.data.frame() %>%
-  mutate(Iteration = 1:10000) %>%
-  pivot_longer(!c(Iteration), names_to = "Chain", values_to = "Cluster") %>%
-  ggplot(aes(x = Iteration, y = Cluster, color = Chain)) +
-  geom_line() +
-  theme_bw() +
-  labs(title = "One Cluster: nB = 1, r0g = 4, s2 = 1")
-
-sapply(1:7, function(x){apply(result60[[x]]$result$ci_result, 1, uniqueClus)})[10000, ]
-sapply(6:7, function(x){apply(result60[[x]]$result$ci_result, 1, uniqueClus)}) %>%
-  as.data.frame() %>%
-  mutate(Iteration = 1:10000) %>%
-  pivot_longer(!c(Iteration), names_to = "Chain", values_to = "Cluster") %>%
-  ggplot(aes(x = Iteration, y = Cluster, color = Chain)) +
-  geom_line() +
-  theme_bw() +
-  labs(title = "One Cluster: nB = 1, r0g = 4, s2 = 1")
+# sapply(1:7, function(x){apply(result30[[x]]$result$ci_result, 1, uniqueClus)})[10000, ]
+# sapply(c(1, 7), function(x){apply(result30[[x]]$result$ci_result, 1, uniqueClus)}) %>%
+#   as.data.frame() %>%
+#   mutate(Iteration = 1:10000) %>%
+#   pivot_longer(!c(Iteration), names_to = "Chain", values_to = "Cluster") %>%
+#   ggplot(aes(x = Iteration, y = Cluster, color = Chain)) +
+#   geom_line() +
+#   theme_bw() +
+#   labs(title = "One Cluster: nB = 1, r0g = 4, s2 = 1")
+# 
+# sapply(1:7, function(x){apply(result60[[x]]$result$ci_result, 1, uniqueClus)})[10000, ]
+# sapply(c(2, 5), function(x){apply(result60[[x]]$result$ci_result, 1, uniqueClus)}) %>%
+#   as.data.frame() %>%
+#   mutate(Iteration = 1:10000) %>%
+#   pivot_longer(!c(Iteration), names_to = "Chain", values_to = "Cluster") %>%
+#   ggplot(aes(x = Iteration, y = Cluster, color = Chain)) +
+#   geom_line() +
+#   theme_bw() +
+#   labs(title = "One Cluster: nB = 1, r0g = 4, s2 = 1")
 
 
 
