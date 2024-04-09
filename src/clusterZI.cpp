@@ -370,14 +370,17 @@ Rcpp::List update_beta(arma::mat z, arma::mat atrisk, arma::mat beta_old,
 // [[Rcpp::export]]
 Rcpp::List update_beta_adaptive(unsigned int t, unsigned int t_threshold, 
                                 arma::mat z, arma::mat atrisk, arma::cube beta_record, 
-                                arma::uvec ci, double mu, double s2, double s2_MH){
+                                arma::mat beta_init, arma::uvec ci, double mu, double s2, double s2_MH){
   
   /* Update the beta vector parameters (Parameter of information sharing 
    within the cluster) - We update only for the active clusters */
   
   arma::vec accept_MH(beta_record.n_rows, arma::fill::value(-1));
-  arma::mat beta_old = beta_record.slice(t);
-  double cd = 2.4/sqrt(beta_record.n_cols);
+  arma::mat beta_old = beta_init;
+  if(t > 0){
+    beta_old = beta_record.slice(t - 1);
+  }
+  double cd = std::pow(2.4, 2.0)/beta_old.n_cols;
   
   // Active Clusters
   arma::uvec active_clus = arma::unique(ci);
@@ -392,14 +395,15 @@ Rcpp::List update_beta_adaptive(unsigned int t, unsigned int t_threshold,
     arma::rowvec bk_old = beta_old.row(k);
     
     // Proposed a new beta_k
-    arma::mat covM = arma::eye(z.n_cols, z.n_cols);
+    arma::mat covM = s2_MH * arma::eye(z.n_cols, z.n_cols);
     
     if(t > t_threshold){
-      covM *= (s2_MH * cd);
-      covM += (cd * arma::cov(beta_record.head_slices(t).row_as_mat(k)));
+      covM *= (std::pow(1, -10) * cd);
+      covM += (cd * arma::cov(beta_record.head_slices(t + 1).row_as_mat(k)));
     }
     
     arma::rowvec bk_pro = arma::conv_to<arma::rowvec>::from(arma::mvnrnd(bk_old.t(), covM));
+    
     // Calculate logA
     double logA = 0.0;
     logA += arma::accu(arma::log_normpdf(bk_pro, mu, std::sqrt(s2)));
@@ -731,6 +735,7 @@ Rcpp::List mod_adaptive(unsigned int iter, unsigned int Kmax, unsigned int nbeta
   arma::mat MH_accept(iter, Kmax, arma::fill::value(-2));
   arma::cube beta_result(Kmax, z.n_cols, iter, arma::fill::value(0));
   
+  arma::mat beta0 = beta_init; 
   arma::mat atrisk_mcmc(atrisk_init);
   arma::mat beta_mcmc(beta_init); 
   Rcpp::List sm_sum;
@@ -741,7 +746,8 @@ Rcpp::List mod_adaptive(unsigned int iter, unsigned int Kmax, unsigned int nbeta
     // update at-risk
     atrisk_mcmc = update_atrisk(z, atrisk_init, beta_init, ci_init, r0g, r1g);
     // update beta
-    beta_sum = update_beta_adaptive(t, t_thres, z, atrisk_mcmc, beta_result, ci_init, mu, s2, s2_MH);
+    beta_sum = update_beta_adaptive(t, t_thres, z, atrisk_mcmc, beta_result, beta0,
+                                    ci_init, mu, s2, s2_MH);
     arma::mat bMCMC = beta_sum["beta_update"];
     // reallocation
     ci_mcmc = realloc_full(Kmax, z, atrisk_mcmc, bMCMC, ci_init, theta);

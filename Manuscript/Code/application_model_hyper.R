@@ -98,7 +98,7 @@ start_ova <- Sys.time()
 registerDoParallel(6)
 testResult1 <- foreach(t = 1:6) %dopar% {
   start_time <- Sys.time()
-  clus_result <- mod(iter = 1000, Kmax = 10, nbeta_split = 1,
+  clus_result <- mod(iter = 15000, Kmax = 10, nbeta_split = 1,
                      z = as.matrix(dat06[, -c(1:5)]), 
                      atrisk_init = matrix(1, ncol = 38, nrow = 90),
                      beta_init = matrix(0, ncol = 38, nrow = 10),
@@ -118,13 +118,13 @@ start_ova <- Sys.time()
 registerDoParallel(6)
 testResult_AD <- foreach(t = 1:6) %dopar% {
   start_time <- Sys.time()
-  clus_result <- mod_adaptive(iter = 2500, Kmax = 10, nbeta_split = 1,
+  clus_result <- mod_adaptive(iter = 15000, Kmax = 10, nbeta_split = 1,
                               z = as.matrix(dat06[, -c(1:5)]), 
                               atrisk_init = matrix(1, ncol = 38, nrow = 90),
                               beta_init = matrix(0, ncol = 38, nrow = 10),
                               ci_init = rep(0, 90), theta = 1, mu = 0,
-                              s2 = 1, s2_MH = 1e-5, t_thres = 200, launch_iter = 30, 
-                              r0g = 4, r1g = 1, r0c = 1, r1c = 1,
+                              s2 = 1, s2_MH = 1e-3, t_thres = 5000, launch_iter = 30, 
+                              r0g = 1, r1g = 1, r0c = 1, r1c = 1,
                               thin = 1)
   tot_time <- difftime(Sys.time(), start_time, units = "secs")
   list(time = tot_time, result = clus_result)
@@ -136,19 +136,21 @@ difftime(Sys.time(), start_ova)
 ### Active Clusters
 sapply(1:6, function(x){apply(testResult1[[x]]$result$ci_result, 1, uniqueClus)}) %>%
   as.data.frame() %>%
-  mutate(Iter = 1:1000) %>%
+  mutate(Iter = 1:5000) %>%
   pivot_longer(!Iter) %>%
-  ggplot(aes(x = Iter, y = value, color = name)) +
+  ggplot(aes(x = Iter, y = value)) +
   geom_line() +
-  theme_bw()
+  theme_bw() +
+  facet_wrap(. ~ name)
 
 sapply(1:6, function(x){apply(testResult_AD[[x]]$result$ci_result, 1, uniqueClus)}) %>%
   as.data.frame() %>%
-  mutate(Iter = 1:2500) %>%
+  mutate(Iter = 1:15000) %>%
   pivot_longer(!Iter) %>%
-  ggplot(aes(x = Iter, y = value, color = name)) +
+  ggplot(aes(x = Iter, y = value)) +
   geom_line() +
-  theme_bw()
+  theme_bw() +
+  facet_wrap(. ~ name)
 
 ### MH-acceptance Ratio
 lapply(1:6, function(y){sapply(1:10, function(x){mean(testResult1[[y]]$result$MH_accept[which(testResult1[[y]]$result$MH_accept[, x] != -1), x])})}) %>%
@@ -177,45 +179,37 @@ lapply(1:6, function(y){sapply(1:10, function(x){sum(testResult_AD[[y]]$result$M
   `rownames<-`(paste0("Cluster ", 1:10)) %>%
   `colnames<-`(paste0("Chain ", 1:6))
 
-testResult1[[1]]$result$beta_result[, , 1000]
-testResult_AD[[1]]$result$beta_result[, , 1000]
-
 ### Beta traceplot
-lapply(which(colSums(testResult1[[1]]$result$MH_accept != -1) >= 5000),
+lapply(which(colSums(testResult1[[1]]$result$MH_accept != -1) >= 1000),
        function(x){t(testResult1[[1]]$result$beta_result[x, , ]) %>%
            as.data.frame() %>%
-           mutate(Iter = 1:10000, Cluster = paste0("Cluster ", x))}) %>%
+           mutate(Iter = 1:3000, Cluster = paste0("Cluster ", x))}) %>%
   bind_rows(.id = NULL) %>%
   pivot_longer(!(c(Cluster, Iter))) %>%
   ggplot(aes(x = Iter, y = value, color = Cluster)) +
   geom_line() +
   facet_wrap(. ~ name, scales = "free_y")
 
-lapply(which(colSums(testResult_AD[[1]]$result$MH_accept != -1) >= 100),
-       function(x){t(testResult_AD[[1]]$result$beta_result[x, , ]) %>%
+lapply(which(colSums(testResult_AD[[6]]$result$MH_accept != -1) >= 5000),
+       function(x){t(testResult_AD[[6]]$result$beta_result[x, , ]) %>%
            as.data.frame() %>%
-           mutate(Iter = 1:2500, Cluster = paste0("Cluster ", x))}) %>%
+           mutate(Iter = 1:15000, Cluster = paste0("Cluster ", x))}) %>%
   bind_rows(.id = NULL) %>%
   pivot_longer(!(c(Cluster, Iter))) %>%
   ggplot(aes(x = Iter, y = value, color = Cluster)) +
   geom_line() +
   facet_wrap(. ~ name, scales = "free_y")
 
-### Beta
-testResult_AD[[1]]$result$beta_result[1, , ] %>% (t)
+table(salso(testResult_AD[[6]]$result$ci_result[-(1:5000), ]))
 
 ### ACF plot
-acf(as.numeric(testResult1[[1]]$result$beta_result[6, 3, ]), lag.max = 1000, plot = F)[[1]] %>%
-  sum()
-
-10000/(1 + (2 * 332.5909))
-
-t(testResult1[[1]]$result$beta_result[7, 1:5, 1001:1010]) %>%
-  cov()
+acf(as.numeric(testResult1[[1]]$result$beta_result[2, 1, ]), lag.max = 100)
+acf(as.numeric(testResult_AD[[6]]$result$beta_result[2, 4, ]), lag.max = 100)
 
 ### Geweke
-geweke.diag(mcmc(testResult1[[1]]$result$beta_result[6, 3, ], start = 1))
-# geweke.plot(mcmc(testResult1[[1]]$result$beta_result[6, 3, ], start = 1))
+geweke.diag(mcmc(testResult1[[1]]$result$beta_result[1, 3, ], start = 1))
+geweke.diag(mcmc(testResult_AD[[6]]$result$beta_result[2, 10, ], start = 5000))
+
 
 rbind(testResult1[[1]]$result$beta_result[6, , 1],
       testResult1[[1]]$result$beta_result[6, , 1])
