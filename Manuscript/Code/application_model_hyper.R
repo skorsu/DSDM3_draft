@@ -7,6 +7,7 @@ library(tidyverse)
 library(salso)
 library(ggplot2)
 library(coda)
+library(latex2exp)
 
 ### Import the data ------------------------------------------------------------
 path <- "/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/"
@@ -96,7 +97,7 @@ identical(colnames(dat12[, -(1:5)]), colnames(dat08[, -(1:5)]))
 set.seed(1415, kind = "L'Ecuyer-CMRG")
 start_ova <- Sys.time()
 registerDoParallel(6)
-testResult1 <- foreach(t = 1:6) %dopar% {
+testResult1 <- foreach(t = 1:5) %dopar% {
   start_time <- Sys.time()
   clus_result <- mod(iter = 15000, Kmax = 10, nbeta_split = 1,
                      z = as.matrix(dat06[, -c(1:5)]), 
@@ -113,113 +114,76 @@ testResult1 <- foreach(t = 1:6) %dopar% {
 stopImplicitCluster()
 difftime(Sys.time(), start_ova)
 
-set.seed(1415, kind = "L'Ecuyer-CMRG")
-start_ova <- Sys.time()
-registerDoParallel(6)
-testResult_AD <- foreach(t = 1:6) %dopar% {
-  start_time <- Sys.time()
-  clus_result <- mod_adaptive(iter = 15000, Kmax = 10, nbeta_split = 1,
-                              z = as.matrix(dat06[, -c(1:5)]), 
-                              atrisk_init = matrix(1, ncol = 38, nrow = 90),
-                              beta_init = matrix(0, ncol = 38, nrow = 10),
-                              ci_init = rep(0, 90), theta = 1, mu = 0,
-                              s2 = 1, s2_MH = 1e-3, t_thres = 5000, launch_iter = 30, 
-                              r0g = 1, r1g = 1, r0c = 1, r1c = 1,
-                              thin = 1)
-  tot_time <- difftime(Sys.time(), start_time, units = "secs")
-  list(time = tot_time, result = clus_result)
-  
-}
-stopImplicitCluster()
-difftime(Sys.time(), start_ova)
-
 ### Active Clusters
-sapply(1:6, function(x){apply(testResult1[[x]]$result$ci_result, 1, uniqueClus)}) %>%
+sapply(1:5, function(x){apply(testResult1[[x]]$result$ci_result, 1, uniqueClus)}) %>%
   as.data.frame() %>%
-  mutate(Iter = 1:5000) %>%
-  pivot_longer(!Iter) %>%
-  ggplot(aes(x = Iter, y = value)) +
+  `colnames<-`(paste0("Chain ", 1:5)) %>%
+  mutate(Iteration = 1:15000) %>%
+  pivot_longer(!Iteration) %>%
+  ggplot(aes(x = Iteration, y = value)) +
   geom_line() +
   theme_bw() +
+  facet_wrap(. ~ name) +
+  labs(title = TeX("Active Clusters: Metropolis-Hasting for $\\beta$"))
+
+### Acceptance Rate for beta
+AcceptRate <- lapply(1:5, function(y){sapply(1:10, function(x){mean(testResult1[[y]]$result$MH_accept[which(testResult1[[y]]$result$MH_accept[, x] != -1), x])})}) %>%
+  as.data.frame() %>%
+  bind_rows(.id = NULL) %>%
+  `rownames<-`(paste0("Cluster ", 1:10)) %>%
+  `colnames<-`(paste0("Chain ", 1:5)) %>%
+  round(3)
+
+nUpdate <- lapply(1:5, function(y){sapply(1:10, function(x){sum(testResult1[[y]]$result$MH_accept[, x] != -1)})}) %>%
+  as.data.frame() %>%
+  bind_rows(.id = NULL) %>%
+  `rownames<-`(paste0("Cluster ", 1:10)) %>%
+  `colnames<-`(paste0("Chain ", 1:5))
+
+AcceptLonger <- data.frame(AcceptRate) %>%
+  `colnames<-`(paste0("Chain ", 1:5)) %>%
+  mutate(Cluster = paste0("Cluster ", 1:10)) %>%
+  pivot_longer(!(Cluster))
+
+nLonger <- sapply(1:5, function(k){paste0(AcceptRate[, k], " (", nUpdate[, k], ")")}) %>%
+  as.data.frame() %>%
+  `colnames<-`(paste0("Chain ", 1:5)) %>%
+  mutate(Cluster = paste0("Cluster ", 1:10)) %>%
+  pivot_longer(!(Cluster))
+
+ggplot() +
+  geom_tile(data = AcceptLonger, aes(x = name, y = Cluster, fill = value)) +
+  geom_text(data = nLonger, aes(x = name, y = Cluster, label = value), color = "white") +
+  labs(x = "Chain", y = "Cluster", title = TeX("Acceptance Rate when updating $\\beta$ via MH")) +
+  theme_minimal()
+
+### Trace plot for beta
+lapply(1:5, function(y){sapply(1:10, function(x){sum(testResult1[[y]]$result$MH_accept[, x] != -1)})})
+
+aC <- which(sapply(1:10, function(x){sum(testResult1[[1]]$result$MH_accept[, x] != -1)}) >= 10000)
+lapply(aC, function(x){t(testResult1[[1]]$result$beta_result[x, , ]) %>%
+    as.data.frame() %>%
+    `colnames<-`(paste0("b", 1:38)) %>%
+    mutate(Iteration = 1:15000, Cluster = paste0("Cluster ", x))}) %>%
+  bind_rows(.id = NULL) %>%
+  pivot_longer(!(c(Iteration, Cluster))) %>%
+  ggplot(aes(x = Iteration, y = value, color = Cluster)) +
+  geom_line() +
   facet_wrap(. ~ name)
-
-sapply(1:6, function(x){apply(testResult_AD[[x]]$result$ci_result, 1, uniqueClus)}) %>%
-  as.data.frame() %>%
-  mutate(Iter = 1:15000) %>%
-  pivot_longer(!Iter) %>%
-  ggplot(aes(x = Iter, y = value)) +
-  geom_line() +
-  theme_bw() +
-  facet_wrap(. ~ name)
-
-### MH-acceptance Ratio
-lapply(1:6, function(y){sapply(1:10, function(x){mean(testResult1[[y]]$result$MH_accept[which(testResult1[[y]]$result$MH_accept[, x] != -1), x])})}) %>%
-  as.data.frame() %>%
-  bind_rows(.id = NULL) %>%
-  `rownames<-`(paste0("Cluster ", 1:10)) %>%
-  `colnames<-`(paste0("Chain ", 1:6)) %>%
-  round(4)
-
-lapply(1:6, function(y){sapply(1:10, function(x){sum(testResult1[[y]]$result$MH_accept[, x] != -1)})}) %>%
-  as.data.frame() %>%
-  bind_rows(.id = NULL) %>%
-  `rownames<-`(paste0("Cluster ", 1:10)) %>%
-  `colnames<-`(paste0("Chain ", 1:6))
-
-lapply(1:6, function(y){sapply(1:10, function(x){mean(testResult_AD[[y]]$result$MH_accept[which(testResult_AD[[y]]$result$MH_accept[, x] != -1), x])})}) %>%
-  as.data.frame() %>%
-  bind_rows(.id = NULL) %>%
-  `rownames<-`(paste0("Cluster ", 1:10)) %>%
-  `colnames<-`(paste0("Chain ", 1:6)) %>%
-  round(4)
-
-lapply(1:6, function(y){sapply(1:10, function(x){sum(testResult_AD[[y]]$result$MH_accept[, x] != -1)})}) %>%
-  as.data.frame() %>%
-  bind_rows(.id = NULL) %>%
-  `rownames<-`(paste0("Cluster ", 1:10)) %>%
-  `colnames<-`(paste0("Chain ", 1:6))
-
-### Beta traceplot
-lapply(which(colSums(testResult1[[1]]$result$MH_accept != -1) >= 1000),
-       function(x){t(testResult1[[1]]$result$beta_result[x, , ]) %>%
-           as.data.frame() %>%
-           mutate(Iter = 1:3000, Cluster = paste0("Cluster ", x))}) %>%
-  bind_rows(.id = NULL) %>%
-  pivot_longer(!(c(Cluster, Iter))) %>%
-  ggplot(aes(x = Iter, y = value, color = Cluster)) +
-  geom_line() +
-  facet_wrap(. ~ name, scales = "free_y")
-
-lapply(which(colSums(testResult_AD[[6]]$result$MH_accept != -1) >= 5000),
-       function(x){t(testResult_AD[[6]]$result$beta_result[x, , ]) %>%
-           as.data.frame() %>%
-           mutate(Iter = 1:15000, Cluster = paste0("Cluster ", x))}) %>%
-  bind_rows(.id = NULL) %>%
-  pivot_longer(!(c(Cluster, Iter))) %>%
-  ggplot(aes(x = Iter, y = value, color = Cluster)) +
-  geom_line() +
-  facet_wrap(. ~ name, scales = "free_y")
-
-table(salso(testResult_AD[[6]]$result$ci_result[-(1:5000), ]))
 
 ### ACF plot
-acf(as.numeric(testResult1[[1]]$result$beta_result[2, 1, ]), lag.max = 100)
-acf(as.numeric(testResult_AD[[6]]$result$beta_result[2, 4, ]), lag.max = 100)
+sapply(1:38, function(x){acf(as.numeric(testResult1[[1]]$result$beta_result[8, x, ]), lag.max = 100, plot = FALSE)[[1]]}) %>%
+  `colnames<-`(paste0("b", 1:38)) %>%
+  as.data.frame() %>%
+  mutate(Lags = 0:100) %>%
+  pivot_longer(!Lags) %>%
+  ggplot(aes(x = Lags, y = value, color = name)) +
+  geom_line() +
+  ylim(-1, 1)
 
 ### Geweke
-geweke.diag(mcmc(testResult1[[1]]$result$beta_result[1, 3, ], start = 1))
-geweke.diag(mcmc(testResult_AD[[6]]$result$beta_result[2, 10, ], start = 5000))
+sapply(1:38, function(x){geweke.diag(mcmc(testResult1[[1]]$result$beta_result[1, x, ], start = 5000))$z})
 
-
-rbind(testResult1[[1]]$result$beta_result[6, , 1],
-      testResult1[[1]]$result$beta_result[6, , 1])
-
-cov(testResult1[[1]]$result$beta_result[6, 1, 1:130],
-    testResult1[[1]]$result$beta_result[6, 1, 1:130])
-
-salso(testResult_AD[[6]]$result$ci_result)
-
-testResult_AD[[6]]$result$ci_result[2490:2500, ]
 
 ### Run the models -------------------------------------------------------------
 #### Set of the hyperparameters with a longer MCMC chains
