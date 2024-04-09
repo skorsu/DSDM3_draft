@@ -27,38 +27,35 @@ ni12 <- read.csv(paste0(datpath, "Data/Nicaragua_12mo_Metadata_csv.csv"))
 ml12 <- read.csv(paste0(datpath, "Data/Mali_12mo_Metadata_csv.csv"))
 
 ### Result
-# result6mo <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_6m.RData"))
-# result8mo <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_8m.RData"))
-# result12mo <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_12m.RData"))
-result01 <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_12m_oneClus.RData"))
-result90 <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_12m_singleton.RData"))
-result30 <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_12m_init30.RData"))
-result60 <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_12m_init60.RData"))
+result6mo <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_6m.RData"))
+result8mo <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_8m.RData"))
+result12mo <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_12m.RData"))
 
 ### User-defined Functions -----------------------------------------------------
-meanSD <- function(x, dplace = 3){
-  mm <- round(mean(x), digits = dplace)
-  ss <- round(sd(x), digits = dplace)
-  paste0(mm, " (", ss, ")")
-}
-
 uniqueClus <- function(x){
   length(unique(x))
 }
 
 ### MCMC: Convergence ----------------------------------------------------------
-lapply(1:8, function(x){data.frame(Cluster = apply(result12mo[[x]]$MCMC$result$ci_result, 1, uniqueClus),
-                                   Chain = paste0(result12mo[[x]]$init, ": Chain ", (x%%2) + 1),
-                                   Iteration = 1:10000)}) %>%
-  bind_rows(.id = NULL) %>%
-  ggplot(aes(x = Iteration, y = Cluster, color = Chain)) +
-  geom_line() +
-  theme_bw() +
-  scale_y_continuous(name = "Active Clusters", limits = c(1, 10), breaks = seq(1, 10)) +
-  labs(title = "6 Month: Active Clusters via MCMC with different initial cluster assignment") +
-  theme(legend.position = "bottom", legend.box = "horizontal")
+#### Trace plot
+trPlot <- function(datList, monthLab){
+  plotTitle <- paste0(monthLab, ": Active Clusters via MCMC with different initial cluster assignment")
+  
+  lapply(1:8, function(x){data.frame(Cluster = apply(datList[[x]]$MCMC$result$ci_result, 1, uniqueClus),
+                                     Chain = paste0(datList[[x]]$init, ": Chain ", (x%%2) + 1),
+                                     Iteration = 1:10000)}) %>%
+    bind_rows(.id = NULL) %>%
+    ggplot(aes(x = Iteration, y = Cluster, color = Chain)) +
+    geom_line() +
+    theme_bw() +
+    scale_y_continuous(name = "Active Clusters", limits = c(1, 10), breaks = seq(1, 10)) +
+    labs(title = plotTitle) +
+    theme(legend.position = "bottom", legend.box = "horizontal")
+}
 
-sapply(1:8, function(x){apply(result8mo[[x]]$MCMC$result$ci_result, 1, uniqueClus)})
+trPlot(result6mo, "6 Month")
+trPlot(result8mo, "8 Month")
+trPlot(result12mo, "12 Month")
 
 # ### salso: combine all chains --------------------------------------------------
 # rbind(result8mo[[2]]$MCMC$result$ci_result[seq(8000, 10000, 10), ],

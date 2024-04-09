@@ -46,6 +46,8 @@ ml12 <- read.csv(paste0(datpath, "Data/Mali_12mo_Metadata_csv.csv"))
 ### Result with at-risk indicator
 annikaZZ <- readRDS(paste0(path, "Result/microbiome_result_at_risk.RData"))
 result6mo <- readRDS(paste0(path, "Result/microbiome_result_6m.RData"))
+result8mo <- readRDS(paste0(path, "Result/microbiome_result_8m.RData"))
+result12mo <- readRDS(paste0(path, "Result/microbiome_result_12m.RData"))
 
 ## Data Pre-processing ---------------------------------------------------------
 ### For each nationality, first split 6 and 8 from x68. Then, choose only the 
@@ -139,22 +141,49 @@ addDat <- rbind(addml %>%
         mutate(Child_ID = toupper(Child_ID), Month = str_replace_all(toupper(Month), " ", "")) %>%
         mutate(Nationality = "NI"))
 
-### Cluster from salso: --------------------------------------------------------
-#### 6-month
-salso_clus <- matrix(NA, ncol = 3, nrow = 90)
-salso_clus[, 1] <- rbind(result6mo[[1]]$MCMC$result$ci_result[seq(5000, 10000, 100), ],
-                         result6mo[[2]]$MCMC$result$ci_result[seq(5000, 10000, 100), ],
-                         result6mo[[3]]$MCMC$result$ci_result[seq(5000, 10000, 100), ],
-                         result6mo[[4]]$MCMC$result$ci_result[seq(5000, 10000, 100), ],
-                         result6mo[[5]]$MCMC$result$ci_result[seq(5000, 10000, 100), ],
-                         result6mo[[6]]$MCMC$result$ci_result[seq(5000, 10000, 100), ],
-                         result6mo[[7]]$MCMC$result$ci_result[seq(5000, 10000, 100), ],
-                         result6mo[[8]]$MCMC$result$ci_result[seq(5000, 10000, 100), ]) %>%
-  salso() %>%
-  as.numeric()
+### Cluster Assignment (salso): ------------------------------------------------
 
-salso_clus[, 2:3] <- sapply(2:3, 
-                            function(x){as.numeric(salso(annikaZZ[[x]]$result$ci_result[-(1:500), ]))})
+cluster_salso <- function(resultList, burnin, thin){
+  
+  ### Separate Chain
+  sepChain <- sapply(1:8, function(x){salso(resultList[[x]]$MCMC$result$ci_result[-seq(1, burnin, thin), ])})
+  
+  ### Combine Chain
+  combChain <- rbind(resultList[[1]]$MCMC$result$ci_result[-seq(1, burnin, thin), ],
+                     resultList[[2]]$MCMC$result$ci_result[-seq(1, burnin, thin), ],
+                     resultList[[3]]$MCMC$result$ci_result[-seq(1, burnin, thin), ],
+                     resultList[[4]]$MCMC$result$ci_result[-seq(1, burnin, thin), ],
+                     resultList[[5]]$MCMC$result$ci_result[-seq(1, burnin, thin), ],
+                     resultList[[6]]$MCMC$result$ci_result[-seq(1, burnin, thin), ],
+                     resultList[[7]]$MCMC$result$ci_result[-seq(1, burnin, thin), ],
+                     resultList[[8]]$MCMC$result$ci_result[-seq(1, burnin, thin), ]) %>%
+    salso() %>%
+    as.numeric()
+  
+  list(sepChain = sepChain, combChain = combChain)
+  
+}
+
+clus6Mo <- cluster_salso(result6mo, 7500, 10)
+clus8Mo <- cluster_salso(result8mo, 7500, 10)
+clus12Mo <- cluster_salso(result12mo, 7500, 10)
+
+lapply(1:8, function(x){as.numeric(table(clus12Mo$sepChain[, x]))}) %>%
+  lapply(`length<-`, max(lengths(lapply(1:8, function(x){as.numeric(table(clus12Mo$sepChain[, x]))})))) %>%
+  `names<-`(paste0("Chain ", 1:8)) %>%
+  bind_rows(.id = "column_label") %>% t() %>%
+  xtable(digits = 0) %>%
+  print(NA.string = "-")
+
+### Combined Chain
+lapply(1:3, function(x){as.numeric(table(list(clus6Mo, clus8Mo, clus12Mo)[[x]]$combChain))}) %>%
+  lapply(`length<-`, max(lengths(lapply(1:3, function(x){as.numeric(table(list(clus6Mo, clus8Mo, clus12Mo)[[x]]$combChain))})))) %>%
+  `names<-`(paste0(c(6, 8, 12), " Month")) %>%
+  bind_rows(.id = "column_label") %>% t() %>%
+  xtable(digits = 0) %>%
+  print(NA.string = "-")
+
+clusSalso <- sapply(1:3, function(x){list(clus6Mo, clus8Mo, clus12Mo)[[x]]$combChain})
 
 ### Group Taxa: ----------------------------------------------------------------
 datList <- list(dat06, dat08, dat12)
@@ -197,6 +226,34 @@ showName <- factor(showName,
                               "Faecalibacterium", "Megasphaera", "Ruminococcus", 
                               "Streptococcus", "Veillonella", "Other_Firmicutes", 
                               "Others"))
+###
+betMat <- matrix(NA, ncol = 38, nrow = 10000)
+for(i in 1:10000){
+  ci <- result6mo[[1]]$MCMC$result$ci_result[i, 1]
+  betMat[i, ] <- result6mo[[1]]$MCMC$result$beta_result[ci + 1, ,i]
+}
+
+betMat %>%
+  as.data.frame() %>%
+  mutate(iter = 1:10000) %>%
+  pivot_longer(!iter) %>%
+  ggplot(aes(x = iter, y = value, color = name)) +
+  geom_line()
+
+t(result6mo[[1]]$MCMC$result$beta_result[5, , ]) %>%
+  as.data.frame() %>%
+  mutate(iter = 1:10000) %>%
+  pivot_longer(!iter) %>%
+  ggplot(aes(x = iter, y = value, color = name)) +
+  geom_line()
+
+t(result6mo[[1]]$MCMC$result$beta_result[, 1, ]) %>% 
+  as.data.frame() %>%
+  mutate(iter = 1:10000) %>%
+  pivot_longer(!iter) %>%
+  ggplot(aes(x = iter, y = value, color = name)) +
+  geom_line()
+
 
 ### Estimates: -----------------------------------------------------------------
 #### Obtain the beta matrix
@@ -491,12 +548,18 @@ plotData <- function(monthabbv, monthLabel, monthDat, monthCluster){
   
 }
 
-plot6mo <- plotData("6MO", "6-Month", dat06, newClus[, 1])
-plot8mo <- plotData("8MO", "8-Month", dat08, newClus[, 2])
-plot12mo <- plotData("12MO", "12-Month", dat12, newClus[, 3])
+plot6mo <- plotData("6MO", "6-Month", dat06, clusSalso[, 1])
+plot8mo <- plotData("8MO", "8-Month", dat08, clusSalso[, 2])
+plot12mo <- plotData("12MO", "12-Month", dat12, clusSalso[, 3])
+grid.arrange(grobs = plot6mo)
+grid.arrange(grobs = plot8mo)
+grid.arrange(grobs = plot12mo)
+
 
 i <- 2
 grid.arrange(grobs = list(plot6mo[[i]], plot8mo[[i]], plot12mo[[i]]))
+grid.arrange(grobs = list(plot6mo[[i]], plot8mo[[i]], plot12mo[[i]]))
+
 
 grid.arrange(grobs = list(plot6mo[[1]], plot8mo[[1]], plot12mo[[1]],
                           plot6mo[[2]], plot8mo[[2]], plot12mo[[2]],
