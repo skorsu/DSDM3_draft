@@ -93,26 +93,29 @@ dat12 <- dat12[, c(1:5, which(colnames(dat12[, -(1:5)]) %in% commomTaxa) + 5)]
 identical(colnames(dat06), colnames(dat08))
 identical(colnames(dat12[, -(1:5)]), colnames(dat08[, -(1:5)]))
 
+testResult1 <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_6m_oneClus.RData"))
+testResult1 <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_6m_singleton.RData"))
+
 ### Run the model --------------------------------------------------------------
-set.seed(1415, kind = "L'Ecuyer-CMRG")
-start_ova <- Sys.time()
-registerDoParallel(6)
-testResult1 <- foreach(t = 1:5) %dopar% {
-  start_time <- Sys.time()
-  clus_result <- mod(iter = 15000, Kmax = 10, nbeta_split = 1,
-                     z = as.matrix(dat06[, -c(1:5)]), 
-                     atrisk_init = matrix(1, ncol = 38, nrow = 90),
-                     beta_init = matrix(0, ncol = 38, nrow = 10),
-                     ci_init = rep(0, 90), theta = 1, mu = 0,
-                     s2 = 1, s2_MH = 1e-5, launch_iter = 30, 
-                     r0g = 4, r1g = 1, r0c = 1, r1c = 1,
-                     thin = 1)
-  tot_time <- difftime(Sys.time(), start_time, units = "secs")
-  list(time = tot_time, result = clus_result)
-  
-}
-stopImplicitCluster()
-difftime(Sys.time(), start_ova)
+# set.seed(1415, kind = "L'Ecuyer-CMRG")
+# start_ova <- Sys.time()
+# registerDoParallel(6)
+# testResult1 <- foreach(t = 1:5) %dopar% {
+#   start_time <- Sys.time()
+#   clus_result <- mod(iter = 15000, Kmax = 10, nbeta_split = 1,
+#                      z = as.matrix(dat06[, -c(1:5)]), 
+#                      atrisk_init = matrix(1, ncol = 38, nrow = 90),
+#                      beta_init = matrix(0, ncol = 38, nrow = 10),
+#                      ci_init = rep(0, 90), theta = 1, mu = 0,
+#                      s2 = 1, s2_MH = 1e-5, launch_iter = 30, 
+#                      r0g = 4, r1g = 1, r0c = 1, r1c = 1,
+#                      thin = 1)
+#   tot_time <- difftime(Sys.time(), start_time, units = "secs")
+#   list(time = tot_time, result = clus_result)
+#   
+# }
+# stopImplicitCluster()
+# difftime(Sys.time(), start_ova)
 
 ### Active Clusters
 sapply(1:5, function(x){apply(testResult1[[x]]$result$ci_result, 1, uniqueClus)}) %>%
@@ -124,7 +127,8 @@ sapply(1:5, function(x){apply(testResult1[[x]]$result$ci_result, 1, uniqueClus)}
   geom_line() +
   theme_bw() +
   facet_wrap(. ~ name) +
-  labs(title = TeX("Active Clusters: Metropolis-Hasting for $\\beta$"))
+  ylim(2, 10) + 
+  labs(title = TeX("Active Clusters: Adaptive Metropolis-Hasting for $\\beta$ (Singleton)"))
 
 ### Acceptance Rate for beta
 AcceptRate <- lapply(1:5, function(y){sapply(1:10, function(x){mean(testResult1[[y]]$result$MH_accept[which(testResult1[[y]]$result$MH_accept[, x] != -1), x])})}) %>%
@@ -160,8 +164,8 @@ ggplot() +
 ### Trace plot for beta
 lapply(1:5, function(y){sapply(1:10, function(x){sum(testResult1[[y]]$result$MH_accept[, x] != -1)})})
 
-aC <- which(sapply(1:10, function(x){sum(testResult1[[1]]$result$MH_accept[, x] != -1)}) >= 10000)
-lapply(aC, function(x){t(testResult1[[1]]$result$beta_result[x, , ]) %>%
+aC <- which(sapply(1:10, function(x){sum(testResult1[[5]]$result$MH_accept[, x] != -1)}) >= 10000)
+lapply(aC, function(x){t(testResult1[[5]]$result$beta_result[x, , ]) %>%
     as.data.frame() %>%
     `colnames<-`(paste0("b", 1:38)) %>%
     mutate(Iteration = 1:15000, Cluster = paste0("Cluster ", x))}) %>%
@@ -169,7 +173,8 @@ lapply(aC, function(x){t(testResult1[[1]]$result$beta_result[x, , ]) %>%
   pivot_longer(!(c(Iteration, Cluster))) %>%
   ggplot(aes(x = Iteration, y = value, color = Cluster)) +
   geom_line() +
-  facet_wrap(. ~ name)
+  facet_wrap(. ~ name) +
+  labs(title = TeX("Trace plot for $\\beta$ via MH (Chain 5)"))
 
 ### ACF plot
 sapply(1:38, function(x){acf(as.numeric(testResult1[[1]]$result$beta_result[8, x, ]), lag.max = 100, plot = FALSE)[[1]]}) %>%
@@ -182,8 +187,33 @@ sapply(1:38, function(x){acf(as.numeric(testResult1[[1]]$result$beta_result[8, x
   ylim(-1, 1)
 
 ### Geweke
-sapply(1:38, function(x){geweke.diag(mcmc(testResult1[[1]]$result$beta_result[1, x, ], start = 5000))$z})
+sapply(1:90, function(y){sapply(1:38, function(x){geweke.diag(mcmc(testResult1[[5]]$result$beta_result[y, x, ], start = 5000))$z}) %>%
+    abs() %>%
+    pnorm(lower.tail = FALSE) * 2}) %>%
+  as.data.frame() %>%
+  `colnames<-`(paste0("Cluster ", 1:90)) %>%
+  mutate(beta = paste0("b", 1:38)) %>%
+  pivot_longer(!beta) %>%
+  mutate(significant = (value < 0.05)) %>%
+  ggplot(aes(x = name, y = beta, fill = significant)) +
+  geom_tile() +
+  labs(title = "Geweke Statistics (Chain 5) -- MH update (Significant = not converged)")
 
+### salso
+lapply(1:5, function(x){table(salso(testResult1[[x]]$result$ci_result[-(1:5000), ]))})
+lapply(1:5, function(x){data.frame(testResult1[[x]]$result$ci_result[seq(5000, 15000, 100), ])}) %>%
+  bind_rows(.id = NULL) %>%
+  as.matrix() %>%
+  salso() %>%
+  table()
+
+tt <- lapply(1:5, function(x){data.frame(testResult1[[x]]$result$ci_result[seq(5000, 15000, 100), ])}) %>%
+  bind_rows(.id = NULL) %>%
+  as.matrix() %>%
+  salso() %>%
+  as.numeric()
+
+table(tt, dat06[, 4])
 
 ### Run the models -------------------------------------------------------------
 #### Set of the hyperparameters with a longer MCMC chains
