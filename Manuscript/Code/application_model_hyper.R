@@ -94,7 +94,9 @@ identical(colnames(dat06), colnames(dat08))
 identical(colnames(dat12[, -(1:5)]), colnames(dat08[, -(1:5)]))
 
 testResult1 <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_6m_oneClus.RData"))
-testResult1 <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_6m_singleton.RData"))
+testResult2 <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_6m_singleton.RData"))
+testResult3 <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_6m_init30.RData"))
+testResult4 <- readRDS(paste0(path, "Manuscript/Result/microbiome_result_6m_init60.RData"))
 
 ### Run the model --------------------------------------------------------------
 # set.seed(1415, kind = "L'Ecuyer-CMRG")
@@ -127,10 +129,50 @@ sapply(1:5, function(x){apply(testResult1[[x]]$result$ci_result, 1, uniqueClus)}
   geom_line() +
   theme_bw() +
   facet_wrap(. ~ name) +
-  ylim(2, 10) + 
+  ylim(1, 10) + 
+  labs(title = TeX("Active Clusters: Adaptive Metropolis-Hasting for $\\beta$ (One Cluster)"))
+
+sapply(1:5, function(x){apply(testResult2[[x]]$result$ci_result, 1, uniqueClus)}) %>%
+  as.data.frame() %>%
+  `colnames<-`(paste0("Chain ", 1:5)) %>%
+  mutate(Iteration = 1:15000) %>%
+  pivot_longer(!Iteration) %>%
+  ggplot(aes(x = Iteration, y = value)) +
+  geom_line() +
+  theme_bw() +
+  facet_wrap(. ~ name) +
+  ylim(1, 90) + 
+  geom_hline(yintercept = 2, linetype = "dotted", color = "blue", size = 0.25) +
   labs(title = TeX("Active Clusters: Adaptive Metropolis-Hasting for $\\beta$ (Singleton)"))
 
+sapply(1:5, function(x){apply(testResult3[[x]]$result$ci_result, 1, uniqueClus)}) %>%
+  as.data.frame() %>%
+  `colnames<-`(paste0("Chain ", 1:5)) %>%
+  mutate(Iteration = 1:15000) %>%
+  pivot_longer(!Iteration) %>%
+  ggplot(aes(x = Iteration, y = value)) +
+  geom_line() +
+  theme_bw() +
+  facet_wrap(. ~ name) +
+  ylim(1, 30) + 
+  geom_hline(yintercept = 2, linetype = "dotted", color = "blue", size = 0.25) +
+  labs(title = TeX("Active Clusters: Adaptive Metropolis-Hasting for $\\beta$ (30 Clusters)"))
+
+sapply(1:5, function(x){apply(testResult4[[x]]$result$ci_result, 1, uniqueClus)}) %>%
+  as.data.frame() %>%
+  `colnames<-`(paste0("Chain ", 1:5)) %>%
+  mutate(Iteration = 1:15000) %>%
+  pivot_longer(!Iteration) %>%
+  ggplot(aes(x = Iteration, y = value)) +
+  geom_line() +
+  theme_bw() +
+  facet_wrap(. ~ name) +
+  ylim(1, 60) + 
+  geom_hline(yintercept = 2, linetype = "dotted", color = "blue", size = 0.25) +
+  labs(title = TeX("Active Clusters: Adaptive Metropolis-Hasting for $\\beta$ (60 Clusters)"))
+
 ### Acceptance Rate for beta
+#### One Cluster
 AcceptRate <- lapply(1:5, function(y){sapply(1:10, function(x){mean(testResult1[[y]]$result$MH_accept[which(testResult1[[y]]$result$MH_accept[, x] != -1), x])})}) %>%
   as.data.frame() %>%
   bind_rows(.id = NULL) %>%
@@ -158,14 +200,107 @@ nLonger <- sapply(1:5, function(k){paste0(AcceptRate[, k], " (", nUpdate[, k], "
 ggplot() +
   geom_tile(data = AcceptLonger, aes(x = name, y = Cluster, fill = value)) +
   geom_text(data = nLonger, aes(x = name, y = Cluster, label = value), color = "white") +
-  labs(x = "Chain", y = "Cluster", title = TeX("Acceptance Rate when updating $\\beta$ via MH")) +
+  labs(x = "Chain", y = "Cluster", title = TeX("Acceptance Rate when updating $\\beta$ via Adaptive MH (One Cluster)")) +
+  theme_minimal()
+
+#### Singleton
+AcceptRate <- lapply(1:5, function(y){sapply(1:90, function(x){mean(testResult2[[y]]$result$MH_accept[which(testResult2[[y]]$result$MH_accept[, x] != -1), x])})}) %>%
+  as.data.frame() %>%
+  bind_rows(.id = NULL) %>%
+  `rownames<-`(paste0("Cluster ", 1:90)) %>%
+  `colnames<-`(paste0("Chain ", 1:5)) %>%
+  round(3)
+
+nUpdate <- lapply(1:5, function(y){sapply(1:90, function(x){sum(testResult2[[y]]$result$MH_accept[, x] != -1)})}) %>%
+  as.data.frame() %>%
+  bind_rows(.id = NULL) %>%
+  `rownames<-`(paste0("Cluster ", 1:90)) %>%
+  `colnames<-`(paste0("Chain ", 1:5))
+
+AcceptLonger <- data.frame(AcceptRate) %>%
+  `colnames<-`(paste0("Chain ", 1:5)) %>%
+  mutate(Cluster = paste0("Cluster ", 1:90)) %>%
+  pivot_longer(!(Cluster))
+
+nLonger <- sapply(1:5, function(k){paste0(AcceptRate[, k], " (", nUpdate[, k], ")")}) %>%
+  as.data.frame() %>%
+  `colnames<-`(paste0("Chain ", 1:5)) %>%
+  mutate(Cluster = paste0("Cluster ", 1:90)) %>%
+  pivot_longer(!(Cluster))
+
+ggplot() +
+  geom_tile(data = AcceptLonger, aes(x = name, y = Cluster, fill = value)) +
+  geom_text(data = nLonger, aes(x = name, y = Cluster, label = value), color = "white") +
+  labs(x = "Chain", y = "Cluster", title = TeX("Acceptance Rate when updating $\\beta$ via Adaptive MH (Singleton)")) +
+  theme_minimal()
+
+#### 30 Clusters
+AcceptRate <- lapply(1:5, function(y){sapply(1:30, function(x){mean(testResult3[[y]]$result$MH_accept[which(testResult3[[y]]$result$MH_accept[, x] != -1), x])})}) %>%
+  as.data.frame() %>%
+  bind_rows(.id = NULL) %>%
+  `rownames<-`(paste0("Cluster ", 1:30)) %>%
+  `colnames<-`(paste0("Chain ", 1:5)) %>%
+  round(3)
+
+nUpdate <- lapply(1:5, function(y){sapply(1:30, function(x){sum(testResult3[[y]]$result$MH_accept[, x] != -1)})}) %>%
+  as.data.frame() %>%
+  bind_rows(.id = NULL) %>%
+  `rownames<-`(paste0("Cluster ", 1:30)) %>%
+  `colnames<-`(paste0("Chain ", 1:5))
+
+AcceptLonger <- data.frame(AcceptRate) %>%
+  `colnames<-`(paste0("Chain ", 1:5)) %>%
+  mutate(Cluster = paste0("Cluster ", 1:30)) %>%
+  pivot_longer(!(Cluster))
+
+nLonger <- sapply(1:5, function(k){paste0(AcceptRate[, k], " (", nUpdate[, k], ")")}) %>%
+  as.data.frame() %>%
+  `colnames<-`(paste0("Chain ", 1:5)) %>%
+  mutate(Cluster = paste0("Cluster ", 1:30)) %>%
+  pivot_longer(!(Cluster))
+
+ggplot() +
+  geom_tile(data = AcceptLonger, aes(x = name, y = Cluster, fill = value)) +
+  geom_text(data = nLonger, aes(x = name, y = Cluster, label = value), color = "white") +
+  labs(x = "Chain", y = "Cluster", title = TeX("Acceptance Rate when updating $\\beta$ via Adaptive MH (30 Clusters)")) +
+  theme_minimal()
+
+#### 60 Clusters
+AcceptRate <- lapply(1:5, function(y){sapply(1:60, function(x){mean(testResult4[[y]]$result$MH_accept[which(testResult4[[y]]$result$MH_accept[, x] != -1), x])})}) %>%
+  as.data.frame() %>%
+  bind_rows(.id = NULL) %>%
+  `rownames<-`(paste0("Cluster ", 1:60)) %>%
+  `colnames<-`(paste0("Chain ", 1:5)) %>%
+  round(3)
+
+nUpdate <- lapply(1:5, function(y){sapply(1:60, function(x){sum(testResult4[[y]]$result$MH_accept[, x] != -1)})}) %>%
+  as.data.frame() %>%
+  bind_rows(.id = NULL) %>%
+  `rownames<-`(paste0("Cluster ", 1:60)) %>%
+  `colnames<-`(paste0("Chain ", 1:5))
+
+AcceptLonger <- data.frame(AcceptRate) %>%
+  `colnames<-`(paste0("Chain ", 1:5)) %>%
+  mutate(Cluster = paste0("Cluster ", 1:60)) %>%
+  pivot_longer(!(Cluster))
+
+nLonger <- sapply(1:5, function(k){paste0(AcceptRate[, k], " (", nUpdate[, k], ")")}) %>%
+  as.data.frame() %>%
+  `colnames<-`(paste0("Chain ", 1:5)) %>%
+  mutate(Cluster = paste0("Cluster ", 1:60)) %>%
+  pivot_longer(!(Cluster))
+
+ggplot() +
+  geom_tile(data = AcceptLonger, aes(x = name, y = Cluster, fill = value)) +
+  geom_text(data = nLonger, aes(x = name, y = Cluster, label = value), color = "white") +
+  labs(x = "Chain", y = "Cluster", title = TeX("Acceptance Rate when updating $\\beta$ via Adaptive MH (60 Clusters)")) +
   theme_minimal()
 
 ### Trace plot for beta
 lapply(1:5, function(y){sapply(1:10, function(x){sum(testResult1[[y]]$result$MH_accept[, x] != -1)})})
 
-aC <- which(sapply(1:10, function(x){sum(testResult1[[5]]$result$MH_accept[, x] != -1)}) >= 10000)
-lapply(aC, function(x){t(testResult1[[5]]$result$beta_result[x, , ]) %>%
+aC <- which(sapply(1:10, function(x){sum(testResult1[[4]]$result$MH_accept[, x] != -1)}) >= 10000)
+lapply(aC, function(x){t(testResult1[[4]]$result$beta_result[x, , ]) %>%
     as.data.frame() %>%
     `colnames<-`(paste0("b", 1:38)) %>%
     mutate(Iteration = 1:15000, Cluster = paste0("Cluster ", x))}) %>%
@@ -174,17 +309,30 @@ lapply(aC, function(x){t(testResult1[[5]]$result$beta_result[x, , ]) %>%
   ggplot(aes(x = Iteration, y = value, color = Cluster)) +
   geom_line() +
   facet_wrap(. ~ name) +
-  labs(title = TeX("Trace plot for $\\beta$ via MH (Chain 5)"))
+  labs(title = TeX("Trace plot for $\\beta$ via Adpative MH (One Cluster - Chain 4)"))
+
+
+aC <- which(sapply(1:90, function(x){sum(testResult2[[1]]$result$MH_accept[, x] != -1)}) >= 10000)
+lapply(aC, function(x){t(testResult2[[1]]$result$beta_result[x, , ]) %>%
+    as.data.frame() %>%
+    `colnames<-`(paste0("b", 1:38)) %>%
+    mutate(Iteration = 1:15000, Cluster = paste0("Cluster ", x))}) %>%
+  bind_rows(.id = NULL) %>%
+  pivot_longer(!(c(Iteration, Cluster))) %>%
+  ggplot(aes(x = Iteration, y = value, color = Cluster)) +
+  geom_line() +
+  facet_wrap(. ~ name) +
+  labs(title = TeX("Trace plot for $\\beta$ via Adpative MH (Actual Singleton - Chain 1)"))
 
 ### ACF plot
-sapply(1:38, function(x){acf(as.numeric(testResult1[[1]]$result$beta_result[8, x, ]), lag.max = 100, plot = FALSE)[[1]]}) %>%
-  `colnames<-`(paste0("b", 1:38)) %>%
-  as.data.frame() %>%
-  mutate(Lags = 0:100) %>%
-  pivot_longer(!Lags) %>%
-  ggplot(aes(x = Lags, y = value, color = name)) +
-  geom_line() +
-  ylim(-1, 1)
+# sapply(1:38, function(x){acf(as.numeric(testResult1[[1]]$result$beta_result[8, x, ]), lag.max = 100, plot = FALSE)[[1]]}) %>%
+#   `colnames<-`(paste0("b", 1:38)) %>%
+#   as.data.frame() %>%
+#   mutate(Lags = 0:100) %>%
+#   pivot_longer(!Lags) %>%
+#   ggplot(aes(x = Lags, y = value, color = name)) +
+#   geom_line() +
+#   ylim(-1, 1)
 
 ### Geweke
 sapply(1:90, function(y){sapply(1:38, function(x){geweke.diag(mcmc(testResult1[[5]]$result$beta_result[y, x, ], start = 5000))$z}) %>%
@@ -207,13 +355,34 @@ lapply(1:5, function(x){data.frame(testResult1[[x]]$result$ci_result[seq(5000, 1
   salso() %>%
   table()
 
-tt <- lapply(1:5, function(x){data.frame(testResult1[[x]]$result$ci_result[seq(5000, 15000, 100), ])}) %>%
+lapply(1:5, function(x){table(salso(testResult2[[x]]$result$ci_result[-(1:5000), ]))})
+lapply(1:5, function(x){data.frame(testResult2[[x]]$result$ci_result[seq(5000, 15000, 100), ])}) %>%
   bind_rows(.id = NULL) %>%
   as.matrix() %>%
   salso() %>%
-  as.numeric()
+  table()
 
-table(tt, dat06[, 4])
+lapply(1:5, function(x){table(salso(testResult3[[x]]$result$ci_result[-(1:5000), ]))})
+lapply(1:5, function(x){data.frame(testResult3[[x]]$result$ci_result[seq(5000, 15000, 100), ])}) %>%
+  bind_rows(.id = NULL) %>%
+  as.matrix() %>%
+  salso() %>%
+  table()
+
+lapply(1:5, function(x){table(salso(testResult4[[x]]$result$ci_result[-(1:5000), ]))})
+lapply(1:5, function(x){data.frame(testResult4[[x]]$result$ci_result[seq(5000, 15000, 100), ])}) %>%
+  bind_rows(.id = NULL) %>%
+  as.matrix() %>%
+  salso() %>%
+  table()
+
+###
+lapply(1:5, function(x){data.frame(testResult4[[x]]$result$ci_result[seq(5000, 15000, 100), ])}) %>%
+  bind_rows(.id = NULL) %>%
+  as.matrix() %>%
+  salso() %>%
+  as.numeric() %>%
+  table(dat06[, 1])
 
 ### Run the models -------------------------------------------------------------
 #### Set of the hyperparameters with a longer MCMC chains
@@ -235,104 +404,108 @@ table(tt, dat06[, 4])
 #                  c(nbeta_split = 5, theta = 1, mu = 0, s2 = 1, s2_MH = 1, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 4),
 #                  c(nbeta_split = 5, theta = 1, mu = 0, s2 = 1, s2_MH = 1, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 9))
 
-# ### Run with different starting point with less thinning
-# #### One Clusters
-# set.seed(1415, kind = "L'Ecuyer-CMRG")
-# start_ova <- Sys.time()
-# registerDoParallel(7)
-# testResult1 <- foreach(t = 1:7) %dopar% {
-#     start_time <- Sys.time()
-#     clus_result <- mod(iter = 100000, Kmax = 10, nbeta_split = 1,
-#                        z = as.matrix(dat12[, -c(1:5)]), atrisk_init = matrix(1, ncol = 38, nrow = 90),
-#                        beta_init = matrix(0, ncol = 38, nrow = 10),
-#                        ci_init = rep(0, 90), theta = 1, mu = 0,
-#                        s2 = 10, s2_MH = 1, launch_iter = 1, r0g = 4, r1g = 1, r0c = 1, r1c = 1,
-#                        thin = 10)
-#     tot_time <- difftime(Sys.time(), start_time, units = "secs")
-#     list(time = tot_time, result = clus_result)
-# 
-#   }
-# stopImplicitCluster()
-# difftime(Sys.time(), start_ova)
-# saveRDS(testResult1, paste0(path, "Manuscript/Result/microbiome_result_12m_oneClus.RData"))
-# rm(testResult1)
-# 
-# #### Singleton
-# set.seed(1415, kind = "L'Ecuyer-CMRG")
-# start_ova <- Sys.time()
-# registerDoParallel(7)
-# testResult2 <- foreach(t = 1:7) %dopar% {
-#   start_time <- Sys.time()
-#   clus_result <- mod(iter = 100000, Kmax = 90, nbeta_split = 1,
-#                      z = as.matrix(dat12[, -c(1:5)]), atrisk_init = matrix(1, ncol = 38, nrow = 90),
-#                      beta_init = as.matrix(dat12[, -c(1:5)])/rowSums(as.matrix(dat12[, -c(1:5)])),
-#                      ci_init = 0:89, theta = 1, mu = 0,
-#                      s2 = 10, s2_MH = 1, launch_iter = 1, r0g = 4, r1g = 1, r0c = 1, r1c = 1,
-#                      thin = 10)
-#   tot_time <- difftime(Sys.time(), start_time, units = "secs")
-#   list(time = tot_time, result = clus_result)
-#   
-# }
-# stopImplicitCluster()
-# difftime(Sys.time(), start_ova)
-# saveRDS(testResult2, paste0(path, "Manuscript/Result/microbiome_result_12m_singleton.RData"))
-# rm(testResult2)
-# 
-# ### 1/3 Clusters = Start with 30 clusters
-# set.seed(1415, kind = "L'Ecuyer-CMRG")
-# start_ova <- Sys.time()
-# registerDoParallel(7)
-# testResult3 <- foreach(t = 1:7) %dopar% {
-#   
-#   beta_mat_init <- matrix(NA, nrow = 30, ncol = 38)
-#   ci_init_30 <- sample(rep(1:30, 3), size = 90, replace = FALSE)
-#   for(i in 1:30){
-#     beta_mat_init[i, ] <- as.numeric(colSums(dat12[which(ci_init_30 == i), -(1:5)])/sum(dat12[which(ci_init_30 == i), -(1:5)]))
-#   }
-#   
-#   start_time <- Sys.time()
-#   clus_result <- mod(iter = 100000, Kmax = 30, nbeta_split = 1,
-#                      z = as.matrix(dat12[, -c(1:5)]), atrisk_init = matrix(1, ncol = 38, nrow = 90),
-#                      beta_init = beta_mat_init,
-#                      ci_init = ci_init_30 - 1, theta = 1, mu = 0,
-#                      s2 = 10, s2_MH = 1, launch_iter = 1, r0g = 4, r1g = 1, r0c = 1, r1c = 1,
-#                      thin = 10)
-#   tot_time <- difftime(Sys.time(), start_time, units = "secs")
-#   list(time = tot_time, result = clus_result)
-#   
-# }
-# stopImplicitCluster()
-# difftime(Sys.time(), start_ova)
-# saveRDS(testResult3, paste0(path, "Manuscript/Result/microbiome_result_12m_init30.RData"))
-# rm(testResult3)
-# 
-# ### 1/1.5 Clusters = Start with 60 clusters
-# set.seed(1415, kind = "L'Ecuyer-CMRG")
-# start_ova <- Sys.time()
-# registerDoParallel(7)
-# testResult4 <- foreach(t = 1:7) %dopar% {
-#   
-#   beta_mat_init <- matrix(NA, nrow = 60, ncol = 38)
-#   ci_init_60 <- sample(c(1:60, 1:30), size = 90, replace = FALSE)
-#   for(i in 1:60){
-#     beta_mat_init[i, ] <- as.numeric(colSums(dat12[which(ci_init_60 == i), -(1:5)])/sum(dat12[which(ci_init_60 == i), -(1:5)]))
-#   }
-#   
-#   start_time <- Sys.time()
-#   clus_result <- mod(iter = 100000, Kmax = 60, nbeta_split = 1,
-#                      z = as.matrix(dat12[, -c(1:5)]), atrisk_init = matrix(1, ncol = 38, nrow = 90),
-#                      beta_init = beta_mat_init,
-#                      ci_init = ci_init_60 - 1, theta = 1, mu = 0,
-#                      s2 = 10, s2_MH = 1, launch_iter = 1, r0g = 4, r1g = 1, r0c = 1, r1c = 1,
-#                      thin = 10)
-#   tot_time <- difftime(Sys.time(), start_time, units = "secs")
-#   list(time = tot_time, result = clus_result)
-#   
-# } 
-# stopImplicitCluster()
-# difftime(Sys.time(), start_ova)
-# saveRDS(testResult4, paste0(path, "Manuscript/Result/microbiome_result_12m_init60.RData"))
-# rm(testResult4)
+### Run with different starting point with less thinning
+#### One Clusters
+set.seed(1415, kind = "L'Ecuyer-CMRG")
+start_ova <- Sys.time()
+registerDoParallel(5)
+testResult1 <- foreach(t = 1:5) %dopar% {
+  start_time <- Sys.time()
+  clus_result <- mod_adaptive(iter = 15000, Kmax = 10, nbeta_split = 1,
+                              z = as.matrix(dat06[, -c(1:5)]), atrisk_init = matrix(1, ncol = 38, nrow = 90),
+                              beta_init = matrix(0, ncol = 38, nrow = 10),
+                              ci_init = rep(0, 90), theta = 1, mu = 0,
+                              s2 = 1, s2_MH = 1e-3, t_thres = 5000, launch_iter = 30, 
+                              r0g = 4, r1g = 1, r0c = 1, r1c = 1,
+                              thin = 1)
+  tot_time <- difftime(Sys.time(), start_time, units = "secs")
+  list(time = tot_time, result = clus_result)
+  
+}
+stopImplicitCluster()
+difftime(Sys.time(), start_ova)
+saveRDS(testResult1, paste0(path, "Manuscript/Result/microbiome_result_6m_oneClus.RData"))
+rm(testResult1)
+
+#### Singleton
+set.seed(1415, kind = "L'Ecuyer-CMRG")
+start_ova <- Sys.time()
+registerDoParallel(5)
+testResult2 <- foreach(t = 1:5) %dopar% {
+  start_time <- Sys.time()
+  clus_result <- mod_adaptive(iter = 15000, Kmax = 90, nbeta_split = 1,
+                              z = as.matrix(dat06[, -c(1:5)]), atrisk_init = matrix(1, ncol = 38, nrow = 90),
+                              beta_init = as.matrix(dat06[, -c(1:5)])/rowSums(as.matrix(dat06[, -c(1:5)])),
+                              ci_init = 0:89, theta = 1, mu = 0,
+                              s2 = 1, s2_MH = 1e-3, t_thres = 5000, launch_iter = 30, 
+                              r0g = 4, r1g = 1, r0c = 1, r1c = 1,
+                              thin = 1)
+  tot_time <- difftime(Sys.time(), start_time, units = "secs")
+  list(time = tot_time, result = clus_result)
+  
+}
+stopImplicitCluster()
+difftime(Sys.time(), start_ova)
+saveRDS(testResult2, paste0(path, "Manuscript/Result/microbiome_result_6m_singleton.RData"))
+rm(testResult2)
+
+### 1/3 Clusters = Start with 30 clusters
+set.seed(1415, kind = "L'Ecuyer-CMRG")
+start_ova <- Sys.time()
+registerDoParallel(5)
+testResult3 <- foreach(t = 1:5) %dopar% {
+  
+  beta_mat_init <- matrix(NA, nrow = 30, ncol = 38)
+  ci_init_30 <- sample(rep(1:30, 3), size = 90, replace = FALSE)
+  for(i in 1:30){
+    beta_mat_init[i, ] <- as.numeric(colSums(dat06[which(ci_init_30 == i), -(1:5)])/sum(dat06[which(ci_init_30 == i), -(1:5)]))
+  }
+  
+  start_time <- Sys.time()
+  clus_result <- mod_adaptive(iter = 15000, Kmax = 30, nbeta_split = 1,
+                              z = as.matrix(dat06[, -c(1:5)]), atrisk_init = matrix(1, ncol = 38, nrow = 90),
+                              beta_init = beta_mat_init,
+                              ci_init = ci_init_30 - 1, theta = 1, mu = 0,
+                              s2 = 1, s2_MH = 1e-3, t_thres = 5000, launch_iter = 30, 
+                              r0g = 4, r1g = 1, r0c = 1, r1c = 1,
+                              thin = 1)
+  tot_time <- difftime(Sys.time(), start_time, units = "secs")
+  list(time = tot_time, result = clus_result)
+  
+}
+stopImplicitCluster()
+difftime(Sys.time(), start_ova)
+saveRDS(testResult3, paste0(path, "Manuscript/Result/microbiome_result_6m_init30.RData"))
+rm(testResult3)
+
+### 1/1.5 Clusters = Start with 60 clusters
+set.seed(1415, kind = "L'Ecuyer-CMRG")
+start_ova <- Sys.time()
+registerDoParallel(5)
+testResult4 <- foreach(t = 1:5) %dopar% {
+  
+  beta_mat_init <- matrix(NA, nrow = 60, ncol = 38)
+  ci_init_60 <- sample(c(1:60, 1:30), size = 90, replace = FALSE)
+  for(i in 1:60){
+    beta_mat_init[i, ] <- as.numeric(colSums(dat06[which(ci_init_60 == i), -(1:5)])/sum(dat06[which(ci_init_60 == i), -(1:5)]))
+  }
+  
+  start_time <- Sys.time()
+  clus_result <- mod_adaptive(iter = 15000, Kmax = 60, nbeta_split = 1,
+                              z = as.matrix(dat06[, -c(1:5)]), atrisk_init = matrix(1, ncol = 38, nrow = 90),
+                              beta_init = beta_mat_init,
+                              ci_init = ci_init_60 - 1, theta = 1, mu = 0,
+                              s2 = 1, s2_MH = 1e-3, t_thres = 5000, launch_iter = 30, 
+                              r0g = 4, r1g = 1, r0c = 1, r1c = 1,
+                              thin = 1)
+  tot_time <- difftime(Sys.time(), start_time, units = "secs")
+  list(time = tot_time, result = clus_result)
+  
+}
+stopImplicitCluster()
+difftime(Sys.time(), start_ova)
+saveRDS(testResult4, paste0(path, "Manuscript/Result/microbiome_result_6m_init60.RData"))
+rm(testResult4)
 
 ### Try running case 3+10 with shorter iterations ------------------------------
 ##### matrix(0, ncol = 38, nrow = 10)
