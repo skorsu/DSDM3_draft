@@ -53,83 +53,55 @@ lapply(1:4, function(y){sapply(1:5, function(x){apply(listData[[y]][[x]]$result$
        title = paste0(str_extract(month_analysis, "^[:digit:]+"), "-Month: Active Clusters via MCMC chains")) +
   scale_y_continuous(limits = c(0, 45), breaks = c(seq(2, 10, 2), seq(15, 45, 5)))
 
+### Acceptance Rate: -----------------------------------------------------------
+lapply(1:5, function(y){sapply(1:90, function(x){if(x > dim(r1[[y]]$result$MH_accept)[2]){return(c(NA, NA))} else{
+  indexUpdate <- r1[[y]]$result$MH_accept[, x] != -1
+  acceptVec <- r1[[y]]$result$MH_accept[indexUpdate, x]
+  c(length(acceptVec), mean(acceptVec))}
+  }) %>% t() %>% as.data.frame() %>%
+  `colnames<-`(c("nPropose", "acceptRate")) %>%
+  mutate(Cluster = paste0("Cluster ", 1:90), case = caseName[1], chain = paste0("Chain ", y))})
+
+
+
+
+
+
+AcceptRate <- lapply(1:5, function(y){sapply(1:10, function(x){mean(testResult1[[y]]$result$MH_accept[which(testResult1[[y]]$result$MH_accept[, x] != -1), x])})}) %>%
+  as.data.frame() %>%
+  bind_rows(.id = NULL) %>%
+  `rownames<-`(paste0("Cluster ", 1:10)) %>%
+  `colnames<-`(paste0("Chain ", 1:5)) %>%
+  round(3)
+
+nUpdate <- lapply(1:5, function(y){sapply(1:10, function(x){sum(testResult1[[y]]$result$MH_accept[, x] != -1)})}) %>%
+  as.data.frame() %>%
+  bind_rows(.id = NULL) %>%
+  `rownames<-`(paste0("Cluster ", 1:10)) %>%
+  `colnames<-`(paste0("Chain ", 1:5))
+
+AcceptLonger <- data.frame(AcceptRate) %>%
+  `colnames<-`(paste0("Chain ", 1:5)) %>%
+  mutate(Cluster = paste0("Cluster ", 1:10)) %>%
+  pivot_longer(!(Cluster))
+
+nLonger <- sapply(1:5, function(k){paste0(AcceptRate[, k], " (", nUpdate[, k], ")")}) %>%
+  as.data.frame() %>%
+  `colnames<-`(paste0("Chain ", 1:5)) %>%
+  mutate(Cluster = paste0("Cluster ", 1:10)) %>%
+  pivot_longer(!(Cluster))
+
+ggplot() +
+  geom_tile(data = AcceptLonger, aes(x = name, y = Cluster, fill = value)) +
+  geom_text(data = nLonger, aes(x = name, y = Cluster, label = value), color = "white") +
+  labs(x = "Chain", y = "Cluster", title = TeX("Acceptance Rate when updating $\\beta$ via Adaptive MH (One Cluster)")) +
+  theme_minimal()
+
+
+
 ###: ---------------------------------------------------------------------------
 
-### Active Clusters
-sapply(1:5, function(x){apply(testResult1[[x]]$result$ci_result, 1, uniqueClus)}) %>%
-  as.data.frame() %>%
-  `colnames<-`(paste0("Chain ", 1:5)) %>%
-  mutate(Iteration = 1:15000) %>%
-  pivot_longer(!Iteration) %>%
-  ggplot(aes(x = Iteration, y = value)) +
-  geom_line() +
-  theme_bw() +
-  facet_wrap(. ~ name) +
-  ylim(1, 10) + 
-  labs(title = TeX("Active Clusters: Adaptive Metropolis-Hasting for $\\beta$ (6-Month: One Cluster)"))
 
-sapply(1:5, function(x){apply(testResult2[[x]]$result$ci_result, 1, uniqueClus)}) %>%
-  as.data.frame() %>%
-  `colnames<-`(paste0("Chain ", 1:5)) %>%
-  mutate(Iteration = 1:15000) %>%
-  pivot_longer(!Iteration) %>%
-  ggplot(aes(x = Iteration, y = value)) +
-  geom_line() +
-  theme_bw() +
-  facet_wrap(. ~ name) +
-  ylim(1, 10) + 
-  labs(title = TeX("Active Clusters: Adaptive Metropolis-Hasting for $\\beta$ (8-Month: One Cluster)"))
-
-sapply(1:5, function(x){apply(testResult3[[x]]$result$ci_result, 1, uniqueClus)}) %>%
-  as.data.frame() %>%
-  `colnames<-`(paste0("Chain ", 1:5)) %>%
-  mutate(Iteration = 1:15000) %>%
-  pivot_longer(!Iteration) %>%
-  ggplot(aes(x = Iteration, y = value)) +
-  geom_line() +
-  theme_bw() +
-  facet_wrap(. ~ name) +
-  ylim(1, 10) + 
-  labs(title = TeX("Active Clusters: Adaptive Metropolis-Hasting for $\\beta$ (12-Month: One Cluster)"))
-
-# sapply(1:5, function(x){apply(testResult2[[x]]$result$ci_result, 1, uniqueClus)}) %>%
-#   as.data.frame() %>%
-#   `colnames<-`(paste0("Chain ", 1:5)) %>%
-#   mutate(Iteration = 1:15000) %>%
-#   pivot_longer(!Iteration) %>%
-#   ggplot(aes(x = Iteration, y = value)) +
-#   geom_line() +
-#   theme_bw() +
-#   facet_wrap(. ~ name) +
-#   ylim(1, 90) + 
-#   geom_hline(yintercept = 2, linetype = "dotted", color = "blue", size = 0.25) +
-#   labs(title = TeX("Active Clusters: Adaptive Metropolis-Hasting for $\\beta$ (Singleton)"))
-# 
-# sapply(1:5, function(x){apply(testResult3[[x]]$result$ci_result, 1, uniqueClus)}) %>%
-#   as.data.frame() %>%
-#   `colnames<-`(paste0("Chain ", 1:5)) %>%
-#   mutate(Iteration = 1:15000) %>%
-#   pivot_longer(!Iteration) %>%
-#   ggplot(aes(x = Iteration, y = value)) +
-#   geom_line() +
-#   theme_bw() +
-#   facet_wrap(. ~ name) +
-#   ylim(1, 30) + 
-#   geom_hline(yintercept = 2, linetype = "dotted", color = "blue", size = 0.25) +
-#   labs(title = TeX("Active Clusters: Adaptive Metropolis-Hasting for $\\beta$ (30 Clusters)"))
-# 
-# sapply(1:5, function(x){apply(testResult4[[x]]$result$ci_result, 1, uniqueClus)}) %>%
-#   as.data.frame() %>%
-#   `colnames<-`(paste0("Chain ", 1:5)) %>%
-#   mutate(Iteration = 1:15000) %>%
-#   pivot_longer(!Iteration) %>%
-#   ggplot(aes(x = Iteration, y = value)) +
-#   geom_line() +
-#   theme_bw() +
-#   facet_wrap(. ~ name) +
-#   ylim(1, 60) + 
-#   geom_hline(yintercept = 2, linetype = "dotted", color = "blue", size = 0.25) +
-#   labs(title = TeX("Active Clusters: Adaptive Metropolis-Hasting for $\\beta$ (60 Clusters)"))
 
 ### Acceptance Rate for beta
 #### One Cluster
