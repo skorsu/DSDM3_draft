@@ -27,7 +27,7 @@ if(! file.exists(path)){
   path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/"
 }
 
-month_analysis <- "6m"
+month_analysis <- "12m"
 caseName <- c("One Cluster", "Singletons", "30 Clusters", "60 Clusters")
 
 listData <- list(r1 = readRDS(paste0(path, "Manuscript/Result/microbiome_result_", month_analysis, "_oneClus.RData")), 
@@ -161,6 +161,3 @@ resultList <- list(ci_result = lapply(1:4, function(y){lapply(1:5, function(x){l
 saveRDS(resultList,
         paste0(path, "Manuscript/Result/microbiome_result_", month_analysis, "_combined.RData"))
 ###: ---------------------------------------------------------------------------
-
-
-
