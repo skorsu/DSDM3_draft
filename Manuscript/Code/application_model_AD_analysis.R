@@ -10,6 +10,7 @@ library(latex2exp)
 library(MCMCprecision)
 library(gridExtra)
 library(ggpubr)
+library(ggh4x)
 
 ### User-defined Functions: ----------------------------------------------------
 meanSD <- function(x, dplace = 3){
@@ -154,7 +155,7 @@ estRela <- lapply(1:3, function(z){sapply(1:90, function(y){ci <- listData[[z]]$
 betaVec <- t(sapply(1:2000, function(x){listData[[z]]$beta_result[[x]][ci[x], ]}))
 expBetaAR <- exp(betaVec) * t(listData[[z]]$atrisk_result[y, , ])
 simRelaAbun <- t(sapply(1:2000, function(x){as.numeric(rdirichlet(1, expBetaAR[x, ]))}))
-colMeans(simRelaAbun)}) %>% 
+colMeans(simRelaAbun)}) %>%
     t()})
 
 ### Sort by some bacteria: -----------------------------------------------------
@@ -264,6 +265,10 @@ orderedClus <- sapply(1:3, function(x){
   newCLUS
   
 })
+
+table(orderedClus[, 1])
+table(orderedClus[, 2])
+table(orderedClus[, 3])
 
 ### Relative Plots: ------------------------------------------------------------
 relaPlot <- function(group_relaAbunList, clus_assign, actual_month){
@@ -428,11 +433,6 @@ ggarrange(h6m$actHeat, h8m$actHeat, h12m$actHeat, h6m$estHeat, h8m$estHeat, h12m
 ### Trajectory Plot: -----------------------------------------------------------
 obsMovement <- function(clusAssign){
   
-  ### Get the bar separating each cluster
-  bar1 <- data.frame(x = rep(1, 2), y = 90 - as.numeric(cumsum(table(clusAssign[, 1]))))
-  bar2 <- data.frame(x = rep(2, 2), y = 90 - as.numeric(cumsum(table(clusAssign[, 2]))))
-  bar3 <- data.frame(x = rep(3, 2), y = 90 - as.numeric(cumsum(table(clusAssign[, 3]))))
-  
   ### Get the observation index
   c06 <- data.frame(obs = 1:90, clus6 = factor(clusAssign[, 1])) %>%
     arrange(clus6) %>% 
@@ -469,29 +469,19 @@ obsMovement <- function(clusAssign){
   d2 <- dim(obsChange2)[1]
   
   ggplot() +
-    geom_text(data = c06, aes(x = rep(1, 90), y = index6, label = obs, color = clus6), size = 4) +
-    geom_text(data = c08, aes(x = rep(2, 90), y = index8, label = obs, color = clus8), size = 4) +
-    geom_text(data = c12, aes(x = rep(3, 90), y = index12, label = obs, color = clus12), size = 4) +
+    geom_text(data = c06, aes(x = rep(1, 90), y = index6, label = obs, color = clus6), size = 3.5) +
+    geom_text(data = c08, aes(x = rep(2, 90), y = index8, label = obs, color = clus8), size = 3.5) +
+    geom_text(data = c12, aes(x = rep(3, 90), y = index12, label = obs, color = clus12), size = 3.5) +
     geom_segment(aes(x = rep(1.01, d1), y = obsChange[, 2], 
                      xend = rep(1.99, d1), yend = obsChange[, 3]),
                  color = "grey50", alpha = 0.6, linewidth = 0.30) +
     geom_segment(aes(x = rep(2.01, d2), y = obsChange2[, 2], 
                      xend = rep(2.99, d2), yend = obsChange2[, 3]), 
                  color = "grey50", alpha = 0.6, linewidth = 0.30) +
-    geom_segment(data = bar1, 
-                 aes(x = x - 0.05, y = y, xend = x + 0.05, yend = y), 
-                 alpha = 0.5, inherit.aes = FALSE) +
-    geom_segment(data = bar2, 
-                 aes(x = x - 0.05, y = y, xend = x + 0.05, yend = y), 
-                 alpha = 0.5, inherit.aes = FALSE) +
-    geom_segment(data = bar3, 
-                 aes(x = x - 0.05, y = y, xend = x + 0.05, yend = y), 
-                 alpha = 0.5, inherit.aes = FALSE) +
     theme_minimal() + 
     theme(legend.position = "none", axis.ticks = element_blank(), axis.text.y = element_blank()) + 
     scale_x_continuous(breaks = c(1, 2, 3), labels = c("6 months", "8 months", "12 months")) +
     labs(x = "Timestamps", y = "", title = "The change of cluster behavior for each infants across three timestamps")
-  
   
 }
 
@@ -517,7 +507,7 @@ descPlot <- function(descDat_type, intVar, capt, monthLab, g1level = "yes", g2le
     theme_minimal() +
     theme(legend.position = "bottom") +
     scale_y_continuous(labels = scales::percent_format()) +
-    labs(x = " ", y = "Percentage", title = ptitle)
+    labs(x = " ", y = "Percentage", title = ptitle, fill = " ")
   
 }
 
@@ -552,5 +542,50 @@ plot12mo <- plotData("12MO", "12-Month", dat12, orderedClus[, 3])
 grid.arrange(grobs = plot6mo)
 grid.arrange(grobs = plot8mo)
 grid.arrange(grobs = plot12mo)
+
+plot12mo[[10]]
+
+ggarrange(plot6mo[[2]], plot8mo[[2]], plot12mo[[2]],
+          ncol = 3, nrow = 1, common.legend = TRUE, legend = "bottom")
+
+ggarrange(plot6mo[[6]], plot6mo[[7]], plot6mo[[8]], plot6mo[[12]],
+          ncol = 4, nrow = 1, common.legend = TRUE, legend = "bottom")
+
+ggarrange(plot8mo[[6]], plot8mo[[7]], plot8mo[[8]], plot8mo[[12]],
+          ncol = 4, nrow = 1, common.legend = TRUE, legend = "bottom")
+
+ggarrange(plot12mo[[6]], plot12mo[[7]], plot12mo[[8]], plot12mo[[12]],
+          ncol = 4, nrow = 1, common.legend = TRUE, legend = "bottom")
+
+ggarrange(plot6mo[[1]], plot8mo[[1]], plot12mo[[1]],
+          ncol = 3, nrow = 1, common.legend = TRUE, legend = "bottom")
+ggarrange(plot6mo[[3]], plot8mo[[3]], plot12mo[[3]],
+          ncol = 3, nrow = 1, common.legend = TRUE, legend = "bottom")
+ggarrange(plot6mo[[4]], plot6mo[[5]], plot6mo[[9]], plot6mo[[10]],
+          ncol = 4, nrow = 1, common.legend = TRUE, legend = "bottom")
+ggarrange(plot8mo[[4]], plot8mo[[5]], plot8mo[[9]], plot8mo[[10]],
+          ncol = 4, nrow = 1, common.legend = TRUE, legend = "bottom")
+ggarrange(plot12mo[[4]], plot12mo[[5]], plot12mo[[9]], plot12mo[[10]],
+          ncol = 4, nrow = 1, common.legend = TRUE, legend = "bottom")
+
+### Alpha-Diversity: -----------------------------------------------------------
+ts_label <- c("6-Month", "8-Month", "12-Month")
+alpMat <- lapply(1:3, function(x){rbind(data.frame(time = ts_label[x], clus = paste0("Cluster ", orderedClus[, x]), alp = "Richness", stat = "Actual", val = as.numeric(rowSums(actRela[[x]] != 0))),
+                                        data.frame(time = ts_label[x], clus = paste0("Cluster ", orderedClus[, x]), alp = "Richness", stat = "Estimated", val = rowSums(estRela[[x]] != 0)),
+                                        data.frame(time = ts_label[x], clus = paste0("Cluster ", orderedClus[, x]), alp = "Shannon", stat = "Actual", val = as.numeric(-rowSums(ifelse(actRela[[x]] == 0, 1e-200, actRela[[x]]) * log(ifelse(actRela[[x]] == 0, 1e-200, actRela[[x]]))))),
+                                        data.frame(time = ts_label[x], clus = paste0("Cluster ", orderedClus[, x]), alp = "Shannon", stat = "Estimated", val = as.numeric(-rowSums(ifelse(estRela[[x]] == 0, 1e-200, estRela[[x]]) * log(ifelse(estRela[[x]] == 0, 1e-200, estRela[[x]]))))),
+                                        data.frame(time = ts_label[x], clus = paste0("Cluster ", orderedClus[, x]), alp = "Simpson", stat = "Actual", val = 1 - as.numeric(rowSums(actRela[[x]]^2))),
+                                        data.frame(time = ts_label[x], clus = paste0("Cluster ", orderedClus[, x]), alp = "Simpson", stat = "Estimated", val = 1 - rowSums(estRela[[x]]^2)),
+                                        data.frame(time = ts_label[x], clus = paste0("Cluster ", orderedClus[, x]), alp = "Inverse Simpson", stat = "Actual", val = 1/as.numeric(rowSums(actRela[[x]]^2))),
+                                        data.frame(time = ts_label[x], clus = paste0("Cluster ", orderedClus[, x]), alp = "Inverse Simpson", stat = "Estimated", val = 1/rowSums(estRela[[x]]^2)))})
+alpMat %>%
+  bind_rows(.id = NULL) %>%
+  ggplot(aes(x = stat, y = val, fill = clus)) +
+  geom_boxplot() +
+  theme_bw() +
+  theme(legend.position = "bottom", axis.title.x = element_blank(), axis.title.y = element_blank()) +
+  ggh4x::facet_grid2(factor(time, levels = paste0(c(6, 8, 12), "-Month")) ~ factor(alp, levels = c("Richness", "Shannon", "Simpson", "Inverse Simpson")), 
+                     scales = "free_y", independent = "y") +
+  labs(fill = "Cluster")
 
 ###: ---------------------------------------------------------------------------

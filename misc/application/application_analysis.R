@@ -6,8 +6,6 @@ library(foreach)
 library(doParallel)
 library(xtable)
 
-
-
 library(mclustcomp)
 library(ggplot2)
 library(gridExtra)
@@ -33,16 +31,21 @@ if(! file.exists(path)){
   path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/Manuscript/"
 }
 
+datpath <- "/Users/kevin-imac/Desktop/Annika/"
+if(! file.exists(datpath)){
+  datpath <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/Manuscript/"
+}
+
 ### Result
 annikaZZ <- readRDS(paste0(path, "Result/microbiome_result.RData"))
 
 ### Data: 6 and 8 Months
-ni68 <- read.csv(paste0(path, "Data/Application/Nicaragua_6mo_8mo_genus.csv"))
-ml68 <- read.csv(paste0(path, "Data/Application/Mali_6mo_8mo_genus.csv"))
+ni68 <- read.csv(paste0(datpath, "Data/Nicaragua_6mo_8mo_genus.csv"))
+ml68 <- read.csv(paste0(datpath, "Data/Mali_6mo_8mo_genus.csv"))
 
 ### Data: 12 Months
-ni12 <- read.csv(paste0(path, "Data/Application/Nicaragua_12mo_Metadata_csv.csv"))
-ml12 <- read.csv(paste0(path, "Data/Application/Mali_12mo_Metadata_csv.csv"))
+ni12 <- read.csv(paste0(datpath, "Data/Nicaragua_12mo_Metadata_csv.csv"))
+ml12 <- read.csv(paste0(datpath, "Data/Mali_12mo_Metadata_csv.csv"))
 
 ## Data Pre-processing ---------------------------------------------------------
 ### For each nationality, first split 6 and 8 from x68. Then, choose only the 
@@ -95,6 +98,8 @@ dat12 <- dat12[, c(1:5, which(colnames(dat12[, -(1:5)]) %in% commomTaxa) + 5)]
 
 identical(colnames(dat06), colnames(dat08))
 identical(colnames(dat12[, -(1:5)]), colnames(dat08[, -(1:5)]))
+
+### Run the model --------------------------------------------------------------
 
 ### Analyze --------------------------------------------------------------------
 #### Computational Time 
