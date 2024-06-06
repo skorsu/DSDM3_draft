@@ -18,29 +18,36 @@ if(! file.exists(path)){
 untar(paste0(path, "Manuscript/Data/Application Data/ibd_alm_results.tar"))
 info <- read.table(paste0(path, "ibd_alm_results/ibd_alm.metadata.txt"), sep = "\t", header = TRUE) %>%
   dplyr::select(-X)
-taxa <- read.table(paste0(path, "ibd_alm_results/RDP/ibd_alm.otu_table.100.denovo.rdp_assigned.txt"))
+info <- data.frame(ID = str_replace(str_extract(info$sample, pattern = "[:digit:]+\\-[:alpha:]"), "\\-", ""),
+                   info %>% dplyr::select(-sample))
+taxa <- read.table(paste0(path, "ibd_alm_results/RDP/ibd_alm.otu_table.100.denovo.rdp_assigned"))
 taxa <- t(taxa)
 taxa <- taxa[, -which(colMeans(taxa > 0) < 0.1)]
 
+dim(taxa)
+
 ### K-means
 plot(sapply(2:10, function(x){sqrt(sum(kmeans(dist(taxa), x)$withinss))}), type = "b")
-
+kmean_clus <- kmeans(dist(taxa), 2)$cluster
+kmean_info <- data.frame(ID = str_extract(names(kmean_clus), "[:digit:]+[:alpha:]"),
+                         clus = kmean_clus) %>%
+  inner_join(info)
+table(kmean_info$clus, kmean_info$DiseaseState)
 
 ### Our model
-as.numeric(apply(taxa, 2, sd)) %>% sort()
 set.seed(1)
 start_time <- Sys.time()
-resultSmits <- mod_adaptive(iter = 1000, Kmax = 5, nbeta_split = 50, 
+ourMod_clus <- mod_adaptive(iter = 5000, Kmax = 10, nbeta_split = 100, 
                             z = as.matrix(taxa), 
                             atrisk_init = matrix(1, nrow = 91, ncol = 616), 
                             beta_init = matrix(0, nrow = 5, ncol = 616), 
                             ci_init = rep(0, 91), 
-                            theta = 1, mu = 0, s2 = 1, 
-                            s2_MH = 1e-3, t_thres = 500, launch_iter = 30, 
+                            theta = 1, mu = 0, s2 = 1e-3, 
+                            s2_MH = 1e-5, t_thres = 2500, launch_iter = 30, 
                             r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 10)
 difftime(Sys.time(), start_time)
 
-salso(resultSmits$ci_result, loss = "binder") %>% table()
+# salso(resultSmits$ci_result, loss = "binder") %>% table()
 
 colSums(resultSmits$MH_accept == 1)/colSums(resultSmits$MH_accept != -1)
 
