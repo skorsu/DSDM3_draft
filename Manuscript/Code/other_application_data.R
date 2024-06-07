@@ -6,6 +6,9 @@ library(ggplot2)
 library(dplyr)
 library(tidyverse)
 library(salso)
+library(ecodist)
+library(foreach)
+library(doParallel)
 
 ### Global Objects: ------------------------------------------------------------
 path <- "/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/"
@@ -20,6 +23,11 @@ info <- read.table(paste0(path, "ibd_alm_results/ibd_alm.metadata.txt"), sep = "
   dplyr::select(-X)
 info <- data.frame(ID = str_replace(str_extract(info$sample, pattern = "[:digit:]+\\-[:alpha:]"), "\\-", ""),
                    info %>% dplyr::select(-sample))
+
+table(info$DiseaseState)
+table(info$ibd)
+table(info$ibd, info$DiseaseState)
+
 taxa <- read.table(paste0(path, "ibd_alm_results/RDP/ibd_alm.otu_table.100.denovo.rdp_assigned"))
 taxa <- t(taxa)
 taxa <- taxa[, -which(colMeans(taxa > 0) < 0.1)]
@@ -32,20 +40,63 @@ kmean_clus <- kmeans(dist(taxa), 2)$cluster
 kmean_info <- data.frame(ID = str_extract(names(kmean_clus), "[:digit:]+[:alpha:]"),
                          clus = kmean_clus) %>%
   inner_join(info)
+
+table(kmean_info$clus, kmean_info$ibd)
+table(kmean_info$clus, kmean_info$gender)
 table(kmean_info$clus, kmean_info$DiseaseState)
 
+### K-mean with BC dist
+plot(sapply(2:10, function(x){sqrt(sum(kmeans(bcdist(taxa), x)$withinss))}), type = "b")
+kmean_BC_clus <- kmeans(bcdist(taxa), 2)$cluster
+kmean_BC_info <- data.frame(ID = str_extract(names(kmean_clus), "[:digit:]+[:alpha:]"),
+                            clus = kmean_BC_clus) %>%
+  inner_join(info)
+
+table(kmean_BC_info$clus, kmean_BC_info$ibd)
+table(kmean_BC_info$clus, kmean_BC_info$gender)
+table(kmean_BC_info$clus, kmean_BC_info$DiseaseState)
+table(kmean_info$clus, kmean_info$abx)
+
 ### Our model
-set.seed(1)
-start_time <- Sys.time()
+set.seed(1, kind = "L'Ecuyer-CMRG")
+registerDoParallel(5)
+start_time_GLOBAL <- Sys.time()
+s2Mat <- data.frame(expand.grid(c(1e-3, 1e-4, 1e-5), c(1e-3, 1e-4, 1e-5)))
+
+result_split_10 <- foreach(t = 1:9) %dopar% {
+  start_time <- Sys.time()
+  mod <- mod_adaptive(iter = 5000, Kmax = 10, nbeta_split = 10, 
+                      z = as.matrix(taxa), 
+                      atrisk_init = matrix(1, nrow = 91, ncol = 616), 
+                      beta_init = matrix(0, nrow = 10, ncol = 616), 
+                      ci_init = rep(0, 91), 
+                      theta = 1, mu = 0, s2 = s2Mat[t, 1], 
+                      s2_MH = s2Mat[t, 2], t_thres = 2500, launch_iter = 30, 
+                      r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 25)
+  comp_time <- difftime(Sys.time(), start_time, units = "secs")
+  return(list(time = comp_time, mod = mod))
+}
+stopImplicitCluster()
+difftime(Sys.time(), start_time_GLOBAL)
+
 ourMod_clus <- mod_adaptive(iter = 5000, Kmax = 10, nbeta_split = 100, 
                             z = as.matrix(taxa), 
                             atrisk_init = matrix(1, nrow = 91, ncol = 616), 
-                            beta_init = matrix(0, nrow = 5, ncol = 616), 
+                            beta_init = matrix(0, nrow = 10, ncol = 616), 
                             ci_init = rep(0, 91), 
                             theta = 1, mu = 0, s2 = 1e-3, 
                             s2_MH = 1e-5, t_thres = 2500, launch_iter = 30, 
-                            r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 10)
-difftime(Sys.time(), start_time)
+                            r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 25)
+
+apply(ourMod_clus$ci_result, 1, function(x){length(unique(x))}) %>%
+  plot(type = "l")
+
+table(ourMod_clus$ci_result[100, ], 
+      ourMod_clus$ci_result[102, ])
+
+salso(ourMod_clus$ci_result)
+
+
 
 # salso(resultSmits$ci_result, loss = "binder") %>% table()
 
