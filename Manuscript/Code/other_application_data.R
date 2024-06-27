@@ -9,9 +9,13 @@ library(salso)
 library(ecodist)
 library(foreach)
 library(doParallel)
+library(cluster)
+library(ggplot2)
+library(ecodist)
+library(coda.base)
 
 ### User-defined functions: ----------------------------------------------------
-activeClus <- function(x){
+uniqueClus <- function(x){
   length(unique(x))
 }
 
@@ -36,56 +40,158 @@ otuTab <- t(otuTab)
 dim(otuTab)
 
 ##### Check the samples: All samples in OTU has the metadata.
-data.frame(metData = paste0("X", metData$Sample_Name_s), OTU = rownames(otuTab))
-rownames(otuTab) %in% paste0("X", metData$Sample_Name_s)
+str_extract(rownames(otuTab), "[^X]+") %in% metData$Sample_Name_s
+metData$Sample_Name_s %in% str_extract(rownames(otuTab), "[^X]+") 
 
 ##### Filter OTU table
 otuTab <- otuTab[, -which(colMeans(otuTab > 0) < 0.1)]
 dim(otuTab)
 
-set.seed(1, kind = "L'Ecuyer-CMRG")
-registerDoParallel(5)
-start_time_GLOBAL <- Sys.time()
-s2Mat <- data.frame(expand.grid(c(1e-3, 1e-4, 1e-5), c(1e-3, 1e-4, 1e-5)))
+##### Demographic
+table(metData$DiseaseState)
+table(metData$Alcohol_s)
+table(metData$Education_s)
+table(metData$sex_s)
 
-result_split_10 <- foreach(t = 1:9) %dopar% {
+##### PAM
+data.frame(k = 2:10,
+           Euclidean = sapply(2:10, function(y){mean(cluster::silhouette(x = pam(dist(otuTab), y))[, 3])}),
+           BrayCurtis = sapply(2:10, function(y){mean(cluster::silhouette(x = pam(bcdist(otuTab), y))[, 3])}),
+           Aitchison = sapply(2:10, function(y){mean(cluster::silhouette(x = pam(dist(otuTab + 1e-20, method = "aitchison"), y))[, 3])})) %>%
+  pivot_longer(cols = !k) %>%
+  ggplot(aes(x = k, y = value)) +
+  geom_line() +
+  facet_wrap(. ~ name, scales = "free_y") +
+  theme_bw() +
+  labs(y = "Average Silhouette", x = "Number of clusters")
+
+##### Cluster: PAM with Euclidean
+table(pam(dist(otuTab), 7)$clustering, metData$DiseaseState)
+table(pam(dist(otuTab), 7)$clustering, metData$Alcohol_s)
+table(pam(dist(otuTab), 7)$clustering, metData$Education_s)
+table(pam(dist(otuTab), 7)$clustering, metData$sex_s)
+
+##### Cluster: PAM with Euclidean
+table(pam(bcdist(otuTab), 7)$clustering, metData$DiseaseState)
+table(pam(bcdist(otuTab), 7)$clustering, metData$Alcohol_s)
+table(pam(bcdist(otuTab), 7)$clustering, metData$Education_s)
+table(pam(bcdist(otuTab), 7)$clustering, metData$sex_s)
+
+##### Import the result form our model
+##### Note: Need to check convergence and try random starting points
+result <- readRDS(paste0(path, "Manuscript/Result/Application Data/hiv_dinh_result_split_10_theta_1e2.rds"))
+plot(apply(result[[1]]$mod$ci_result, 1, uniqueClus), type = "l")
+
+set.seed(1)
+salso(result[[1]]$mod$ci_result[-(1:200), ], loss = "binder")
+
+clusIndex <- as.numeric(salso(result[[1]]$mod$ci_result[-(1:200), ], loss = "binder"))
+table(clusIndex, metData$DiseaseState)
+table(clusIndex, metData$Alcohol_s)
+table(clusIndex, metData$sex_s)
+
+table(clusIndex, paste0(metData$sex_s, ": ", metData$is_gay_s))
+
+data.frame(clus = paste0("Cluster ", clusIndex), val = metData$BMI_s) %>%
+  ggplot(aes(x = clus, y = val, group = clus)) +
+  geom_boxplot() +
+  labs(x = "Cluster", y = "BMI")
+
+data.frame(clus = paste0("Cluster ", clusIndex), val = metData$age_s) %>%
+  ggplot(aes(x = clus, y = val, group = clus)) +
+  geom_boxplot() +
+  labs(x = "Cluster", y = "Age")
+
+data.frame(clus = paste0("Cluster ", clusIndex), val = metData$Fat_s) %>%
+  ggplot(aes(x = clus, y = val, group = clus)) +
+  geom_boxplot() +
+  labs(x = "Cluster", y = "Fat")
+
+
+data.frame(clusIndex, val = metData$Fat_s) %>%
+  group_by(clusIndex) %>%
+  summarise(mean(val), sd(val))
+
+table(pam(dist(otuTab), 7)$clustering, metData$Alcohol_s)
+table(clusIndex, metData$Education_s)
+
+### Try: Random Starting Point (Theta = 1)
+### Note: Dihn 6/27
+set.seed(1)
+clusInit <- matrix(0, ncol = 6, nrow = 36)
+clusInit[, 3] <- sample(0:2, size = 36, replace = TRUE)
+clusInit[, 4] <- sample(0:2, size = 36, replace = TRUE)
+clusInit[, 5] <- 0:35
+clusInit[, 6] <- 0:35
+
+KmaxVec <- c(10, 10, 20, 20, 36, 36)
+
+set.seed(1, kind = "L'Ecuyer-CMRG")
+registerDoParallel(6)
+start_time_GLOBAL <- Sys.time()
+
+result_split_10_theta_1_rn <- foreach(t = 1:6) %dopar% {
   start_time <- Sys.time()
-  mod <- mod_adaptive(iter = 5000, Kmax = 10, nbeta_split = 10, 
-                      z = as.matrix(otuTab), 
-                      atrisk_init = matrix(1, nrow = 36, ncol = 1024), 
-                      beta_init = matrix(0, nrow = 36, ncol = 1024), 
-                      ci_init = rep(0, 36), 
-                      theta = 1, mu = 0, s2 = s2Mat[t, 1], 
-                      s2_MH = s2Mat[t, 2], t_thres = 2500, launch_iter = 30, 
-                      r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 10)
+  mod <- mod_adaptive(iter = 5000, Kmax = KmaxVec[t], nbeta_split = 10,
+                      z = as.matrix(otuTab),
+                      atrisk_init = matrix(1, nrow = 36, ncol = 1024),
+                      beta_init = matrix(0, nrow = KmaxVec[t], ncol = 1024),
+                      ci_init = clusInit[, t],
+                      theta = 1, mu = 0, s2 = 1e-3,
+                      s2_MH = 1e-3, t_thres = 2500, launch_iter = 30,
+                      r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 5)
   comp_time <- difftime(Sys.time(), start_time, units = "secs")
   return(list(time = comp_time, mod = mod))
 }
 stopImplicitCluster()
 difftime(Sys.time(), start_time_GLOBAL)
 
-# set.seed(1)
-# startTime <- Sys.time()
-# modResult <- mod_adaptive(iter = 1000, Kmax = 10, nbeta_split = 10, 
-#                           z = as.matrix(otuTab), 
-#                           atrisk_init = matrix(1, nrow = 36, ncol = 1024), 
-#                           beta_init = matrix(0, nrow = 10, ncol = 1024), 
-#                           ci_init = rep(0, 36), theta = 1, mu = 0, s2 = 1e-3, 
-#                           s2_MH = 1e-5, t_thres = 500, launch_iter = 30, 
-#                           r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 5)
-# totTime <- difftime(Sys.time(), startTime)
 
-
-
-
-plot(apply(modResult$ci_result, 1, activeClus), type = "l")
-
-
-#clus_assign <- data.frame(ID = str_extract(rownames(otuTab), "[^X]+"),
-#                          cluster = as.numeric(salso(modResult$ci_result, loss = "binder")))
-
-## This is the result when using 1e-3 for both s2.
-table(metData$sex_s, clus_assign$cluster)
+# set.seed(1, kind = "L'Ecuyer-CMRG")
+# registerDoParallel(5)
+# start_time_GLOBAL <- Sys.time()
+# s2Mat <- data.frame(expand.grid(c(1e-3, 1e-4, 1e-5), c(1e-3, 1e-4, 1e-5)))
+# 
+# result_split_10_r0g_4 <- foreach(t = 1:9) %dopar% {
+#   start_time <- Sys.time()
+#   mod <- mod_adaptive(iter = 3000, Kmax = 10, nbeta_split = 10, 
+#                       z = as.matrix(otuTab), 
+#                       atrisk_init = matrix(1, nrow = 36, ncol = 1024), 
+#                       beta_init = matrix(0, nrow = 10, ncol = 1024), 
+#                       ci_init = rep(0, 36), 
+#                       theta = 1, mu = 0, s2 = s2Mat[t, 1], 
+#                       s2_MH = s2Mat[t, 2], t_thres = 1500, launch_iter = 30, 
+#                       r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 3)
+#   comp_time <- difftime(Sys.time(), start_time, units = "secs")
+#   return(list(time = comp_time, mod = mod))
+# }
+# stopImplicitCluster()
+# difftime(Sys.time(), start_time_GLOBAL)
+# 
+# saveRDS(result_split_10_r0g_4, file = paste0(path, "Manuscript/Data/Application Data/hiv_dinh_result_split_10_r0g_4.rds"))
+# 
+# # set.seed(1)
+# # startTime <- Sys.time()
+# # modResult <- mod_adaptive(iter = 1000, Kmax = 10, nbeta_split = 10, 
+# #                           z = as.matrix(otuTab), 
+# #                           atrisk_init = matrix(1, nrow = 36, ncol = 1024), 
+# #                           beta_init = matrix(0, nrow = 10, ncol = 1024), 
+# #                           ci_init = rep(0, 36), theta = 1, mu = 0, s2 = 1e-3, 
+# #                           s2_MH = 1e-5, t_thres = 500, launch_iter = 30, 
+# #                           r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 5)
+# # totTime <- difftime(Sys.time(), startTime)
+# 
+# 
+# 
+# 
+# plot(apply(modResult$ci_result, 1, activeClus), type = "l")
+# 
+# 
+# #clus_assign <- data.frame(ID = str_extract(rownames(otuTab), "[^X]+"),
+# #                          cluster = as.numeric(salso(modResult$ci_result, loss = "binder")))
+# 
+# ## This is the result when using 1e-3 for both s2.
+# table(metData$sex_s, clus_assign$cluster)
 
 
 
