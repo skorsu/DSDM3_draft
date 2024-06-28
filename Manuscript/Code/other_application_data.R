@@ -13,6 +13,7 @@ library(cluster)
 library(ggplot2)
 library(ecodist)
 library(coda.base)
+library(mclustcomp)
 
 ### User-defined functions: ----------------------------------------------------
 uniqueClus <- function(x){
@@ -71,7 +72,7 @@ table(pam(dist(otuTab), 7)$clustering, metData$Alcohol_s)
 table(pam(dist(otuTab), 7)$clustering, metData$Education_s)
 table(pam(dist(otuTab), 7)$clustering, metData$sex_s)
 
-##### Cluster: PAM with Euclidean
+##### Cluster: PAM with Bray-Curtis
 table(pam(bcdist(otuTab), 7)$clustering, metData$DiseaseState)
 table(pam(bcdist(otuTab), 7)$clustering, metData$Alcohol_s)
 table(pam(bcdist(otuTab), 7)$clustering, metData$Education_s)
@@ -79,7 +80,25 @@ table(pam(bcdist(otuTab), 7)$clustering, metData$sex_s)
 
 ##### Import the result form our model
 ##### Note: Need to check convergence and try random starting points
-result <- readRDS(paste0(path, "Manuscript/Result/Application Data/hiv_dinh_result_split_10_theta_1e2.rds"))
+result <- readRDS(paste0(path, "Manuscript/Result/Application Data/hiv_dinh_result_split_10_theta_1_rn.rds"))
+# result <- readRDS(paste0(path, "Manuscript/Result/Application Data/hiv_dinh_result_split_10_theta_1e2.rds"))
+
+clusIndex <- sapply(1:6, function(x){set.seed(1); salso(result[[x]]$mod$ci_result[-(1:100), ], loss = "binder")})
+table(clusIndex[, 6], metData$DiseaseState)
+
+plot(apply(result[[1]]$mod$ci_result, 1, uniqueClus), type = "l")
+
+plot(result[[1]]$mod$beta_result[10, 834, ], type = "l")
+
+which.max(colSums(otuTab))
+
+set.seed(1)
+clusAgg <- lapply(1:6, function(x){as.data.frame(result[[x]]$mod$ci_result[seq(100, 1000, 1), ])}) %>%
+  bind_rows() %>%
+  as.matrix() %>%
+  salso(loss = "binder")
+table(clusAgg, metData$DiseaseState)
+
 plot(apply(result[[1]]$mod$ci_result, 1, uniqueClus), type = "l")
 
 set.seed(1)
@@ -193,8 +212,65 @@ difftime(Sys.time(), start_time_GLOBAL)
 # ## This is the result when using 1e-3 for both s2.
 # table(metData$sex_s, clus_assign$cluster)
 
+### Noguera-Julian 2016, HIV: --------------------------------------------------
+file.exists(paste0(path, "Manuscript/Data/Application Data/hiv_noguerajulian_results.tar"))
+untar(paste0(path, "Manuscript/Data/Application Data/hiv_noguerajulian_results.tar"))
 
+#### Metadata
+metData <- read.delim(paste0(path, "hiv_noguerajulian_results/hiv_noguerajulian.metadata.txt"))
+View(metData)
+dim(metData)
 
+#### OTU Table
+otuTab <- read.table(paste0(path, "hiv_noguerajulian_results/RDP/hiv_noguerajulian.otu_table.100.denovo.rdp_assigned"))
+otuTab <- t(otuTab)
+dim(otuTab)
+otuTab <- otuTab[, -which(colMeans(otuTab > 0) < 0.1)] ##### Filter OTU table
+dim(otuTab)
+
+##### Filter only the observations appear in both Metadata and OTU table
+sum(rownames(otuTab) %in% metData$X.SampleID)
+sum(metData$X.SampleID %in% rownames(otuTab))
+
+interSamp <- intersect(metData$X.SampleID, rownames(otuTab))
+otuTab <- otuTab[which(rownames(otuTab) %in% interSamp), ]
+metData <- metData[which(metData$X.SampleID %in% interSamp), ]
+
+dim(otuTab)
+dim(metData)
+
+sum(rownames(otuTab) %in% metData$X.SampleID)
+sum(metData$X.SampleID %in% rownames(otuTab))
+
+### Try: Random Starting Point (Theta = 1)
+### Note: Noguera-Julian 6/28
+set.seed(1)
+clusInit <- matrix(0, ncol = 5, nrow = 348)
+clusInit[, 2] <- sample(0:9, size = 348, replace = TRUE)
+clusInit[, 4] <- sample(0:19, size = 348, replace = TRUE)
+clusInit[, 5] <- 0:347
+
+KmaxVec <- c(10, 10, 30, 30, 348)
+
+set.seed(1, kind = "L'Ecuyer-CMRG")
+registerDoParallel(5)
+start_time_GLOBAL <- Sys.time()
+
+result_split_10_theta_1_rn <- foreach(t = 1:5) %dopar% {
+  start_time <- Sys.time()
+  mod <- mod_adaptive(iter = 5000, Kmax = KmaxVec[t], nbeta_split = 10,
+                      z = as.matrix(otuTab),
+                      atrisk_init = matrix(1, nrow = 348, ncol = 1241),
+                      beta_init = matrix(0, nrow = KmaxVec[t], ncol = 1241),
+                      ci_init = clusInit[, t],
+                      theta = 1, mu = 0, s2 = 1e-3,
+                      s2_MH = 1e-3, t_thres = 2500, launch_iter = 30,
+                      r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 5)
+  comp_time <- difftime(Sys.time(), start_time, units = "secs")
+  return(list(time = comp_time, mod = mod))
+}
+stopImplicitCluster()
+difftime(Sys.time(), start_time_GLOBAL)
 
 ### Papa 2012, IBD: ------------------------------------------------------------
 # # file.exists(paste0(path, "Manuscript/Data/Application Data/ibd_alm_results.tar"))
