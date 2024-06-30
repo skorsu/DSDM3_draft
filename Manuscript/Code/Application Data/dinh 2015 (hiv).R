@@ -185,7 +185,7 @@ ggplot(actClus, aes(x = Iteration, y = value, color = name)) +
 sapply(1:6, function(x){mean(result[[x]]$mod$sm_accept)})
 
 table(result[[1]]$mod$MH_accept[, 1])
-
+table(result[[1]]$mod$MH_accept[(1:2500), 1])
 table(result[[1]]$mod$MH_accept[-(1:2500), 1])
 
 334/(1919 + 334)
