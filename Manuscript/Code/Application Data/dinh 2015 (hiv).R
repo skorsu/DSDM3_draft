@@ -15,6 +15,7 @@ library(ecodist)
 library(coda.base)
 library(mclustcomp)
 library(vcd)
+library(gridExtra)
 
 ### User-defined functions: ----------------------------------------------------
 uniqueClus <- function(x){
@@ -52,8 +53,7 @@ otuTab <- otuTab[, -which(colMeans(otuTab > 0) < 0.1)]
 dim(otuTab)
 
 ### EDA: -----------------------------------------------------------------------
-View(metData)
-table(metData$Current_smoking_s)
+# View(metData)
 
 metNew <- metData %>%
   transmute(ID = Sample_Name_s,
@@ -67,6 +67,8 @@ metNew <- metData %>%
             IL6 = as.numeric(IL6_s), Kcal = as.numeric(Kcal_s), TNFalpha = as.numeric(TNFalpha_s))
 
 metNew$Education <- factor(metNew$Education, levels = c("College", "Up to High School", "No High School"))
+
+# View(metNew)
 
 metNew %>%
   group_by(Disease) %>%
@@ -115,8 +117,56 @@ metNew %>%
   geom_boxplot() +
   facet_wrap(. ~ name, scales = "free_y")
 
+### Taxa for visualization:-----------------------------------------------------
+colTaxa <- data.frame(Kingdom = str_replace(str_extract(colnames(otuTab), "k\\_\\_[:alpha:]+"), "k\\_\\_", ""),
+                      Phylum = str_replace(str_extract(colnames(otuTab), "p\\_\\_[:alpha:]+"), "p\\_\\_", ""),
+                      Class = str_replace(str_extract(colnames(otuTab), "c\\_\\_[:alpha:]+"), "c\\_\\_", ""),
+                      Order = str_replace(str_extract(colnames(otuTab), "o\\_\\_[:alpha:]+"), "o\\_\\_", ""),
+                      Family = str_replace(str_extract(colnames(otuTab), "f\\_\\_[:alpha:]+"), "f\\_\\_", ""),
+                      Genus = str_replace(str_extract(colnames(otuTab), "g\\_\\_[:alpha:]+"), "g\\_\\_", ""),
+                      Species = str_replace(str_extract(colnames(otuTab), "s\\_\\_[:alpha:]+"), "s\\_\\_", ""))
+
+colTaxa[which(is.na(colTaxa$Class)), "Class"] <- "Other Firmicutes"
+# table(colTaxa$Phylum)
+# table(colTaxa$Class)
+# table(colTaxa$Family)
+# table(colTaxa$Phylum, colTaxa$Family) %>% sum()
+
+ClassName <- names(table(colTaxa$Class))
+ClassOTU <- sapply(1:9, function(x){rowSums(otuTab[, which(colTaxa$Class == ClassName[x])])}) %>%
+  `colnames<-`(ClassName)
+  
+ClassOTU <- ClassOTU/rowSums(ClassOTU)
+# View(ClassOTU)
+
+### Visualization
+ClassOTUlonger <- ClassOTU %>%
+  as.data.frame() %>%
+  mutate(ID = rownames(ClassOTU)) %>%
+  pivot_longer(!ID, names_to = "Class")
+
+ClassRank <- c("Bacteroidia", "Bacilli", "Clostridia", "Erysipelotrichia", "Negativicutes", "Other Firmicutes",
+               "Fusobacteriia", "Betaproteobacteria", "Gammaproteobacteria")
+LabelRank <- c("Bacteroidetes - Bacteroidia", "Firmicutes - Bacilli", 
+               "Firmicutes - Clostridia", "Firmicutes - Erysipelotrichia", 
+               "Firmicutes - Negativicutes", "Firmicutes - Other Firmicutes",
+               "Fusobacteria - Fusobacteriia", "Proteobacteria - Betaproteobacteria", 
+               "Proteobacteria - Gammaproteobacteria")
+ColorPhyla <- c("#FF9999", "#99FF99", "#66FF66", "#33FF33", "#00FF00", "#00CC00",
+                "#81EFFF", "#CC99FF", "#9966FF")
+
+ClassOTUlonger$Class <- factor(ClassOTUlonger$Class, levels = ClassRank, labels = LabelRank)
+
+ggplot(ClassOTUlonger, aes(x = ID, y = value, fill = Class)) +
+  geom_bar(position = "stack", stat = "identity") +
+  scale_fill_manual(values = ColorPhyla) + 
+  scale_y_continuous(labels = scales::percent) +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 90), legend.position = "bottom") +
+  labs(y = "Relative Abundance")
+
 ### PAM: -----------------------------------------------------------------------
-#### CHoosing the number of clusters for each distance metric
+#### Choosing the number of clusters for each distance metric
 data.frame(k = 2:10,
            Euclidean = sapply(2:10, function(y){mean(cluster::silhouette(x = pam(dist(otuTab), y))[, 3])}),
            BrayCurtis = sapply(2:10, function(y){mean(cluster::silhouette(x = pam(bcdist(otuTab), y))[, 3])}),
@@ -129,6 +179,7 @@ data.frame(k = 2:10,
   labs(y = "Average Silhouette", x = "Number of clusters")
 
 ##### PAM - Cluster Assignment with the metadata
+set.seed(1)
 metPAM <- data.frame(ID = names(pam(bcdist(otuTab), 7)$clustering),
                      clusEu = pam(dist(otuTab), 7)$clustering, 
                      clusBC = pam(bcdist(otuTab), 7)$clustering,
@@ -136,30 +187,70 @@ metPAM <- data.frame(ID = names(pam(bcdist(otuTab), 7)$clustering),
   `rownames<-`(NULL) %>%
   inner_join(metNew)
 
-View(metPAM)
+transmute(metPAM, ID, Cluster = paste0("Cluster ", clusEu)) %>%
+  inner_join(ClassOTUlonger) %>%
+  ggplot(aes(x = ID, y = value, fill = Class)) +
+  geom_bar(position = "stack", stat = "identity") +
+  scale_fill_manual(values = ColorPhyla) + 
+  scale_y_continuous(labels = scales::percent) +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 90), legend.position = "bottom") +
+  labs(y = "Relative Abundance", title = "Relative Abundance - Cluster by PAM with Euclidean distance") +
+  facet_grid(. ~ Cluster, scales = "free_x")
 
+transmute(metPAM, ID, Cluster = paste0("Cluster ", clusBC)) %>%
+  inner_join(ClassOTUlonger) %>%
+  ggplot(aes(x = ID, y = value, fill = Class)) +
+  geom_bar(position = "stack", stat = "identity") +
+  scale_fill_manual(values = ColorPhyla) + 
+  scale_y_continuous(labels = scales::percent) +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 90), legend.position = "bottom") +
+  labs(y = "Relative Abundance", title = "Relative Abundance - Cluster by PAM with Bray-Curtis distance") +
+  facet_grid(. ~ Cluster, scales = "free_x")
+
+transmute(metPAM, ID, Cluster = paste0("Cluster ", clusAT)) %>%
+  inner_join(ClassOTUlonger) %>%
+  ggplot(aes(x = ID, y = value, fill = Class)) +
+  geom_bar(position = "stack", stat = "identity") +
+  scale_fill_manual(values = ColorPhyla) + 
+  scale_y_continuous(labels = scales::percent) +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 90), legend.position = "bottom") +
+  labs(y = "Relative Abundance", title = "Relative Abundance - Cluster by PAM with Aitchison distance") +
+  facet_grid(. ~ Cluster, scales = "free_x")
+
+##### Metadata - Euclidean -----------------------------------------------------
+###### Conclusion - Only Cluster 2 and 3 can be interpret as an HIV groups. Provide 4 singletons
 structable(Disease ~ clusEu, metPAM)
 structable(Gender ~ clusEu, metPAM)
-structable( ~ clusEu, metPAM)
+structable(Education ~ clusEu, metPAM)
+structable(Drinker ~ clusEu, metPAM)
+structable(Smoking ~ clusEu, metPAM)
 
+#### Cluster 2 - Male, Education HS or higher, Smoking
+#### Cluster 3 - Male, Education HS or higher, Drinker
 
+##### Metadata - Bray-Curtis ---------------------------------------------------
+###### Conclusion - Cluster 4 and 5 can be interpret as an HIV groups. Provide 2 singletons
+structable(Disease ~ clusBC, metPAM)
+structable(Gender ~ clusBC, metPAM)
+structable(Education ~ clusBC, metPAM)
+structable(Drinker ~ clusBC, metPAM)
+structable(Smoking ~ clusBC, metPAM)
 
-table(metPAM$clusEu, metPAM$Disease)
-
-table(pam(dist(otuTab), 7)$clustering, metData$DiseaseState)
-table(pam(dist(otuTab), 7)$clustering, metData$Alcohol_s)
-table(pam(dist(otuTab), 7)$clustering, metData$Education_s)
-table(pam(dist(otuTab), 7)$clustering, metData$sex_s)
-
-##### Cluster: PAM with Bray-Curtis
-table(pam(bcdist(otuTab), 7)$clustering, metData$DiseaseState)
-table(pam(bcdist(otuTab), 7)$clustering, metData$Alcohol_s)
-table(pam(bcdist(otuTab), 7)$clustering, metData$Education_s)
-table(pam(bcdist(otuTab), 7)$clustering, metData$sex_s)
+#### Cluster 4 - Education HS or higher
+#### Cluster 5 - Male, Education HS or higher, Drinker
 
 ### ZIDM-ZIDM: -----------------------------------------------------------------
 #### Import the result form our model
-result <- readRDS(paste0(path, "Manuscript/Result/Application Data/Dinh/hiv_dinh_result_split_10_theta_1_rn.rds"))
+result <- readRDS(paste0(path, "Manuscript/Result/Application Data/Dinh/hiv_dinh_result_split_10_theta_1_rn_ADAP500.rds"))
+
+#### Run for 5000 iterations, thinning every 5th iterations
+#### AMH - Apply the adpative proposal after the 500th iteration
+
+#### Computational Time
+sapply(1:6, function(x){as.numeric(result[[x]]$time)})/3600
 
 #### Convergence Checking: -----------------------------------------------------
 ##### Active Cluster in MCMC iterations
@@ -181,161 +272,111 @@ ggplot(actClus, aes(x = Iteration, y = value, color = name)) +
        color = "Initialization") +
   theme(legend.position = "bottom")
 
-##### Acceptance Rate
+##### Acceptance Rate - Split-Merge Step
 sapply(1:6, function(x){mean(result[[x]]$mod$sm_accept)})
 
-table(result[[1]]$mod$MH_accept[, 1])
-table(result[[1]]$mod$MH_accept[(1:2500), 1])
-table(result[[1]]$mod$MH_accept[-(1:2500), 1])
-
-334/(1919 + 334)
-320/(880 + 320)
-
-sapply(1:6, function(x){table(result[[x]]$mod$sm_status, result[[x]]$mod$sm_accept)})
-result[[6]]$time/(3600)
-
-table(result[[1]]$mod$sm_status, result[[1]]$mod$sm_accept)
-
-salso(result[[1]]$mod$ci_result[-(1:100), ], loss = "binder")
-
-clusIndex <- sapply(1:6, function(x){set.seed(1); salso(result[[x]]$mod$ci_result[-(1:100), ], loss = "binder")})
-
-registerDoParallel(5)
-clusAssign <- foreach(t = 1:10, .combine = "cbind") %dopar% {
- as.numeric(salso(result[[1]]$mod$ci_result[-(1:100), ], loss = "binder"))
-}
-stopImplicitCluster()
-
-as.matrix(expand.grid(1:10, 1:10)) %>%
-  apply(1, function(x){mclustcomp(clusAssign[, x[1]], clusAssign[, x[2]])[1, 2]
-}) %>%
-  mean()
+##### Acceptance Rate - Cluster Concentration
+Kmax <- c(10, 10, 20, 20, 36, 36)
+# lapply(1:6, function(y){sapply(1:Kmax[y], function(x){c(sum(result[[y]]$mod$MH_accept[, x] != -1),
+#                                                    sum(result[[y]]$mod$MH_accept[, x] == 1)/sum(result[[y]]$mod$MH_accept[, x] != -1),
+#                                                    sum(result[[y]]$mod$MH_accept[(1:500), x] == 1)/sum(result[[y]]$mod$MH_accept[(1:500), x] != -1),
+#                                                    sum(result[[y]]$mod$MH_accept[-(1:500), x] == 1)/sum(result[[y]]$mod$MH_accept[-(1:500), x] != -1))}) %>%
+#     t()})
 
 
-table(clusIndex[, 6], metData$DiseaseState)
-
-plot(apply(result[[1]]$mod$ci_result, 1, uniqueClus), type = "l")
-
-plot(result[[1]]$mod$beta_result[10, 834, ], type = "l")
-
-which.max(colSums(otuTab))
-
+#### Cluster Assignment: -------------------------------------------------------
 set.seed(1)
-clusAgg <- lapply(1:6, function(x){as.data.frame(result[[x]]$mod$ci_result[seq(100, 1000, 1), ])}) %>%
+clusZZ <- lapply(1:6, function(x){as.data.frame(result[[x]]$mod$ci_result[seq(250, 1000, 10), ])}) %>%
   bind_rows() %>%
   as.matrix() %>%
   salso(loss = "binder")
-table(clusAgg, metData$DiseaseState)
 
-plot(apply(result[[1]]$mod$ci_result, 1, uniqueClus), type = "l")
+##### Estimated Relative Abundance
+estProb <- lapply(1:6, function(y){
+  
+  sapply(1:36, function(x){
+    ci <- result[[y]]$mod$ci_result[seq(250, 1000, 10), x]
+    dumProb <- matrix(NA, nrow = 76, ncol = 1024)
+    for(i in 1:76){
+      estClusConc <- exp(result[[y]]$mod$beta_result[ci[i] + 1, , 1250 + ((i - 1) * 50)])
+      atrisk <- result[[y]]$mod$atrisk_result[x, , 250 + ((i - 1) * 10)]
+      dumProb[i, ] <- (estClusConc * atrisk)/sum(estClusConc * atrisk)
+    }
+    
+    colSums(dumProb)/sum(dumProb)
+    
+  }) %>% t() %>% as.data.frame()
+  
+  
+})
 
-set.seed(1)
-salso(result[[1]]$mod$ci_result[-(1:200), ], loss = "binder")
+estProb <- (estProb[[1]] + estProb[[2]] + estProb[[3]] + estProb[[4]] + estProb[[5]] + estProb[[6]])/sum(estProb[[1]] + estProb[[2]] + estProb[[3]] + estProb[[4]] + estProb[[5]] + estProb[[6]])
+colnames(estProb) <- colnames(otuTab)
 
-clusIndex <- as.numeric(salso(result[[1]]$mod$ci_result[-(1:200), ], loss = "binder"))
-table(clusIndex, metData$DiseaseState)
-table(clusIndex, metData$Alcohol_s)
-table(clusIndex, metData$sex_s)
+ClassEstOTU <- sapply(1:9, function(x){rowSums(estProb[, which(colTaxa$Class == ClassName[x])])}) %>%
+  `colnames<-`(ClassName)
 
-table(clusIndex, paste0(metData$sex_s, ": ", metData$is_gay_s))
+ClassEstOTU <- ClassEstOTU/rowSums(ClassEstOTU)
 
-data.frame(clus = paste0("Cluster ", clusIndex), val = metData$BMI_s) %>%
-  ggplot(aes(x = clus, y = val, group = clus)) +
-  geom_boxplot() +
-  labs(x = "Cluster", y = "BMI")
+ClassEstlonger <- ClassEstOTU %>%
+  as.data.frame() %>%
+  mutate(ID = rownames(ClassOTU)) %>%
+  pivot_longer(!ID, names_to = "Class")
 
-data.frame(clus = paste0("Cluster ", clusIndex), val = metData$age_s) %>%
-  ggplot(aes(x = clus, y = val, group = clus)) +
-  geom_boxplot() +
-  labs(x = "Cluster", y = "Age")
+ClassEstlonger$Class <- factor(ClassEstlonger$Class, levels = ClassRank, labels = LabelRank)
 
-data.frame(clus = paste0("Cluster ", clusIndex), val = metData$Fat_s) %>%
-  ggplot(aes(x = clus, y = val, group = clus)) +
-  geom_boxplot() +
-  labs(x = "Cluster", y = "Fat")
+data.frame(ID = rownames(otuTab), clusterZZ = paste0("Cluster ", clusZZ)) %>%
+  inner_join(ClassOTUlonger) %>%
+  ggplot(aes(x = ID, y = value, fill = Class)) +
+  geom_bar(position = "stack", stat = "identity") +
+  scale_fill_manual(values = ColorPhyla) + 
+  scale_y_continuous(labels = scales::percent) +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 90), legend.position = "bottom") +
+  labs(y = "Relative Abundance", title = "Relative Abundance - Cluster by PAM with ZIDM-ZIDM") +
+  facet_grid(. ~ clusterZZ, scales = "free_x")
 
+data.frame(ID = rownames(otuTab), clusterZZ = paste0("Cluster ", clusZZ)) %>%
+  inner_join(ClassEstlonger) %>%
+  ggplot(aes(x = ID, y = value, fill = Class)) +
+  geom_bar(position = "stack", stat = "identity") +
+  scale_fill_manual(values = ColorPhyla) + 
+  scale_y_continuous(labels = scales::percent) +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 90), legend.position = "bottom") +
+  labs(y = "Estimated Relative Abundance", title = "Estimated Relative Abundance - Cluster by PAM with ZIDM-ZIDM") +
+  facet_grid(. ~ clusterZZ, scales = "free_x")
 
-data.frame(clusIndex, val = metData$Fat_s) %>%
-  group_by(clusIndex) %>%
-  summarise(mean(val), sd(val))
+##### ZIDM-ZIDM: Profile Analysis ----------------------------------------------
+metZZ <- data.frame(ID = rownames(otuTab), clusZZ) %>%
+  inner_join(metNew)
 
-table(pam(dist(otuTab), 7)$clustering, metData$Alcohol_s)
-table(clusIndex, metData$Education_s)
+###### Conclusion - 9 Clusters in total (No singleton)
+###### Cluster 1, 8 - non-HIV while Cluster 5, 6, 9 are HIV.
+structable(Disease ~ clusZZ, metZZ)
+structable(Gender ~ clusZZ, metZZ)
+structable(Education ~ clusZZ, metZZ)
+structable(Drinker ~ clusZZ, metZZ)
+structable(Smoking ~ clusZZ, metZZ)
 
-### Try: Random Starting Point (Theta = 1)
-### Note: Dihn 6/27
-set.seed(1)
-clusInit <- matrix(0, ncol = 6, nrow = 36)
-clusInit[, 3] <- sample(0:2, size = 36, replace = TRUE)
-clusInit[, 4] <- sample(0:2, size = 36, replace = TRUE)
-clusInit[, 5] <- 0:35
-clusInit[, 6] <- 0:35
-
-KmaxVec <- c(10, 10, 20, 20, 36, 36)
-
-set.seed(1, kind = "L'Ecuyer-CMRG")
-registerDoParallel(6)
-start_time_GLOBAL <- Sys.time()
-
-result_split_10_theta_1_rn <- foreach(t = 1:6) %dopar% {
-  start_time <- Sys.time()
-  mod <- mod_adaptive(iter = 5000, Kmax = KmaxVec[t], nbeta_split = 10,
-                      z = as.matrix(otuTab),
-                      atrisk_init = matrix(1, nrow = 36, ncol = 1024),
-                      beta_init = matrix(0, nrow = KmaxVec[t], ncol = 1024),
-                      ci_init = clusInit[, t],
-                      theta = 1, mu = 0, s2 = 1e-3,
-                      s2_MH = 1e-3, t_thres = 2500, launch_iter = 30,
-                      r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 5)
-  comp_time <- difftime(Sys.time(), start_time, units = "secs")
-  return(list(time = comp_time, mod = mod))
-}
-stopImplicitCluster()
-difftime(Sys.time(), start_time_GLOBAL)
+##### Cluster 1 - Heterosexual, Not Smoking
+##### Cluster 5 - Male, Education HS or higher, smoking
+##### Cluster 6 - Male, College, Drinker
+##### Cluster 8 - Education HS or higher, smoking
+##### Cluster 9 - Heterosexual, Drinker, smoking
 
 
-# set.seed(1, kind = "L'Ecuyer-CMRG")
-# registerDoParallel(5)
-# start_time_GLOBAL <- Sys.time()
-# s2Mat <- data.frame(expand.grid(c(1e-3, 1e-4, 1e-5), c(1e-3, 1e-4, 1e-5)))
-# 
-# result_split_10_r0g_4 <- foreach(t = 1:9) %dopar% {
-#   start_time <- Sys.time()
-#   mod <- mod_adaptive(iter = 3000, Kmax = 10, nbeta_split = 10, 
-#                       z = as.matrix(otuTab), 
-#                       atrisk_init = matrix(1, nrow = 36, ncol = 1024), 
-#                       beta_init = matrix(0, nrow = 10, ncol = 1024), 
-#                       ci_init = rep(0, 36), 
-#                       theta = 1, mu = 0, s2 = s2Mat[t, 1], 
-#                       s2_MH = s2Mat[t, 2], t_thres = 1500, launch_iter = 30, 
-#                       r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 3)
-#   comp_time <- difftime(Sys.time(), start_time, units = "secs")
-#   return(list(time = comp_time, mod = mod))
-# }
-# stopImplicitCluster()
-# difftime(Sys.time(), start_time_GLOBAL)
-# 
-# saveRDS(result_split_10_r0g_4, file = paste0(path, "Manuscript/Data/Application Data/hiv_dinh_result_split_10_r0g_4.rds"))
-# 
-# # set.seed(1)
-# # startTime <- Sys.time()
-# # modResult <- mod_adaptive(iter = 1000, Kmax = 10, nbeta_split = 10, 
-# #                           z = as.matrix(otuTab), 
-# #                           atrisk_init = matrix(1, nrow = 36, ncol = 1024), 
-# #                           beta_init = matrix(0, nrow = 10, ncol = 1024), 
-# #                           ci_init = rep(0, 36), theta = 1, mu = 0, s2 = 1e-3, 
-# #                           s2_MH = 1e-5, t_thres = 500, launch_iter = 30, 
-# #                           r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 5)
-# # totTime <- difftime(Sys.time(), startTime)
-# 
-# 
-# 
-# 
-# plot(apply(modResult$ci_result, 1, activeClus), type = "l")
-# 
-# 
-# #clus_assign <- data.frame(ID = str_extract(rownames(otuTab), "[^X]+"),
-# #                          cluster = as.numeric(salso(modResult$ci_result, loss = "binder")))
-# 
-# ## This is the result when using 1e-3 for both s2.
-# table(metData$sex_s, clus_assign$cluster)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
