@@ -135,7 +135,7 @@ table(pam(dist(otuTab), 7)$clustering, metData$Alcohol_s)
 table(clusIndex, metData$Education_s)
 
 ### Try: Random Starting Point (Theta = 1)
-### Note: Dihn 6/27
+### Note: Dinh 6/27
 set.seed(1)
 clusInit <- matrix(0, ncol = 6, nrow = 36)
 clusInit[, 3] <- sample(0:2, size = 36, replace = TRUE)
@@ -145,19 +145,31 @@ clusInit[, 6] <- 0:35
 
 KmaxVec <- c(10, 10, 20, 20, 36, 36)
 
+betaList <- vector("list", 6)
+betaList[[1]] <-  rbind(as.numeric(colSums(otuTab))/sum(otuTab),
+                        matrix(0, nrow = 9, ncol = 1024))
+betaList[[2]] <-  rbind(as.numeric(colSums(otuTab))/sum(otuTab),
+                        matrix(0, nrow = 9, ncol = 1024))
+betaList[[3]] <-  rbind(sapply(0:2, function(x){colSums(otuTab[which(clusInit[, 3] == x), ])/sum(otuTab[which(clusInit[, 3] == x), ])}) %>% t(),
+                        matrix(0, nrow = 17, ncol = 1024))
+betaList[[4]] <-  rbind(sapply(0:2, function(x){colSums(otuTab[which(clusInit[, 4] == x), ])/sum(otuTab[which(clusInit[, 4] == x), ])}) %>% t(),
+                        matrix(0, nrow = 17, ncol = 1024))
+betaList[[5]] <-  as.matrix(otuTab/rowSums(otuTab))
+betaList[[6]] <-  as.matrix(otuTab/rowSums(otuTab))
+
 set.seed(1, kind = "L'Ecuyer-CMRG")
 registerDoParallel(6)
 start_time_GLOBAL <- Sys.time()
 
-result_split_10_theta_1_rn <- foreach(t = 1:6) %dopar% {
+result_split_10_theta_1_rn_ADAP500 <- foreach(t = 1:6) %dopar% {
   start_time <- Sys.time()
   mod <- mod_adaptive(iter = 5000, Kmax = KmaxVec[t], nbeta_split = 10,
                       z = as.matrix(otuTab),
                       atrisk_init = matrix(1, nrow = 36, ncol = 1024),
-                      beta_init = matrix(0, nrow = KmaxVec[t], ncol = 1024),
+                      beta_init = betaList[[t]],
                       ci_init = clusInit[, t],
                       theta = 1, mu = 0, s2 = 1e-3,
-                      s2_MH = 1e-3, t_thres = 2500, launch_iter = 30,
+                      s2_MH = 1e-3, t_thres = 500, launch_iter = 30,
                       r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 5)
   comp_time <- difftime(Sys.time(), start_time, units = "secs")
   return(list(time = comp_time, mod = mod))
@@ -165,6 +177,7 @@ result_split_10_theta_1_rn <- foreach(t = 1:6) %dopar% {
 stopImplicitCluster()
 difftime(Sys.time(), start_time_GLOBAL)
 
+saveRDS(result_split_10_theta_1_rn_ADAP500, file = paste0(path, "Manuscript/Data/Application Data/hiv_dinh_result_split_10_theta_1_rn_ADAP500.rds"))
 
 # set.seed(1, kind = "L'Ecuyer-CMRG")
 # registerDoParallel(5)
@@ -256,16 +269,16 @@ set.seed(1, kind = "L'Ecuyer-CMRG")
 registerDoParallel(5)
 start_time_GLOBAL <- Sys.time()
 
-result_split_10_theta_1_rn <- foreach(t = 1:5) %dopar% {
+result_split_10_theta_1e3_rn <- foreach(t = 1:5) %dopar% {
   start_time <- Sys.time()
-  mod <- mod_adaptive(iter = 5000, Kmax = KmaxVec[t], nbeta_split = 10,
+  mod <- mod_adaptive(iter = 3000, Kmax = KmaxVec[t], nbeta_split = 10,
                       z = as.matrix(otuTab),
                       atrisk_init = matrix(1, nrow = 348, ncol = 1241),
                       beta_init = matrix(0, nrow = KmaxVec[t], ncol = 1241),
                       ci_init = clusInit[, t],
-                      theta = 1, mu = 0, s2 = 1e-3,
-                      s2_MH = 1e-3, t_thres = 2500, launch_iter = 30,
-                      r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 5)
+                      theta = 1e-3, mu = 0, s2 = 1e-3,
+                      s2_MH = 1e-3, t_thres = 1500, launch_iter = 30,
+                      r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 3)
   comp_time <- difftime(Sys.time(), start_time, units = "secs")
   return(list(time = comp_time, mod = mod))
 }
