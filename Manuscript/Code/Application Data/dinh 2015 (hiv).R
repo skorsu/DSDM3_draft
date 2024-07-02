@@ -283,6 +283,12 @@ Kmax <- c(10, 10, 20, 20, 36, 36)
 #                                                    sum(result[[y]]$mod$MH_accept[-(1:500), x] == 1)/sum(result[[y]]$mod$MH_accept[-(1:500), x] != -1))}) %>%
 #     t()})
 
+#### The average acceptance rate for the cluster concentration for every chain
+lapply(1:6, function(y){sapply(1:Kmax[y], function(x){sum(result[[y]]$mod$MH_accept[, x] == 1)/sum(result[[y]]$mod$MH_accept[, x] != -1)})}) %>%
+  lapply(mean)
+
+plot(result[[1]]$mod$beta_result[1, 1, ], type = "l")
+
 
 #### Cluster Assignment: -------------------------------------------------------
 set.seed(1)
@@ -359,11 +365,11 @@ structable(Education ~ clusZZ, metZZ)
 structable(Drinker ~ clusZZ, metZZ)
 structable(Smoking ~ clusZZ, metZZ)
 
-##### Cluster 1 - Heterosexual, Not Smoking
+##### Cluster 1 - Not Smoking
 ##### Cluster 5 - Male, Education HS or higher, smoking
 ##### Cluster 6 - Male, College, Drinker
 ##### Cluster 8 - Education HS or higher, smoking
-##### Cluster 9 - Heterosexual, Drinker, smoking
+##### Cluster 9 - Drinker, smoking
 
 
 
