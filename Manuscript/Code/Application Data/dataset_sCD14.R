@@ -20,56 +20,32 @@ path <- "/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/Manuscript/"
 if(! file.exists(path)){
   path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/Manuscript/"
 }
-resultpath <- paste0(path, "Result/selbal_sCD14/")
+resultpath <- paste0(path, "Result/selbal_crohn/")
 # file.exists(resultpath)
 
 # Crohn dataset
-sCD14Data <- selbal::sCD14
-status_sCD14 <- sCD14Data[, 61]
-otu_sCD14 <- sCD14Data[, -61]
-
-# otu_sCD14[, -which(colMeans(otu_sCD14 > 0) < 0.1)]
+CrohnData <- selbal::Crohn
+statusCrohn <- CrohnData[, 49]
+otuCrohn <- CrohnData[, -49]
 
 # Demographic
-# boxplot(status_sCD14)
-# dim(otu_sCD14)
-
-# Run the model
-# start_time <- Sys.time()
-# mod <- mod_adaptive(iter = 500, Kmax = 10, nbeta_split = 5, 
-#                     z = as.matrix(otu_sCD14), atrisk_init = matrix(1, nrow = 151, ncol = 60), 
-#                     beta_init = matrix(0, nrow = 10, ncol = 60), 
-#                     ci_init = rep(0, 151), 
-#                     theta = 1, mu = 0, s2 = 1, s2_MH = 1e-3, 
-#                     t_thres = 50, launch_iter = 30, 
-#                     r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 1)
-# comp_time <- difftime(Sys.time(), start_time, units = "secs")
-# apply(mod$ci_result, 1, uniqueClus) %>% plot(type = "l")
-# 
-# clusSALSO <- salso(mod$ci_result) %>% as.numeric()
-# data.frame(cluster = clusSALSO, sCD14 = status_sCD14) %>%
-#   group_by(cluster) %>%
-#   summarize(mean(sCD14), sd(sCD14), median(sCD14))
-# 
-# data.frame(cluster = clusSALSO, sCD14 = status_sCD14) %>%
-#   ggplot(aes(x = cluster, y = sCD14, group = cluster)) +
-#   geom_boxplot()
-
+## data.frame(x = status_sCD14) %>%
+  
 ### Default set of Hyperparameters
 set.seed(1, kind = "L'Ecuyer-CMRG")
 registerDoParallel(6)
 globalTime <- Sys.time()
 foreach(t = 1:6) %dopar% {
   start_time <- Sys.time()
-  mod <- mod_adaptive(iter = 25000, Kmax = 10, nbeta_split = 5, 
-                      z = as.matrix(otu_sCD14), atrisk_init = matrix(1, nrow = 151, ncol = 60), 
-                      beta_init = matrix(0, nrow = 10, ncol = 60), 
-                      ci_init = rep(0, 151), 
-                      theta = 1, mu = 0, s2 = 1, s2_MH = 1e-3, 
-                      t_thres = 2500, launch_iter = 30, 
+  mod <- mod_adaptive(iter = 25000, Kmax = 10, nbeta_split = 5,
+                      z = as.matrix(otuCrohn), atrisk_init = matrix(1, nrow = 975, ncol = 48),
+                      beta_init = matrix(0, nrow = 10, ncol = 48),
+                      ci_init = rep(0, 975),
+                      theta = 1, mu = 0, s2 = 1, s2_MH = 1e-3,
+                      t_thres = 2500, launch_iter = 30,
                       r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 1)
   comp_time <- difftime(Sys.time(), start_time, units = "secs")
-  saveRDS(list(time = comp_time, mod = mod), file = paste0(resultpath, "result_selbal_sCD14_chain_", t, "_init_oneClus_defaultHyper.rds"))
+  saveRDS(list(time = comp_time, mod = mod), file = paste0(resultpath, "result_selbal_crohn_chain_", t, "_init_oneClus_defaultHyper.rds"))
 }
 stopImplicitCluster()
 difftime(Sys.time(), globalTime)
@@ -80,15 +56,15 @@ registerDoParallel(6)
 globalTime <- Sys.time()
 foreach(t = 1:6) %dopar% {
   start_time <- Sys.time()
-  mod <- mod_adaptive(iter = 25000, Kmax = 10, nbeta_split = 5, 
-                      z = as.matrix(otu_sCD14), atrisk_init = matrix(1, nrow = 151, ncol = 60), 
-                      beta_init = matrix(0, nrow = 10, ncol = 60), 
-                      ci_init = rep(0, 151), 
-                      theta = 1, mu = 0, s2 = 1, s2_MH = 1e-5, 
-                      t_thres = 2500, launch_iter = 30, 
+  mod <- mod_adaptive(iter = 25000, Kmax = 10, nbeta_split = 5,
+                      z = as.matrix(otuCrohn), atrisk_init = matrix(1, nrow = 975, ncol = 48),
+                      beta_init = matrix(0, nrow = 10, ncol = 48),
+                      ci_init = rep(0, 975),
+                      theta = 1, mu = 0, s2 = 1, s2_MH = 1e-5,
+                      t_thres = 2500, launch_iter = 30,
                       r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 1)
   comp_time <- difftime(Sys.time(), start_time, units = "secs")
-  saveRDS(list(time = comp_time, mod = mod), file = paste0(resultpath, "result_selbal_sCD14_chain_", t, "_init_oneClus_s2MH_1en5.rds"))
+  saveRDS(list(time = comp_time, mod = mod), file = paste0(resultpath, "result_selbal_crohn_chain_", t, "_init_oneClus_s2MH_1en5.rds"))
 }
 stopImplicitCluster()
 difftime(Sys.time(), globalTime)
