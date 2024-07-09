@@ -20,7 +20,7 @@ path <- "/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/Manuscript/"
 if(! file.exists(path)){
   path <- "/Users/kevinkvp/Desktop/Github Repo/ClusterZI/Manuscript/"
 }
-resultpath <- paste0(path, "Result/selbal_HIV/")
+resultpath <- paste0(path, "Result/selbal_sCD14/")
 # file.exists(resultpath)
 
 # Crohn dataset
