@@ -60,7 +60,7 @@ foreach(t = 1:6) %dopar% {
 stopImplicitCluster()
 difftime(Sys.time(), globalTime)
 
-### Different starting point: 1e-3
+### Different starting point: 1e-3 - PART 1
 set.seed(1)
 ciInit <- matrix(NA, nrow = 155, ncol = 6)
 ciInit[, 1] <- sample(0:4, 155, replace = TRUE)
@@ -105,29 +105,49 @@ foreach(t = 1:6) %dopar% {
 stopImplicitCluster()
 difftime(Sys.time(), globalTime)
 
-# ### Lower the s2_MH to 1e-5
-# set.seed(1, kind = "L'Ecuyer-CMRG")
-# registerDoParallel(6)
-# globalTime <- Sys.time()
-# foreach(t = 1:6) %dopar% {
-#   start_time <- Sys.time()
-#   mod <- mod_adaptive(iter = 25000, Kmax = 10, nbeta_split = 5, 
-#                       z = as.matrix(otuHIV), atrisk_init = matrix(1, nrow = 155, ncol = 60), 
-#                       beta_init = matrix(0, nrow = 10, ncol = 60), 
-#                       ci_init = rep(0, 155), 
-#                       theta = 1, mu = 0, s2 = 1, s2_MH = 1e-5, 
-#                       t_thres = 2500, launch_iter = 30, 
-#                       r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 1)
-#   comp_time <- difftime(Sys.time(), start_time, units = "secs")
-#   saveRDS(list(time = comp_time, mod = mod), file = paste0(resultpath, "result_selbal_HIV_chain_", t, "_init_oneClus_s2MH_1en5.rds"))
-# }
-# stopImplicitCluster()
-# difftime(Sys.time(), globalTime)
+### Different starting point: 1e-3 - PART 2
+set.seed(1)
+ciInit <- matrix(NA, nrow = 155, ncol = 3)
+ciInit[, 1] <- sample(0:2, 155, replace = TRUE)
+ciInit[, 2] <- sample(0:2, 155, replace = TRUE)
+ciInit[, 3] <- sample(0:2, 155, replace = TRUE)
+
+xiInit <- lapply(1:3, function(y){sapply(0:max(ciInit[, y]), function(x){
+  colSums(otuHIV[which(ciInit[, y] == x), ])/sum(otuHIV[which(ciInit[, y] == x), ])
+}) %>% t()
+})
+
+xiInit[[1]] <- rbind(xiInit[[1]], matrix(0, nrow = 12, ncol = 60))
+xiInit[[2]] <- rbind(xiInit[[2]], matrix(0, nrow = 12, ncol = 60))
+xiInit[[3]] <- rbind(xiInit[[3]], matrix(0, nrow = 12, ncol = 60))
+
+resultName <- paste0("result_selbal_HIV_chain_", 1:3, "_init_3clus_Kmax_15_defaultHyper.rds")
+
+set.seed(1, kind = "L'Ecuyer-CMRG")
+registerDoParallel(3)
+globalTime <- Sys.time()
+foreach(t = 1:3) %dopar% {
+  start_time <- Sys.time()
+  mod <- mod_adaptive(iter = 25000, Kmax = 15, nbeta_split = 5,
+                      z = as.matrix(otuHIV), atrisk_init = matrix(1, nrow = 155, ncol = 60),
+                      beta_init = as.matrix(xiInit[[t]]),
+                      ci_init = ciInit[, t],
+                      theta = 1, mu = 0, s2 = 1, s2_MH = 1e-3,
+                      t_thres = 2500, launch_iter = 30,
+                      r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 1)
+  comp_time <- difftime(Sys.time(), start_time, units = "secs")
+  saveRDS(list(time = comp_time, mod = mod), file = paste0(resultpath, resultName[t]))
+}
+stopImplicitCluster()
+difftime(Sys.time(), globalTime)
 
 ### Post Analysis: -------------------------------------------------------------
 #### Read the result
+# resultFilename <- c(paste0(resultpath, "result_selbal_HIV_chain_", 1:6, "_init_oneClus_defaultHyper.rds"),
+#                     paste0(resultpath, "result_selbal_HIV_chain_", 1:6, "_init_oneClus_s2MH_1en5.rds"))
+
 resultFilename <- c(paste0(resultpath, "result_selbal_HIV_chain_", 1:6, "_init_oneClus_defaultHyper.rds"),
-                    paste0(resultpath, "result_selbal_HIV_chain_", 1:6, "_init_oneClus_s2MH_1en5.rds"))
+                    paste0(resultpath, resultName))
 
 ### Computational time
 registerDoParallel(6)
@@ -218,20 +238,21 @@ lapply(1:12, function(x){data.frame(xiThird[[x]], chain = paste0("Chain ", x))})
   guides(color = guide_legend(ncol = 6))
 
 ### Check the acceptance rate
+KmaxVec <- c(10, 10, 10, 10, 10, 10, 20, 20, 20, 50, 50, 50)
 registerDoParallel(6)
 xiAccept <- foreach(t = 1:12) %dopar% {
   result <- readRDS(resultFilename[t])
-  sapply(1:10, function(x){sum(result$mod$MH_accept[, x] == 1)/sum(result$mod$MH_accept[, x] != -1)})
+  sapply(1:KmaxVec[t], function(x){sum(result$mod$MH_accept[, x] == 1)/sum(result$mod$MH_accept[, x] != -1)})
 }
 stopImplicitCluster()
 
 xiAcceptLong <- do.call(rbind, xiAccept) %>%
   as.data.frame() %>%
-  `colnames<-`(paste0("Component ", 1:10)) %>%
+  `colnames<-`(paste0("Component ", 1:50)) %>%
   mutate(Chain = paste0("Chain ", 1:12)) %>%
   pivot_longer(!Chain)
 
-xiAcceptLong$name <- factor(xiAcceptLong$name, levels = paste0("Component ", 10:1))
+xiAcceptLong$name <- factor(xiAcceptLong$name, levels = paste0("Component ", 50:1))
 xiAcceptLong$Chain <- factor(xiAcceptLong$Chain, levels = paste0("Chain ", 1:12))
 
 xiAcceptLong %>%
@@ -245,6 +266,7 @@ xiAcceptLong %>%
   theme_bw()
 
 ### Cluster Assignment - Individual
+set.seed(1, kind = "L'Ecuyer-CMRG")
 registerDoParallel(6)
 clusSALSO <- foreach(t = 1:12, .combine = cbind) %dopar% {
   result <- readRDS(resultFilename[t])
@@ -259,7 +281,7 @@ salsoDemo <- lapply(1:12, function(x){data.frame(table(clusSALSO[, x], statusHIV
            Cluster = paste0("Cluster ", Var1))}) %>%
   bind_rows() 
 
-salsoDemo$Cluster <- factor(salsoDemo$Cluster, levels = paste0("Cluster ", 1:5))
+salsoDemo$Cluster <- factor(salsoDemo$Cluster, levels = paste0("Cluster ", 1:max(clusSALSO)))
 salsoDemo$Chain <- factor(salsoDemo$Chain, levels = paste0("Chain ", 1:12))
 
 salsoDemo %>%
@@ -359,7 +381,7 @@ MCMCCombine <- foreach(t = 1:12, .combine = rbind) %dopar% {
 stopImplicitCluster()
 
 set.seed(1)
-clusComb <- salso(MCMCCombine)
+clusComb <- as.numeric(salso(MCMCCombine))
 
 #### Demographic - Combined Chain
 salsoCombDemo <- data.frame(table(clusComb, statusHIV, sexHIV)) %>%
