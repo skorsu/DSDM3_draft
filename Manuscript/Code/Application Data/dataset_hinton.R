@@ -30,6 +30,62 @@ sexHIV <- factor(datHIV[, 61], labels = c("non-MSM", "MSM"))
 statusHIV <- factor(datHIV[, 62], labels = c("Healthy", "HIV-patient"))
 otuHIV <- datHIV[, 1:60]
 
+# Sequencing Dept
+median(rowSums(otuHIV))
+min(rowSums(otuHIV))
+max(rowSums(otuHIV))
+
+which(rowSums(otuHIV) == min(rowSums(otuHIV)))
+otuHIV[30, ]
+
+ggplot(data.frame(x = rowSums(otuHIV)), aes(x = x)) +
+  geom_histogram() +
+  labs(x = "Total Read Count", title = "HIV dataset: Distribution of the Total Read Count") +
+  theme_bw() +
+  theme(axis.title.y = element_blank())
+
+# Shannon Diversity and Simpson Index
+shannon_d <- sapply(1:155, function(x){
+  pi <- otuHIV[x, otuHIV[x, ] != 0]/sum(otuHIV[x, otuHIV[x, ] != 0])
+  -sum(pi * log(pi))})
+
+simpson_d <- sapply(1:155, function(x){
+  pi <- otuHIV[x, otuHIV[x, ] != 0]/sum(otuHIV[x, otuHIV[x, ] != 0])
+  1 - sum(pi^2)})
+
+statusSex <- paste0(statusHIV, " \n ", sexHIV)
+
+numericLonger <- data.frame(trc = rowSums(otuHIV), shannon_d, simpson_d) %>%
+  mutate(ID = 1:155, statusSex) %>%
+  pivot_longer(!c(ID, statusSex)) 
+
+numericLonger$name <- factor(numericLonger$name, labels = c("Shannon", "Simpson", "Total Read Count"))
+
+ggplot(numericLonger, aes(x = statusSex, y = value)) +
+  geom_boxplot() +
+  facet_wrap(. ~ name, scales = "free_y")
+
+table(statusSex)
+
+data.frame(trc = rowSums(otuHIV), shannon_d, simpson_d) %>%
+  mutate(ID = 1:155, statusSex) %>%
+  group_by(statusSex) %>%
+  summarise(n(), median(trc), min(trc), max(trc), median(shannon_d), min(shannon_d), 
+            max(shannon_d), median(simpson_d), min(simpson_d), 
+            max(simpson_d)) %>% View()
+
+data.frame(trc = rowSums(otuHIV), shannon_d, simpson_d) %>%
+  mutate(ID = 1:155, statusSex) %>%
+  summarise(n(), median(trc), min(trc), max(trc), median(shannon_d), min(shannon_d), 
+            max(shannon_d), median(simpson_d), min(simpson_d), 
+            max(simpson_d)) %>% View()
+
+which.min(shannon_d)
+which.min(simpson_d)
+which.max(rowSums(otuHIV))
+which.max(shannon_d)
+which.max(simpson_d)
+
 # Demographic
 data.frame(table(statusHIV, sexHIV)) %>%
   ggplot(aes(x = sexHIV, y = Freq)) +
@@ -146,8 +202,10 @@ difftime(Sys.time(), globalTime)
 # resultFilename <- c(paste0(resultpath, "result_selbal_HIV_chain_", 1:6, "_init_oneClus_defaultHyper.rds"),
 #                     paste0(resultpath, "result_selbal_HIV_chain_", 1:6, "_init_oneClus_s2MH_1en5.rds"))
 
-resultFilename <- c(paste0(resultpath, "result_selbal_HIV_chain_", 1:6, "_init_oneClus_defaultHyper.rds"),
-                    paste0(resultpath, resultName))
+resultFilename <- c(paste0(resultpath, "result_selbal_HIV_chain_", 1:3, "_init_oneClus_defaultHyper.rds"),
+                    paste0(resultpath, "result_selbal_HIV_chain_", 1:3, "_init_3clus_Kmax_15_defaultHyper.rds"),
+                    paste0(resultpath, "result_selbal_HIV_chain_", 1:3, "_init_5clus_Kmax_20_defaultHyper.rds"),
+                    paste0(resultpath, "result_selbal_HIV_chain_", 1:3, "_init_20clus_Kmax_50_defaultHyper.rds"))
 
 ### Computational time
 registerDoParallel(6)
@@ -173,17 +231,16 @@ activeClusMatPlot <- activeClusMat %>%
   mutate(iter = 1:25000) %>%
   pivot_longer(!iter)
 
-activeClusMatPlot$name <- factor(activeClusMatPlot$name, levels = paste0("result.", 1:12))
+activeClusMatPlot$name <- factor(activeClusMatPlot$name, 
+                                 levels = paste0("result.", 1:12), labels = paste0("Chain ", 1:12))
 
 ggplot(activeClusMatPlot, aes(x = iter, y = value, color = name)) +
   geom_line() +
   theme_bw() +
-  scale_color_discrete(labels = unname(TeX(c(paste0(rep("$\\sigma^{2}_{MH} = 1 \\times 10^{-3}$"), ": Chain ", 1:6),
-                                             paste0(rep("$\\sigma^{2}_{MH} = 1 \\times 10^{-5}$"), ": Chain ", 1:6))))) +
   theme(legend.position = "bottom") +
   labs(title = "Active Clusters via MCMC Iterations", x = "Iteration", y = "Number of the active clusteres",
        color = "MCMC Chain") +
-  guides(color = guide_legend(ncol = 6))
+  guides(color = guide_legend(ncol = 12))
 
 ### Check the convergence of xi
 data.frame(colMeans(otuHIV), apply(otuHIV, 2, var))
@@ -200,19 +257,17 @@ xiFirst <- foreach(t = 1:12) %dopar% {
 }
 stopImplicitCluster()
 
-# labelPlotchain <- c(paste0(rep("$\\sigma^{2}_{MH} = 1 \\times 10^{-3}$ \\n "), "Chain ", 1:6),
-#                     paste0(rep("$\\sigma^{2}_{MH} = 1 \\times 10^{-5}$"), ": Chain ", 1:6))
+xiFirstLong <- lapply(1:12, function(x){data.frame(xiFirst[[x]], chain = paste0("Chain ", x))}) %>%
+  bind_rows()
 
-lapply(1:12, function(x){data.frame(xiFirst[[x]], chain = paste0("Chain ", x))}) %>%
-  bind_rows() %>%
-  ggplot(aes(x = Iteration, y = xi, color = Cluster)) +
+xiFirstLong$chain <- factor(xiFirstLong$chain, levels = paste0("Chain ", 1:12))
+
+ggplot(xiFirstLong, aes(x = Iteration, y = xi, color = Cluster)) +
   geom_line() +
   facet_wrap(. ~ chain) +
   theme_bw() +
-  theme(legend.position = "bottom") +
-  labs(title = TeX(paste0("Trace plot: ", "$\\xi_{k1}$")), x = "Iteration", y = TeX("\\xi"),
-       color = "MCMC Chain") +
-  guides(color = guide_legend(ncol = 6))
+  theme(legend.position = "none") +
+  labs(title = TeX(paste0("Trace plot: ", "$\\xi_{k1}$")), x = "Iteration", y = TeX("\\xi"))
 
 registerDoParallel(6)
 xiThird <- foreach(t = 1:12) %dopar% {
@@ -226,44 +281,70 @@ xiThird <- foreach(t = 1:12) %dopar% {
 }
 stopImplicitCluster()
 
-lapply(1:12, function(x){data.frame(xiThird[[x]], chain = paste0("Chain ", x))}) %>%
-  bind_rows() %>%
-  ggplot(aes(x = Iteration, y = xi, color = Cluster)) +
+xiThirdLong <- lapply(1:12, function(x){data.frame(xiThird[[x]], chain = paste0("Chain ", x))}) %>%
+  bind_rows()
+
+xiThirdLong$chain <- factor(xiThirdLong$chain, levels = paste0("Chain ", 1:12))
+
+ggplot(xiThirdLong, aes(x = Iteration, y = xi, color = Cluster)) +
   geom_line() +
   facet_wrap(. ~ chain) +
   theme_bw() +
-  theme(legend.position = "bottom") +
-  labs(title = TeX(paste0("Trace plot: ", "$\\xi_{k3}$")), x = "Iteration", y = TeX("\\xi"),
-       color = "MCMC Chain") +
-  guides(color = guide_legend(ncol = 6))
+  theme(legend.position = "none") +
+  labs(title = TeX(paste0("Trace plot: ", "$\\xi_{k3}$")), x = "Iteration", y = TeX("\\xi"))
 
 ### Check the acceptance rate
-KmaxVec <- c(10, 10, 10, 10, 10, 10, 20, 20, 20, 50, 50, 50)
+KmaxVec <- c(10, 10, 10, 15, 15, 15, 20, 20, 20, 50, 50, 50)
 registerDoParallel(6)
-xiAccept <- foreach(t = 1:12) %dopar% {
+xiAcceptRXN <- foreach(t = 1:12) %dopar% {
   result <- readRDS(resultFilename[t])
   sapply(1:KmaxVec[t], function(x){sum(result$mod$MH_accept[, x] == 1)/sum(result$mod$MH_accept[, x] != -1)})
 }
 stopImplicitCluster()
 
-xiAcceptLong <- do.call(rbind, xiAccept) %>%
-  as.data.frame() %>%
-  `colnames<-`(paste0("Component ", 1:50)) %>%
-  mutate(Chain = paste0("Chain ", 1:12)) %>%
-  pivot_longer(!Chain)
+registerDoParallel(6)
+xiAccept <- foreach(t = 1:12) %dopar% {
+  result <- readRDS(resultFilename[t])
+  sapply(1:KmaxVec[t], function(x){sum(result$mod$MH_accept[, x] != -1)})
+}
+stopImplicitCluster()
 
-xiAcceptLong$name <- factor(xiAcceptLong$name, levels = paste0("Component ", 50:1))
-xiAcceptLong$Chain <- factor(xiAcceptLong$Chain, levels = paste0("Chain ", 1:12))
+colorHM <- matrix(NA, nrow = 50, ncol = 12)
+labelHM <- matrix(NA, nrow = 50, ncol = 12)
 
-xiAcceptLong %>%
-  ggplot(aes(x = Chain, y = name, fill = value)) +
+for(i in 1:12){
+  
+  for(j in 1:KmaxVec[i]){
+    
+    colorHM[j, i] <- xiAcceptRXN[[i]][j]
+    labelHM[j, i] <- paste0(round(xiAcceptRXN[[i]][j], 2), " (", xiAccept[[i]][j], ")")
+    
+  }
+  
+}
+
+labelHM[labelHM == "NaN(0)"] <- NA
+
+xiAcceptLab <- as.data.frame(colorHM) %>%
+  mutate(Component = paste0("Component ", 1:50)) %>%
+  pivot_longer(!Component, values_to = "AcceptRate") %>%
+  inner_join(as.data.frame(labelHM) %>%
+               mutate(Component = paste0("Component ", 1:50)) %>%
+               pivot_longer(!Component, values_to = "RateLabel"))
+  
+xiAcceptLab$name <- factor(xiAcceptLab$name, levels = paste0("V", 1:12), labels = paste0("Chain ", 1:12))
+xiAcceptLab$RateLabel[xiAcceptLab$RateLabel == "NaN (0)"] <- NA
+
+xiAcceptLab %>%
+  ggplot(aes(x = name, y = Component, fill = AcceptRate)) +
   geom_tile() +
   scale_fill_gradient(low = "white", high = "red") +
-  geom_text(aes(label = round(value, 2)), color = "black", size = 4) +
+  geom_text(aes(label = RateLabel), color = "black", size = 2) +
+  theme_bw() +
+  theme(axis.ticks.y = element_blank(), axis.text.y = element_blank(), 
+        legend.position = "bottom") +
   labs(x = "MCMC Chain", y = "Component", fill = "Acceptance Rate",
-       title = TeX(paste0("Acceptance Rate of the Adpative MH for ", "$\\textbf{\\xi}_{k}$"))) +
-  theme(legend.position = "bottom") +
-  theme_bw()
+       title = TeX(paste0("Acceptance Rate of the Adpative MH for ", "$\\textbf{\\xi}_{k}$")))
 
 ### Cluster Assignment - Individual
 set.seed(1, kind = "L'Ecuyer-CMRG")
@@ -287,7 +368,7 @@ salsoDemo$Chain <- factor(salsoDemo$Chain, levels = paste0("Chain ", 1:12))
 salsoDemo %>%
   ggplot(aes(x = Cluster, y = Freq, fill = status_sex)) +
   geom_bar(stat = "identity", position = position_dodge(), width = 0.5) +
-  geom_text(aes(label = Freq), position = position_dodge(width = 0.5), vjust = -0.5) + 
+  geom_text(aes(label = Freq), position = position_dodge(width = 0.5), vjust = -0.15, size = 2) + 
   scale_fill_manual(values = c("springgreen3", "springgreen4", "coral1", "coral3")) +
   facet_wrap(. ~ Chain, scales = "free_x") +
   theme_bw() +
@@ -346,7 +427,7 @@ ggplot(otuRelaPlot, aes(x = ID, y = value, fill = name)) +
   scale_fill_manual(values = c(turbo(n = 15), "gray90")) + 
   scale_y_continuous(labels = scales::percent) +
   theme(axis.text.x = element_text(angle = 90)) +
-  theme(legend.position = "bottom") +
+  theme(legend.position = "bottom", axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
   guides(fill = guide_legend(nrow = 2)) +
   labs(fill = "Taxa", y = "Relative Abundance",
        title = paste0("Relative Abundance for each cluster"))
@@ -364,7 +445,7 @@ relaPlot <- lapply(1:12, function(x){
     scale_fill_manual(values = c(turbo(n = 15), "gray90")) + 
     scale_y_continuous(labels = scales::percent) +
     theme(axis.text.x = element_text(angle = 90)) +
-    theme(legend.position = "bottom") +
+    theme(legend.position = "bottom", axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
     guides(fill = guide_legend(nrow = 2)) +
     labs(fill = "Taxa", y = "Relative Abundance",
          title = paste0("Chain ", x, " - Relative Abundance for each cluster"))
@@ -417,6 +498,11 @@ ggplot(otuRelaCombPlot, aes(x = ID, y = value, fill = name)) +
   theme(legend.position = "bottom") +
   guides(fill = guide_legend(nrow = 2)) +
   labs(fill = "Taxa", y = "Relative Abundance",
-       title = paste0("Relative Abundance for each cluster"))
+       title = paste0("Relative Abundance for each cluster of the combined MCMC chain"))
 
-
+data.frame(trc = rowSums(otuHIV), shannon_d, simpson_d) %>%
+  mutate(ID = 1:155, clusComb) %>%
+  group_by(clusComb) %>%
+  summarise(n(), median(trc), min(trc), max(trc), median(shannon_d), min(shannon_d), 
+            max(shannon_d), median(simpson_d), min(simpson_d), 
+            max(simpson_d)) %>% View()
