@@ -140,7 +140,7 @@ ciInit[, 2] <- sample(0:2, 375, replace = TRUE)
 ciInit[, 3] <- sample(0:2, 375, replace = TRUE)
 
 xiInit <- lapply(1:3, function(y){sapply(0:max(ciInit[, y]), function(x){
-  colSums(otuHIV[which(ciInit[, y] == x), ])/sum(otuHIV[which(ciInit[, y] == x), ])
+  colSums(dat[which(ciInit[, y] == x), ])/sum(dat[which(ciInit[, y] == x), ])
 }) %>% t()
 })
 
@@ -156,7 +156,7 @@ globalTime <- Sys.time()
 foreach(t = 1:3) %dopar% {
   start_time <- Sys.time()
   mod <- mod_adaptive(iter = 25000, Kmax = 15, nbeta_split = 5,
-                      z = as.matrix(otuHIV), atrisk_init = matrix(1, nrow = 375, ncol = 56),
+                      z = as.matrix(dat), atrisk_init = matrix(1, nrow = 375, ncol = 56),
                       beta_init = as.matrix(xiInit[[t]]),
                       ci_init = ciInit[, t],
                       theta = 1, mu = 0, s2 = 1, s2_MH = 1e-3,
