@@ -89,13 +89,13 @@ difftime(Sys.time(), globalTime)
 
 ### Different starting point: 1e-3 - PART 1
 set.seed(1)
-ciInit <- matrix(NA, nrow = 155, ncol = 6)
-ciInit[, 1] <- sample(0:4, 155, replace = TRUE)
-ciInit[, 2] <- sample(0:4, 155, replace = TRUE)
-ciInit[, 3] <- sample(0:4, 155, replace = TRUE)
-ciInit[, 4] <- sample(0:19, 155, replace = TRUE)
-ciInit[, 5] <- sample(0:19, 155, replace = TRUE)
-ciInit[, 6] <- sample(0:19, 155, replace = TRUE)
+ciInit <- matrix(NA, nrow = 375, ncol = 6)
+ciInit[, 1] <- sample(0:4, 375, replace = TRUE)
+ciInit[, 2] <- sample(0:4, 375, replace = TRUE)
+ciInit[, 3] <- sample(0:4, 375, replace = TRUE)
+ciInit[, 4] <- sample(0:19, 375, replace = TRUE)
+ciInit[, 5] <- sample(0:19, 375, replace = TRUE)
+ciInit[, 6] <- sample(0:19, 375, replace = TRUE)
 
 KmaxVec <- c(20, 20, 20, 50, 50, 50)
 
@@ -104,12 +104,12 @@ xiInit <- lapply(1:6, function(y){sapply(0:max(ciInit[, y]), function(x){
 }) %>% t()
 })
 
-xiInit[[1]] <- rbind(xiInit[[1]], matrix(0, nrow = 15, ncol = 60))
-xiInit[[2]] <- rbind(xiInit[[2]], matrix(0, nrow = 15, ncol = 60))
-xiInit[[3]] <- rbind(xiInit[[3]], matrix(0, nrow = 15, ncol = 60))
-xiInit[[4]] <- rbind(xiInit[[4]], matrix(0, nrow = 30, ncol = 60))
-xiInit[[5]] <- rbind(xiInit[[5]], matrix(0, nrow = 30, ncol = 60))
-xiInit[[6]] <- rbind(xiInit[[6]], matrix(0, nrow = 30, ncol = 60))
+xiInit[[1]] <- rbind(xiInit[[1]], matrix(0, nrow = 15, ncol = 56))
+xiInit[[2]] <- rbind(xiInit[[2]], matrix(0, nrow = 15, ncol = 56))
+xiInit[[3]] <- rbind(xiInit[[3]], matrix(0, nrow = 15, ncol = 56))
+xiInit[[4]] <- rbind(xiInit[[4]], matrix(0, nrow = 30, ncol = 56))
+xiInit[[5]] <- rbind(xiInit[[5]], matrix(0, nrow = 30, ncol = 56))
+xiInit[[6]] <- rbind(xiInit[[6]], matrix(0, nrow = 30, ncol = 56))
 
 resultName <- c(paste0("result_ravel_chain_", 1:3, "_init_5clus_Kmax_20_defaultHyper.rds"),
                 paste0("result_ravel_chain_", 1:3, "_init_20clus_Kmax_50_defaultHyper.rds"))
