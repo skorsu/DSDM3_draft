@@ -132,6 +132,42 @@ foreach(t = 1:6) %dopar% {
 stopImplicitCluster()
 difftime(Sys.time(), globalTime)
 
+### Different starting point: 1e-3 - PART 2
+set.seed(1)
+ciInit <- matrix(NA, nrow = 375, ncol = 3)
+ciInit[, 1] <- sample(0:2, 375, replace = TRUE)
+ciInit[, 2] <- sample(0:2, 375, replace = TRUE)
+ciInit[, 3] <- sample(0:2, 375, replace = TRUE)
+
+xiInit <- lapply(1:3, function(y){sapply(0:max(ciInit[, y]), function(x){
+  colSums(otuHIV[which(ciInit[, y] == x), ])/sum(otuHIV[which(ciInit[, y] == x), ])
+}) %>% t()
+})
+
+xiInit[[1]] <- rbind(xiInit[[1]], matrix(0, nrow = 12, ncol = 56))
+xiInit[[2]] <- rbind(xiInit[[2]], matrix(0, nrow = 12, ncol = 56))
+xiInit[[3]] <- rbind(xiInit[[3]], matrix(0, nrow = 12, ncol = 56))
+
+resultName <- paste0("result_ravel_chain_", 1:3, "_init_3clus_Kmax_15_defaultHyper.rds")
+
+set.seed(1, kind = "L'Ecuyer-CMRG")
+registerDoParallel(3)
+globalTime <- Sys.time()
+foreach(t = 1:3) %dopar% {
+  start_time <- Sys.time()
+  mod <- mod_adaptive(iter = 25000, Kmax = 15, nbeta_split = 5,
+                      z = as.matrix(otuHIV), atrisk_init = matrix(1, nrow = 375, ncol = 56),
+                      beta_init = as.matrix(xiInit[[t]]),
+                      ci_init = ciInit[, t],
+                      theta = 1, mu = 0, s2 = 1, s2_MH = 1e-3,
+                      t_thres = 2500, launch_iter = 30,
+                      r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 1)
+  comp_time <- difftime(Sys.time(), start_time, units = "secs")
+  saveRDS(list(time = comp_time, mod = mod), file = paste0(resultpath, resultName[t]))
+}
+stopImplicitCluster()
+difftime(Sys.time(), globalTime)
+
 # ### Post Analysis: -------------------------------------------------------------
 # resultFilename <- c(paste0(resultpath, "result_selbal_crohn_chain_", 1:6, "_init_oneClus_defaultHyper.rds"),
 #                     paste0(resultpath, "result_selbal_crohn_chain_", 1:6, "_init_oneClus_s2MH_1en5.rds"))
