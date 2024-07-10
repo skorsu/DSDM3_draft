@@ -351,11 +351,33 @@ clusSALSO <- foreach(t = 1:12, .combine = cbind) %dopar% {
 }
 stopImplicitCluster()
 
-### Demo
-dumDat <- data.frame(ID = rownames(dat), clus = clusSALSO[, 1]) %>%
-  inner_join(demoWBHN)
-table(dumDat$clus, dumDat$Nugent)
-table(dumDat$clus, dumDat$Ethnicity)
+### Individual - Demographic
+demoLong <- lapply(1:12, function(x){
+  dumDat <- data.frame(ID = rownames(dat), clus = clusSALSO[, x]) %>%
+    inner_join(demoWBHN)
+  DemoPercent <- data.frame(table(dumDat$clus, dumDat$Nugent)) %>%
+    group_by(Var1) %>%
+    mutate(Percent = Freq/sum(Freq), Chain = paste0("Chain ", x)) %>%
+    arrange(Var1)
+  DemoPercent
+}) %>%
+  bind_rows()
+
+demoLong$Chain <- factor(demoLong$Chain, levels = paste0("Chain ", 1:12))
+demoLong$Var1 <- factor(demoLong$Var1, labels = paste0("Cluster ", 1:6))
+
+demoLong %>%
+  ggplot(aes(x = Var1, y = Percent, fill = Var2)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = paste0("n = ",Freq)), position = position_stack(vjust = 0.5), size = 2) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_bw() +
+  theme(legend.position = "bottom") +
+  scale_fill_manual(values = c("springgreen3", "coral1", "gray90")) +
+  facet_wrap(. ~ Chain, scales = "free_x") +
+  labs(title = "The distribution of the predicted Nugent score for each cluster in every MCMC chain.",
+       x = "Cluster", fill = "Predicted Nugent Score Group")
+
 
 #### Individual - Relative Abundance
 taxaName <- data.frame(c = str_remove(str_extract(colnames(dat), "c__[:alpha:]+"), "c__"),
