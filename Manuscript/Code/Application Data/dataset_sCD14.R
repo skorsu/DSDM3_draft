@@ -29,8 +29,9 @@ statusCrohn <- CrohnData[, 49]
 otuCrohn <- CrohnData[, -49]
 
 # Demographic
-## data.frame(x = status_sCD14) %>%
-  
+dim(otuCrohn)
+table(statusCrohn)
+
 ### Default set of Hyperparameters
 set.seed(1, kind = "L'Ecuyer-CMRG")
 registerDoParallel(6)
@@ -50,26 +51,94 @@ foreach(t = 1:6) %dopar% {
 stopImplicitCluster()
 difftime(Sys.time(), globalTime)
 
-### Lower the s2_MH to 1e-5
-set.seed(1, kind = "L'Ecuyer-CMRG")
-registerDoParallel(6)
-globalTime <- Sys.time()
-foreach(t = 1:6) %dopar% {
-  start_time <- Sys.time()
-  mod <- mod_adaptive(iter = 25000, Kmax = 10, nbeta_split = 5,
-                      z = as.matrix(otuCrohn), atrisk_init = matrix(1, nrow = 975, ncol = 48),
-                      beta_init = matrix(0, nrow = 10, ncol = 48),
-                      ci_init = rep(0, 975),
-                      theta = 1, mu = 0, s2 = 1, s2_MH = 1e-5,
-                      t_thres = 2500, launch_iter = 30,
-                      r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 1)
-  comp_time <- difftime(Sys.time(), start_time, units = "secs")
-  saveRDS(list(time = comp_time, mod = mod), file = paste0(resultpath, "result_selbal_crohn_chain_", t, "_init_oneClus_s2MH_1en5.rds"))
+### Post Analysis: -------------------------------------------------------------
+
+resultFilename <- c(paste0(resultpath, "result_selbal_crohn_chain_", 1:6, "_init_oneClus_defaultHyper.rds"))
+
+### Computational time
+registerDoParallel(3)
+compTime <- foreach(t = 1:6, .combine = cbind) %dopar% {
+  result <- readRDS(resultFilename[t])
+  as.numeric(result$time)
 }
 stopImplicitCluster()
-difftime(Sys.time(), globalTime)
 
-### Post Analysis: -------------------------------------------------------------
+mean(compTime/3600)
+sd(compTime/3600)
+
+### Active Cluster
+registerDoParallel(3)
+activeClusMat <- foreach(t = 1:6, .combine = cbind) %dopar% {
+  result <- readRDS(resultFilename[t])
+  apply(result$mod$ci_result, 1, uniqueClus)
+}
+stopImplicitCluster()
+
+activeClusMatPlot <- activeClusMat %>%
+  as.data.frame() %>%
+  mutate(iter = 1:25000) %>%
+  pivot_longer(!iter)
+
+activeClusMatPlot$name <- factor(activeClusMatPlot$name, 
+                                 levels = paste0("result.", 1:12), labels = paste0("Chain ", 1:12))
+
+ggplot(activeClusMatPlot, aes(x = iter, y = value, color = name)) +
+  geom_line() +
+  theme_bw() +
+  theme(legend.position = "bottom") +
+  labs(title = "Active Clusters via MCMC Iterations", x = "Iteration", y = "Number of the active clusteres",
+       color = "MCMC Chain") +
+  guides(color = guide_legend(ncol = 6))
+
+registerDoParallel(3)
+xiFirst <- foreach(t = 1:6) %dopar% {
+  result <- readRDS(resultFilename[t])
+  result$mod$beta_result[, 1, ] %>% t() %>%
+    as.data.frame() %>%
+    mutate(Iteration = 1:25000) %>%
+    pivot_longer(!Iteration) %>%
+    transmute(Iteration, xi = value,
+              Cluster = paste0("Cluster ", str_extract(name, "[:digit:]+")))
+}
+stopImplicitCluster()
+
+xiFirstLong <- lapply(1:6, function(x){data.frame(xiFirst[[x]], chain = paste0("Chain ", x))}) %>%
+  bind_rows()
+
+xiFirstLong$chain <- factor(xiFirstLong$chain, levels = paste0("Chain ", 1:6))
+
+ggplot(xiFirstLong, aes(x = Iteration, y = xi, color = Cluster)) +
+  geom_line() +
+  facet_wrap(. ~ chain) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  labs(title = TeX(paste0("Trace plot: ", "$\\xi_{k1}$")), x = "Iteration", y = TeX("\\xi"))
+
+result <- readRDS(resultFilename[2])
+clusSALSO <- as.numeric(salso(result$mod$ci_result[-(1:5000), ]))
+table(clusSALSO, statusCrohn)
+
+colnames(otuCrohn)
+taxaName <- data.frame(c = str_remove(str_extract(colnames(otuCrohn), "c__[:alpha:]+"), "c__"),
+                       o = str_remove(str_extract(colnames(otuCrohn), "o__[:alpha:]+"), "o__"),
+                       f = str_remove(str_extract(colnames(otuCrohn), "f__[:alpha:]+"), "f__"),
+                       g = str_remove(str_extract(colnames(otuCrohn), "g__[:alpha:]+"), "g__"))
+
+View(taxaName)
+highTaxa <- sapply(1:9, function(x){
+  (otuCrohn[which(clusSALSO == x), ]/rowSums(otuCrohn[which(clusSALSO == x), ])) %>%
+    colMeans() %>%
+    sort(decreasing = TRUE, index.return = TRUE) %>%
+    .$ix %>%
+    .[1:10]})
+
+otuHIVvisual <- otuCrohn/otuCrohn(otuHIV)
+highTaxaIndex <- union(union(highTaxa[, 1], highTaxa[, 2]), highTaxa[, 3])
+highTaxaIndexLabel <- ifelse(taxaName$g %in% c("unclassified", "Incertae"), 
+                             ifelse(is.na(taxaName$f), 
+                                    ifelse(is.na(taxaName$o), taxaName$c, taxaName$o), taxaName$f), taxaName$g) 
+highTaxaIndexLabel[highTaxaIndex]
+
 # #### Read the result
 # resultFilename <- c(paste0(resultpath, "result_selbal_HIV_chain_", 1:6, "_init_oneClus_defaultHyper.rds"),
 #                     paste0(resultpath, "result_selbal_HIV_chain_", 1:6, "_init_oneClus_s2MH_1en5.rds"))

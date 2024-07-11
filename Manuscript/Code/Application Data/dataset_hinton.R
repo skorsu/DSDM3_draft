@@ -112,7 +112,7 @@ ciInit[, 12] <- sample(0:19, 155, replace = TRUE)
 
 xiInitDum <- lapply(4:12, function(y){sapply(0:max(ciInit[, y]), function(x){
   p <- colSums(otuHIV[which(ciInit[, y] == x), ])/sum(otuHIV[which(ciInit[, y] == x), ])
-  ifelse(is.infinite(log(p/(1-p))), 1e-10, log(p/(1-p)))
+  ifelse(is.infinite(log(p/(1-p))), -20, log(p/(1-p)))
 }) %>% t()
 })
 
@@ -133,10 +133,10 @@ xiInit[[10]] <- xiInitDum[[7]]
 xiInit[[11]] <- xiInitDum[[8]]
 xiInit[[12]] <- xiInitDum[[9]]
 
-resultName <- c(paste0("result_selbal_HIV_chain_", 1:3, "_init_oneClus_JUL10.rds"),
-                paste0("result_selbal_HIV_chain_", 1:3, "_init_3clus_JUL10.rds"),
-                paste0("result_selbal_HIV_chain_", 1:3, "_init_5clus_JUL10.rds"),
-                paste0("result_selbal_HIV_chain_", 1:3, "_init_20clus_JUL10.rds"))
+resultName <- c(paste0("result_selbal_HIV_chain_", 1:3, "_init_oneClus_JUL10_fixed.rds"),
+                paste0("result_selbal_HIV_chain_", 1:3, "_init_3clus_JUL10_fixed.rds"),
+                paste0("result_selbal_HIV_chain_", 1:3, "_init_5clus_JUL10_fixed.rds"),
+                paste0("result_selbal_HIV_chain_", 1:3, "_init_20clus_JUL10_fixed.rds"))
 
 set.seed(1, kind = "L'Ecuyer-CMRG")
 registerDoParallel(6)
@@ -261,10 +261,10 @@ difftime(Sys.time(), globalTime)
 # resultFilename <- c(paste0(resultpath, "result_selbal_HIV_chain_", 1:6, "_init_oneClus_defaultHyper.rds"),
 #                     paste0(resultpath, "result_selbal_HIV_chain_", 1:6, "_init_oneClus_s2MH_1en5.rds"))
 
-resultFilename <- c(paste0(resultpath, "result_selbal_HIV_chain_", 1:3, "_init_oneClus_defaultHyper.rds"),
-                    paste0(resultpath, "result_selbal_HIV_chain_", 1:3, "_init_3clus_Kmax_15_defaultHyper.rds"),
-                    paste0(resultpath, "result_selbal_HIV_chain_", 1:3, "_init_5clus_Kmax_20_defaultHyper.rds"),
-                    paste0(resultpath, "result_selbal_HIV_chain_", 1:3, "_init_20clus_Kmax_50_defaultHyper.rds"))
+resultFilename <- c(paste0(resultpath, "result_selbal_HIV_chain_", 1:3, "_init_oneClus_JUL10_fixed.rds"),
+                    paste0(resultpath, "result_selbal_HIV_chain_", 1:3, "_init_3clus_JUL10_fixed.rds"),
+                    paste0(resultpath, "result_selbal_HIV_chain_", 1:3, "_init_5clus_JUL10_fixed.rds"),
+                    paste0(resultpath, "result_selbal_HIV_chain_", 1:3, "_init_20clus_JUL10_fixed.rds"))
 
 ### Computational time
 registerDoParallel(6)
@@ -277,7 +277,7 @@ stopImplicitCluster()
 mean(compTime/3600)
 sd(compTime/3600)
 
-### Active Cluster - Combine both two hyperparameters
+### Active Cluster
 registerDoParallel(6)
 activeClusMat <- foreach(t = 1:12, .combine = cbind) %dopar% {
   result <- readRDS(resultFilename[t])
@@ -353,57 +353,57 @@ ggplot(xiThirdLong, aes(x = Iteration, y = xi, color = Cluster)) +
   labs(title = TeX(paste0("Trace plot: ", "$\\xi_{k3}$")), x = "Iteration", y = TeX("\\xi"))
 
 ### Check the acceptance rate
-KmaxVec <- c(10, 10, 10, 15, 15, 15, 20, 20, 20, 50, 50, 50)
-registerDoParallel(6)
-xiAcceptRXN <- foreach(t = 1:12) %dopar% {
-  result <- readRDS(resultFilename[t])
-  sapply(1:KmaxVec[t], function(x){sum(result$mod$MH_accept[, x] == 1)/sum(result$mod$MH_accept[, x] != -1)})
-}
-stopImplicitCluster()
-
-registerDoParallel(6)
-xiAccept <- foreach(t = 1:12) %dopar% {
-  result <- readRDS(resultFilename[t])
-  sapply(1:KmaxVec[t], function(x){sum(result$mod$MH_accept[, x] != -1)})
-}
-stopImplicitCluster()
-
-colorHM <- matrix(NA, nrow = 50, ncol = 12)
-labelHM <- matrix(NA, nrow = 50, ncol = 12)
-
-for(i in 1:12){
-  
-  for(j in 1:KmaxVec[i]){
-    
-    colorHM[j, i] <- xiAcceptRXN[[i]][j]
-    labelHM[j, i] <- paste0(round(xiAcceptRXN[[i]][j], 2), " (", xiAccept[[i]][j], ")")
-    
-  }
-  
-}
-
-labelHM[labelHM == "NaN(0)"] <- NA
-
-xiAcceptLab <- as.data.frame(colorHM) %>%
-  mutate(Component = paste0("Component ", 1:50)) %>%
-  pivot_longer(!Component, values_to = "AcceptRate") %>%
-  inner_join(as.data.frame(labelHM) %>%
-               mutate(Component = paste0("Component ", 1:50)) %>%
-               pivot_longer(!Component, values_to = "RateLabel"))
-  
-xiAcceptLab$name <- factor(xiAcceptLab$name, levels = paste0("V", 1:12), labels = paste0("Chain ", 1:12))
-xiAcceptLab$RateLabel[xiAcceptLab$RateLabel == "NaN (0)"] <- NA
-
-xiAcceptLab %>%
-  ggplot(aes(x = name, y = Component, fill = AcceptRate)) +
-  geom_tile() +
-  scale_fill_gradient(low = "white", high = "red") +
-  geom_text(aes(label = RateLabel), color = "black", size = 2) +
-  theme_bw() +
-  theme(axis.ticks.y = element_blank(), axis.text.y = element_blank(), 
-        legend.position = "bottom") +
-  labs(x = "MCMC Chain", y = "Component", fill = "Acceptance Rate",
-       title = TeX(paste0("Acceptance Rate of the Adpative MH for ", "$\\textbf{\\xi}_{k}$")))
+# KmaxVec <- c(10, 10, 10, 15, 15, 15, 20, 20, 20, 50, 50, 50)
+# registerDoParallel(6)
+# xiAcceptRXN <- foreach(t = 1:12) %dopar% {
+#   result <- readRDS(resultFilename[t])
+#   sapply(1:KmaxVec[t], function(x){sum(result$mod$MH_accept[, x] == 1)/sum(result$mod$MH_accept[, x] != -1)})
+# }
+# stopImplicitCluster()
+# 
+# registerDoParallel(6)
+# xiAccept <- foreach(t = 1:12) %dopar% {
+#   result <- readRDS(resultFilename[t])
+#   sapply(1:KmaxVec[t], function(x){sum(result$mod$MH_accept[, x] != -1)})
+# }
+# stopImplicitCluster()
+# 
+# colorHM <- matrix(NA, nrow = 50, ncol = 12)
+# labelHM <- matrix(NA, nrow = 50, ncol = 12)
+# 
+# for(i in 1:12){
+#   
+#   for(j in 1:KmaxVec[i]){
+#     
+#     colorHM[j, i] <- xiAcceptRXN[[i]][j]
+#     labelHM[j, i] <- paste0(round(xiAcceptRXN[[i]][j], 2), " (", xiAccept[[i]][j], ")")
+#     
+#   }
+#   
+# }
+# 
+# labelHM[labelHM == "NaN(0)"] <- NA
+# 
+# xiAcceptLab <- as.data.frame(colorHM) %>%
+#   mutate(Component = paste0("Component ", 1:50)) %>%
+#   pivot_longer(!Component, values_to = "AcceptRate") %>%
+#   inner_join(as.data.frame(labelHM) %>%
+#                mutate(Component = paste0("Component ", 1:50)) %>%
+#                pivot_longer(!Component, values_to = "RateLabel"))
+#   
+# xiAcceptLab$name <- factor(xiAcceptLab$name, levels = paste0("V", 1:12), labels = paste0("Chain ", 1:12))
+# xiAcceptLab$RateLabel[xiAcceptLab$RateLabel == "NaN (0)"] <- NA
+# 
+# xiAcceptLab %>%
+#   ggplot(aes(x = name, y = Component, fill = AcceptRate)) +
+#   geom_tile() +
+#   scale_fill_gradient(low = "white", high = "red") +
+#   geom_text(aes(label = RateLabel), color = "black", size = 2) +
+#   theme_bw() +
+#   theme(axis.ticks.y = element_blank(), axis.text.y = element_blank(), 
+#         legend.position = "bottom") +
+#   labs(x = "MCMC Chain", y = "Component", fill = "Acceptance Rate",
+#        title = TeX(paste0("Acceptance Rate of the Adpative MH for ", "$\\textbf{\\xi}_{k}$")))
 
 ### Cluster Assignment - Individual
 set.seed(1, kind = "L'Ecuyer-CMRG")
@@ -483,7 +483,7 @@ ggplot(otuRelaPlot, aes(x = ID, y = value, fill = name)) +
   geom_bar(position = "stack", stat = "identity") +
   facet_wrap(. ~ cluster, scales = "free_x") +
   theme_bw() +
-  scale_fill_manual(values = c(turbo(n = 15), "gray90")) + 
+  scale_fill_manual(values = c(turbo(n = 16), "gray90")) + 
   scale_y_continuous(labels = scales::percent) +
   theme(axis.text.x = element_text(angle = 90)) +
   theme(legend.position = "bottom", axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
@@ -491,26 +491,26 @@ ggplot(otuRelaPlot, aes(x = ID, y = value, fill = name)) +
   labs(fill = "Taxa", y = "Relative Abundance",
        title = paste0("Relative Abundance for each cluster"))
 
-relaPlot <- lapply(1:12, function(x){
-  otuRelaPlot <- otuRela %>%
-    as.data.frame() %>% 
-    mutate(ID = str_extract(rownames(otuHIV), "[:digit:]+"), cluster = paste0("Cluster ", clusSALSO[, x])) %>%
-    pivot_longer(!c(ID, cluster))
-  otuRelaPlot$name <- factor(otuRelaPlot$name, levels = c(highTaxaIndexLabel, "Others"))
-  ggplot(otuRelaPlot, aes(x = ID, y = value, fill = name)) +
-    geom_bar(position = "stack", stat = "identity") +
-    facet_grid(. ~ cluster, scales = "free_x") +
-    theme_bw() +
-    scale_fill_manual(values = c(turbo(n = 15), "gray90")) + 
-    scale_y_continuous(labels = scales::percent) +
-    theme(axis.text.x = element_text(angle = 90)) +
-    theme(legend.position = "bottom", axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
-    guides(fill = guide_legend(nrow = 2)) +
-    labs(fill = "Taxa", y = "Relative Abundance",
-         title = paste0("Chain ", x, " - Relative Abundance for each cluster"))
-})
-
-ggarrange(plotlist = relaPlot, common.legend = TRUE, legend = "bottom")
+# relaPlot <- lapply(1:12, function(x){
+#   otuRelaPlot <- otuRela %>%
+#     as.data.frame() %>% 
+#     mutate(ID = str_extract(rownames(otuHIV), "[:digit:]+"), cluster = paste0("Cluster ", clusSALSO[, x])) %>%
+#     pivot_longer(!c(ID, cluster))
+#   otuRelaPlot$name <- factor(otuRelaPlot$name, levels = c(highTaxaIndexLabel, "Others"))
+#   ggplot(otuRelaPlot, aes(x = ID, y = value, fill = name)) +
+#     geom_bar(position = "stack", stat = "identity") +
+#     facet_grid(. ~ cluster, scales = "free_x") +
+#     theme_bw() +
+#     scale_fill_manual(values = c(turbo(n = 15), "gray90")) + 
+#     scale_y_continuous(labels = scales::percent) +
+#     theme(axis.text.x = element_text(angle = 90)) +
+#     theme(legend.position = "bottom", axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+#     guides(fill = guide_legend(nrow = 2)) +
+#     labs(fill = "Taxa", y = "Relative Abundance",
+#          title = paste0("Chain ", x, " - Relative Abundance for each cluster"))
+# })
+# 
+# ggarrange(plotlist = relaPlot, common.legend = TRUE, legend = "bottom")
 
 ### Combine all chains
 registerDoParallel(6)
@@ -551,7 +551,7 @@ ggplot(otuRelaCombPlot, aes(x = ID, y = value, fill = name)) +
   geom_bar(position = "stack", stat = "identity") +
   facet_wrap(. ~ cluster, scales = "free_x") +
   theme_bw() +
-  scale_fill_manual(values = c(turbo(n = 15), "gray90")) + 
+  scale_fill_manual(values = c(turbo(n = 16), "gray90")) + 
   scale_y_continuous(labels = scales::percent) +
   theme(axis.text.x = element_text(angle = 90)) +
   theme(legend.position = "bottom") +
