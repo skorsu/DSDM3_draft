@@ -45,8 +45,95 @@ datUMich <- dat[which(rownames(dat) %>% as.numeric() %in% metadata$sample[which(
 datUMich <- datUMich[, -which(colMeans(datUMich > 0) < 0.1)]
 dim(datUMich)
 
+### Combined Duplicated Taxa
+taxaSplit <- do.call(rbind.data.frame, 
+                     lapply(taxaList$Taxonomy, function(x){str_replace(str_split_fixed(x, "\\;", 6), "\\([:digit:]+\\)\\;*", "")}))
+colnames(taxaSplit) <- c("k", "p", "c", "o", "f", "g")
+rownames(taxaSplit) <- taxaList$OTU
+distinctTaxa <- taxaSplit %>% distinct()
+
+start_cleaned <- Sys.time()
+cleanedUmich <- matrix(NA, nrow = 107, ncol = 309)
+cleanedUmichCOL <- rep(NA, 309)
+j <- 1
+
+for(i in 1:309){
+  
+  colIndex <- (colnames(datUMich) %in% taxaList$OTU[which(sapply(1:9467, function(x){sum(taxaSplit[x, ] == distinctTaxa[i, ])}) == 6)]) %>%
+    which()
+  
+  if(length(colIndex) != 0){
+    
+    if(length(colIndex) == 1){
+      cleanedUmich[, j] <- datUMich[, colIndex]
+    } else {
+      cleanedUmich[, j] <- rowSums(datUMich[, colIndex])
+    }
+    
+    cleanedUmichCOL[j] <- paste(distinctTaxa[i, ], collapse = ";")
+    
+    j <- j + 1
+    
+  }
+  
+  print(c(i, j))
+  
+}
+difftime(Sys.time(), start_cleaned)
+
+cleanedUmich <- cleanedUmich[, 1:81]
+rownames(cleanedUmich) <- rownames(datUMich)
+colnames(cleanedUmich) <- cleanedUmichCOL[1:81]
+
+View(cleanedUmich)
+saveRDS(cleanedUmich, paste0(datapath, "baxter/cleanUmich.rds"))
+
+### Read the data
+metadata <- read.delim(paste0(datapath, "baxter/metadata.tsv"))
+otuTab <- readRDS(paste0(datapath, "baxter/cleanUmich.rds"))
+
+data.frame(x = 1:81, p = sort(colSums(otuTab)/sum(otuTab), decreasing = TRUE)) %>%
+  ggplot(aes(x = x, y = p)) +
+  geom_bar(stat = "identity")
+
+x <- rnorm(81, 0, sqrt(1))
+data.frame(x = 1:81, p = sort(exp(x)/sum(exp(x)), decreasing = TRUE)) %>%
+  ggplot(aes(x = x, y = p)) +
+  geom_bar(stat = "identity")
+
+mod <- mod_adaptive(iter = 3000, Kmax = 20, nbeta_split = 10,
+                    z = as.matrix(otuTab), atrisk_init = matrix(1, nrow = 107, ncol = 81),
+                    beta_init = matrix(0, nrow = 20, ncol = 81),
+                    ci_init = rep(0, 107),
+                    theta = 1, mu = 0, s2 = 1, s2_MH = 1e-3,
+                    t_thres = 2000, launch_iter = 30,
+                    r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 1)
+
+apply(mod$ci_result, 1, uniqueClus) %>% plot(type = "l")
+
+mod$beta_result[, 1, ] %>% t() %>% as.data.frame() %>%
+  mutate(iter = 1:3000) %>%
+  pivot_longer(!iter) %>%
+  ggplot(aes(x = iter, y = value, color = name)) +
+  geom_line()
+
+salsoSum <- data.frame(sample = as.numeric(rownames(otuTab)), clus = as.numeric(salso(mod$ci_result[-(1:1000), ]))) %>%
+  inner_join(metadata)
+
+table(salsoSum$clus)
+table(salsoSum$clus, salsoSum$dx)
+table(salsoSum$clus, salsoSum$Hx_Prev)
+table(salsoSum$clus, salsoSum$Gender)
+table(salsoSum$clus, salsoSum$Smoke)
+table(salsoSum$clus, salsoSum$Diabetic)
+table(salsoSum$clus, salsoSum$stage)
+
+salsoSum %>%
+  group_by(clus) %>%
+  summarise(mean(Age), sd(Age), mean(BMI), sd(BMI))
+
 ### Run the models
-## 1, nrow = 107, ncol = 303
+## 1, nrow = 107, ncol = 81
 
 set.seed(1)
 ciInit <- matrix(0, nrow = 107, ncol = 12)
@@ -61,7 +148,7 @@ ciInit[, 11] <- sample(0:19, 107, replace = TRUE)
 ciInit[, 12] <- sample(0:19, 107, replace = TRUE)
 
 xiInitDum <- lapply(4:12, function(y){sapply(0:max(ciInit[, y]), function(x){
-  p <- colSums(datUMich[which(ciInit[, y] == x), ])/sum(datUMich[which(ciInit[, y] == x), ])
+  p <- colSums(otuTab[which(ciInit[, y] == x), ])/sum(otuTab[which(ciInit[, y] == x), ])
   ifelse(is.infinite(log(p/(1-p))), -20, log(p/(1-p)))
 }) %>% t()
 })
@@ -83,10 +170,10 @@ xiInit[[10]] <- xiInitDum[[7]]
 xiInit[[11]] <- xiInitDum[[8]]
 xiInit[[12]] <- xiInitDum[[9]]
 
-resultName <- c(paste0("result_UMich_chain_", 1:3, "_init_oneClus_s2_1en1_s2MH_1en3.rds"),
-                paste0("result_UMich_chain_", 1:3, "_init_3clus_s2_1en1_s2MH_1en3.rds"),
-                paste0("result_UMich_chain_", 1:3, "_init_5clus_s2_1en1_s2MH_1en3.rds"),
-                paste0("result_UMich_chain_", 1:3, "_init_20clus_s2_1en1_s2MH_1en3.rds"))
+resultName <- c(paste0("result_cleaned_UMich_chain_", 1:3, "_init_oneClus_s2_1en1_s2MH_1en3.rds"),
+                paste0("result_cleaned_UMich_chain_", 1:3, "_init_3clus_s2_1en1_s2MH_1en3.rds"),
+                paste0("result_cleaned_UMich_chain_", 1:3, "_init_5clus_s2_1en1_s2MH_1en3.rds"),
+                paste0("result_cleaned_UMich_chain_", 1:3, "_init_20clus_s2_1en1_s2MH_1en3.rds"))
 
 set.seed(1, kind = "L'Ecuyer-CMRG")
 registerDoParallel(6)
@@ -94,10 +181,10 @@ globalTime <- Sys.time()
 foreach(t = 1:6) %dopar% {
   start_time <- Sys.time()
   mod <- mod_adaptive(iter = 25000, Kmax = 20, nbeta_split = 5,
-                      z = as.matrix(otuHIV), atrisk_init = matrix(1, nrow = 155, ncol = 60),
+                      z = as.matrix(otuTab), atrisk_init = matrix(1, nrow = 107, ncol = 81),
                       beta_init = as.matrix(xiInit[[t]]),
                       ci_init = ciInit[, t],
-                      theta = 1, mu = 0, s2 = 0.1, s2_MH = 1e-3,
+                      theta = 1, mu = 0, s2 = 1, s2_MH = 1e-3,
                       t_thres = 5000, launch_iter = 30,
                       r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 1)
   comp_time <- difftime(Sys.time(), start_time, units = "secs")
