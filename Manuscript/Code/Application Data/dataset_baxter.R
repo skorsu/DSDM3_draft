@@ -91,6 +91,7 @@ saveRDS(cleanedUmich, paste0(datapath, "baxter/cleanUmich.rds"))
 ### Read the data
 metadata <- read.delim(paste0(datapath, "baxter/metadata.tsv"))
 otuTab <- readRDS(paste0(datapath, "baxter/cleanUmich.rds"))
+otuTab <- as.matrix(otuTab)
 
 data.frame(x = 1:81, p = sort(colSums(otuTab)/sum(otuTab), decreasing = TRUE)) %>%
   ggplot(aes(x = x, y = p)) +
@@ -132,9 +133,7 @@ salsoSum %>%
   group_by(clus) %>%
   summarise(mean(Age), sd(Age), mean(BMI), sd(BMI))
 
-### Run the models
-## 1, nrow = 107, ncol = 81
-
+### RUN THE MODEL
 set.seed(1)
 ciInit <- matrix(0, nrow = 107, ncol = 12)
 ciInit[, 4] <- sample(0:2, 107, replace = TRUE)
@@ -148,10 +147,18 @@ ciInit[, 11] <- sample(0:19, 107, replace = TRUE)
 ciInit[, 12] <- sample(0:19, 107, replace = TRUE)
 
 xiInitDum <- lapply(4:12, function(y){sapply(0:max(ciInit[, y]), function(x){
-  p <- colSums(otuTab[which(ciInit[, y] == x), ])/sum(otuTab[which(ciInit[, y] == x), ])
+  pp <- otuTab[which(ciInit[, y] == x), ]
+  if(is.matrix(pp)){
+    p <- colSums(pp)/sum(pp)
+  } else {
+    p <- pp/sum(pp)
+  }
+  # p <- colSums(otuTab[which(ciInit[, y] == x), ])/sum(otuTab[which(ciInit[, y] == x), ])
   ifelse(is.infinite(log(p/(1-p))), -20, log(p/(1-p)))
 }) %>% t()
 })
+
+is.matrix(otuTab[1, ])
 
 xiInit <- vector("list", 12)
 xiInit[[1]] <- matrix(0, nrow = 20, ncol = 303)
@@ -180,7 +187,7 @@ registerDoParallel(6)
 globalTime <- Sys.time()
 foreach(t = 1:6) %dopar% {
   start_time <- Sys.time()
-  mod <- mod_adaptive(iter = 25000, Kmax = 20, nbeta_split = 5,
+  mod <- mod_adaptive(iter = 25000, Kmax = 20, nbeta_split = 10,
                       z = as.matrix(otuTab), atrisk_init = matrix(1, nrow = 107, ncol = 81),
                       beta_init = as.matrix(xiInit[[t]]),
                       ci_init = ciInit[, t],
