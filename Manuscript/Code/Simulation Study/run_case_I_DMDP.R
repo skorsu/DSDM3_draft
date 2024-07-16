@@ -39,7 +39,7 @@ resultDTMM <- foreach(t = 1:20) %dopar% {
   
   start_time <- Sys.time()
   clus_result <- adjDTMM(dat[[t]]$dat, 
-                         tree = read.tree(text = paste("(", paste(1:50, collapse = ", "), ");")), 
+                         tree = read.tree(text = paste("(", paste(1:250, collapse = ", "), ");")), 
                          init_c = rep(1, 50), mcmc_iter = 2500)
   tot_time <- difftime(Sys.time(), start_time, units = "secs")
   list(time = tot_time, result = t(clus_result$post_c))
