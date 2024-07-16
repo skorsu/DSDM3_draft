@@ -129,17 +129,40 @@ ggplot(testDatPlot, aes(x = name, y = Index, fill = value)) +
   geom_tile() +
   scale_fill_gradient(low = "white", high = "red")
 
-mod <- mod_adaptive(iter = 1000, Kmax = 10, nbeta_split = 50, 
+mod <- mod_adaptive(iter = 2500, Kmax = 10, nbeta_split = 50, 
                     z = testDat, atrisk_init = matrix(1, nrow = 100, ncol = 250), 
                     beta_init = matrix(0, nrow = 10, ncol = 250), 
                     ci_init = rep(0, 100), theta = 1, mu = 0, s2 = 0.1, 
-                    s2_MH = 1e-3, t_thres = 200, launch_iter = 30, 
+                    s2_MH = 1e-3, t_thres = 500, launch_iter = 30, 
                     r0g = 1, r1g = 1, r0c = 1, r1c = 9, thin = 1)
 
 apply(mod$ci_result, 1, function(x){length(unique(x))}) %>% plot(type = "l")
 mod$ci_result[500, ]
 table(salso(mod$ci_result[-(1:500), ]), sort(rep(1:4, 25)))
 plot(mod$beta_result[1, 220, ], type = "l")
+
+###### Simulated the data
+set.seed(1, kind = "L'Ecuyer-CMRG")
+registerDoParallel(1)
+simu_data_case_II <- foreach(t = 1:20) %dopar% {
+  testDat_1 <- datsim_new(n = 50, Jnoise = 200, Jsignal = 50, pi_gamma = 1,
+                          ZSumNoise = 100000, caseSignal = 3, aPhi = 1, bPhi = 1, aLambda = 1, bLambda = 1, 
+                          ZSumSignal = 25000)
+  testDat_2 <- datsim_new(n = 50, Jnoise = 200, Jsignal = 50, pi_gamma = 1,
+                          ZSumNoise = 100000, caseSignal = 3, aPhi = 1, bPhi = 1, aLambda = 1, bLambda = 1, 
+                          ZSumSignal = 25000)
+  
+  testDat <- rbind(cbind(testDat_1[1:25, 201:250], testDat_1[1:25, -(201:250)]),
+                   cbind(testDat_1[26:50, 1:50], testDat_1[26:50, 201:250], testDat_1[26:50, 51:200]), 
+                   cbind(testDat_2[1:25, 1:100], testDat_2[1:25, 201:250], testDat_2[1:25, 101:200]),
+                   testDat_2[26:50, ])
+  randIndex <- sample(1:100)
+  testDat <- testDat[randIndex, ]
+  clusAssign <- sort(rep(1:4, 25))[randIndex]
+  list(dat = testDat, clus = clusAssign)
+}
+stopImplicitCluster()
+saveRDS(simu_data_case_II, file = paste0(path, "/Simulation Study/simu_data_case_II.rds"))
 
 
 ### Simulate the data: ---------------------------------------------------------
