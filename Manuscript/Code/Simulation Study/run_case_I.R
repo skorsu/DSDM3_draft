@@ -1,3 +1,6 @@
+library(foreach)
+library(doParallel)
+
 ### Import the data
 path <- "/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/Manuscript/"
 if(! file.exists(path)){
