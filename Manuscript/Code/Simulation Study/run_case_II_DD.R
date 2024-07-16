@@ -19,7 +19,7 @@ result <- foreach(t = 1:20) %:%
     start_time <- Sys.time()
     mod <- DMDM(iter = 2500, Kmax = k, z = as.matrix(dat[[t]]$dat),
                 beta_mat = matrix(0, nrow = k, ncol = 250), 
-                ci_init = rep(0, 50), theta = 1, thin = 1)
+                ci_init = rep(0, 100), theta = 1, thin = 1)
     tot_time <- difftime(Sys.time(), start_time, units = "secs")
     list(mod = mod, time = tot_time) 
             
