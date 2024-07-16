@@ -1,4 +1,5 @@
 library(DTMM)
+library(ape)
 library(foreach)
 library(doParallel)
 
