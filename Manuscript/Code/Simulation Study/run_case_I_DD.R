@@ -10,6 +10,8 @@ if(! file.exists(path)){
 ### Import the data
 dat <- readRDS(paste0(path, "Data/Simulation Study/simu_data_case_I.rds"))
 
+set.seed(1, kind = "L'Ecuyer-CMRG")
+registerDoParallel(3)
 result <- foreach(t = 1:20) %:%
   foreach(k = 2:9) %dopar% {
     
@@ -22,6 +24,7 @@ result <- foreach(t = 1:20) %:%
     list(mod = mod, time = tot_time) 
             
 }
+stopImplicitCluster()
 
 saveRDS(result, 
         file = paste0(path, "Result/Simulation Study/simu_data_case_I_DD.rds"))
