@@ -59,7 +59,7 @@ result <- foreach(h = 1:length(hyperParam)) %:% ### Each set of the hyperparamet
                                 thin = 1)
     tot_time <- difftime(Sys.time(), start_time, units = "secs")
     saveRDS(list(mod = mod, time = tot_time), 
-            file = paste0(path, "Result/Sensitivity Analysis/simu_data_case_I_chain_", r, "_hyperparamset_", h, ".rds"))
+            file = paste0(path, "Result/Sensitivity Analysis/sensitivity_case_I_chain_", r, "_hyperparamset_", h, ".rds"))
     
     list(time = tot_time, result = clus_result$ci_result)
   }
