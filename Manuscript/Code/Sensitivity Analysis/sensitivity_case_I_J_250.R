@@ -11,29 +11,29 @@ if(! file.exists(path)){
 dat <- readRDS(paste0(path, "Data/Simulation Study/simu_data_case_I.rds"))
 
 ### Set of the hyperparameter: -------------------------------------------------
-hyperParam <- list(c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 500),
-                   c(Kmax = 10, nbeta_split = 5, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 500),
-                   c(Kmax = 10, nbeta_split = 20, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 500),
-                   c(Kmax = 10, nbeta_split = 10, theta = 0.1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 500),
-                   c(Kmax = 10, nbeta_split = 10, theta = 10, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 500),
-                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 0.1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 500),
-                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 10, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 500),
-                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-5, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 500),
-                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 500),
-                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 5, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 500),
-                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 20, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 500),
-                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 0.1, r1g = 1, r0c = 1, r1c = 1, t_thres = 500),
-                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 10, r1g = 1, r0c = 1, r1c = 1, t_thres = 500),
-                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 0.1, r0c = 1, r1c = 1, t_thres = 500),
-                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 10, r0c = 1, r1c = 1, t_thres = 500),
-                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 4, r1c = 1, t_thres = 500),
-                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 9, r1c = 1, t_thres = 500),
-                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 4, t_thres = 500),
-                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 9, t_thres = 500),
-                   c(Kmax = 5, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 500),
-                   c(Kmax = 20, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 500),
-                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 250),
-                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 750))
+hyperParam <- list(c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 5000),
+                   c(Kmax = 10, nbeta_split = 5, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 5000),
+                   c(Kmax = 10, nbeta_split = 20, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 5000),
+                   c(Kmax = 10, nbeta_split = 10, theta = 0.1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 5000),
+                   c(Kmax = 10, nbeta_split = 10, theta = 10, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 5000),
+                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 0.1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 5000),
+                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 10, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 5000),
+                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-5, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 5000),
+                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 5000),
+                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 5, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 5000),
+                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 20, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 5000),
+                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 0.1, r1g = 1, r0c = 1, r1c = 1, t_thres = 5000),
+                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 10, r1g = 1, r0c = 1, r1c = 1, t_thres = 5000),
+                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 0.1, r0c = 1, r1c = 1, t_thres = 5000),
+                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 10, r0c = 1, r1c = 1, t_thres = 5000),
+                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 4, r1c = 1, t_thres = 5000),
+                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 9, r1c = 1, t_thres = 5000),
+                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 4, t_thres = 5000),
+                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 9, t_thres = 5000),
+                   c(Kmax = 5, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 5000),
+                   c(Kmax = 20, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 5000),
+                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 2500),
+                   c(Kmax = 10, nbeta_split = 10, theta = 1, s2 = 1, s2_MH = 1e-3, launch_iter = 10, r0g = 1, r1g = 1, r0c = 1, r1c = 1, t_thres = 7500))
 
 ### Run all models and save the result -----------------------------------------
 set.seed(1, kind = "L'Ecuyer-CMRG")
@@ -42,8 +42,8 @@ registerDoParallel(3)
 result <- foreach(h = 1:length(hyperParam)) %:% ### Each set of the hyperparameter
   foreach(r = 1:20) %dopar% { ### The number of replicated data
     start_time <- Sys.time()
-    mod <- mod_adaptive(iter = 2500, Kmax = hyperParam[[h]]["Kmax"], 
-                                nbeta_split = hyperParam[[h]]["nbeta_split"], 
+    mod <- mod_adaptive(iter = 10000, Kmax = hyperParam[[h]]["Kmax"], 
+                        nbeta_split = hyperParam[[h]]["nbeta_split"], 
                                 z = dat[[r]]$dat, 
                                 atrisk_init = matrix(1, ncol = 250, nrow = 50), 
                                 beta_init = matrix(0, ncol = 250, nrow = hyperParam[[h]]["Kmax"]), 
