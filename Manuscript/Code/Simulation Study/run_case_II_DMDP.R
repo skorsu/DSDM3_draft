@@ -42,8 +42,7 @@ resultDTMM <- foreach(t = 1:20) %dopar% {
                          tree = read.tree(text = paste("(", paste(1:250, collapse = ", "), ");")), 
                          init_c = rep(1, 100), mcmc_iter = 10000)
   tot_time <- difftime(Sys.time(), start_time, units = "secs")
-  list(time = tot_time, result = t(clus_result$post_c))
-  saveRDS(list(mod = mod, time = tot_time), 
+  saveRDS(list(time = tot_time, result = t(clus_result$post_c)), 
           file = paste0(path, "Result/Simulation Study/simu_data_case_II_chain_", t, "_DMDP.rds"))
   
 }
