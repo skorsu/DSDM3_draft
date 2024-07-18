@@ -164,6 +164,115 @@ simu_data_case_II <- foreach(t = 1:20) %dopar% {
 stopImplicitCluster()
 saveRDS(simu_data_case_II, file = paste0(path, "/Simulation Study/simu_data_case_II.rds"))
 
+### Case 3: J = 100 ------------------------------------------------------------
+testDat <- datsim_new(n = 50, Jnoise = 80, Jsignal = 20, pi_gamma = 0.85,
+                      ZSumNoise = 4000, caseSignal = 2, aPhi = 1, bPhi = 1, aLambda = 1, bLambda = 1, 
+                      ZSumSignal = 1000)
+randIndex <- sample(1:50)
+testDat <- testDat[randIndex, ]
+testDatPlot <- data.frame(testDat, Index = 1:50) %>%
+  pivot_longer(!Index)
+
+testDatPlot$name <- factor(testDatPlot$name, levels = paste0("X", 1:500))
+ggplot(testDatPlot, aes(x = name, y = Index, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "red")
+
+mod <- mod_adaptive(iter = 2500, Kmax = 10, nbeta_split = 20, 
+                    z = testDat, atrisk_init = matrix(1, nrow = 50, ncol = 100), 
+                    beta_init = matrix(0, nrow = 10, ncol = 100), 
+                    ci_init = rep(0, 50), theta = 1, mu = 0, s2 = 0.1, 
+                    s2_MH = 1e-3, t_thres = 500, launch_iter = 30, 
+                    r0g = 1, r1g = 1, r0c = 1, r1c = 4, thin = 1)
+
+apply(mod$ci_result, 1, function(x){length(unique(x))}) %>% plot(type = "l")
+salso(mod$ci_result)
+
+as.numeric(salso(mod$ci_result)) %>% table(sort(rep(1:2, 25))[randIndex])
+plot(mod$beta_result[6, 220, ], type = "l")
+
+###### Simulated the data
+set.seed(1, kind = "L'Ecuyer-CMRG")
+registerDoParallel(1)
+simu_data_case_III <- foreach(t = 1:20) %dopar% {
+  testDat <- datsim_new(n = 50, Jnoise = 80, Jsignal = 20, pi_gamma = 0.85,
+                        ZSumNoise = 4000, caseSignal = 2, aPhi = 1, bPhi = 1, aLambda = 1, bLambda = 1, 
+                        ZSumSignal = 1000)
+  randIndex <- sample(1:50)
+  testDat <- testDat[randIndex, ]
+  clusAssign <- sort(rep(1:2, 25))[randIndex]
+  list(dat = testDat, clus = clusAssign)
+}
+stopImplicitCluster()
+saveRDS(simu_data_case_III, file = paste0(path, "/Simulation Study/simu_data_case_III.rds"))
+
+### Case 4: J = 150 ------------------------------------------------------------
+testDat_1 <- datsim_new(n = 60, Jnoise = 120, Jsignal = 30, pi_gamma = 0.85,
+                        ZSumNoise = 8000, caseSignal = 2.5, aPhi = 1, bPhi = 1, aLambda = 1, bLambda = 1, 
+                        ZSumSignal = 2000)
+testDat_2 <- datsim_new(n = 40, Jnoise = 120, Jsignal = 30, pi_gamma = 0.85,
+                        ZSumNoise = 8000, caseSignal = 2.5, aPhi = 1, bPhi = 1, aLambda = 1, bLambda = 1, 
+                        ZSumSignal = 2000)
+testDat_3 <- datsim_new(n = 50, Jnoise = 120, Jsignal = 30, pi_gamma = 0.85,
+                        ZSumNoise = 8000, caseSignal = 2.5, aPhi = 1, bPhi = 1, aLambda = 1, bLambda = 1, 
+                        ZSumSignal = 2000)
+
+testDat <- rbind(testDat_1,
+      cbind(testDat_2[1:20, 121:150], testDat_2[1:20, -(121:150)]), 
+      cbind(testDat_2[21:40, 1:20], testDat_2[21:40, 121:150], testDat_2[21:40, 21:120]),
+      cbind(testDat_3[1:25, 1:50], testDat_3[1:25, 121:150], testDat_3[1:25, 51:120]),
+      cbind(testDat_3[26:50, 1:80], testDat_3[26:50, 121:150], testDat_3[26:50, 81:120]))
+
+# randIndex <- sample(1:50)
+#$ testDat <- testDat[randIndex, ]
+testDatPlot <- data.frame(testDat, Index = 1:150) %>%
+  pivot_longer(!Index)
+
+testDatPlot$name <- factor(testDatPlot$name, levels = paste0("X", 1:500))
+ggplot(testDatPlot, aes(x = name, y = Index, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "red")
+
+mod <- mod_adaptive(iter = 1500, Kmax = 10, nbeta_split = 30, 
+                    z = testDat, atrisk_init = matrix(1, nrow = 150, ncol = 150), 
+                    beta_init = matrix(0, nrow = 10, ncol = 150), 
+                    ci_init = rep(0, 150), theta = 1, mu = 0, s2 = 0.1, 
+                    s2_MH = 1e-3, t_thres = 1000, launch_iter = 30, 
+                    r0g = 1, r1g = 1, r0c = 1, r1c = 4, thin = 1)
+
+apply(mod$ci_result, 1, function(x){length(unique(x))}) %>% plot(type = "l")
+salso(mod$ci_result)
+
+as.numeric(salso(mod$ci_result)) %>% table(c(sort(rep(1:2, 30)), sort(rep(3:4, 20)), sort(rep(5:6, 25))))
+plot(mod$beta_result[6, 220, ], type = "l")
+
+###### Simulated the data
+set.seed(1, kind = "L'Ecuyer-CMRG")
+registerDoParallel(1)
+simu_data_case_IV <- foreach(t = 1:20) %dopar% {
+  testDat_1 <- datsim_new(n = 60, Jnoise = 120, Jsignal = 30, pi_gamma = 0.85,
+                          ZSumNoise = 8000, caseSignal = 2.5, aPhi = 1, bPhi = 1, aLambda = 1, bLambda = 1, 
+                          ZSumSignal = 2000)
+  testDat_2 <- datsim_new(n = 40, Jnoise = 120, Jsignal = 30, pi_gamma = 0.85,
+                          ZSumNoise = 8000, caseSignal = 2.5, aPhi = 1, bPhi = 1, aLambda = 1, bLambda = 1, 
+                          ZSumSignal = 2000)
+  testDat_3 <- datsim_new(n = 50, Jnoise = 120, Jsignal = 30, pi_gamma = 0.85,
+                          ZSumNoise = 8000, caseSignal = 2.5, aPhi = 1, bPhi = 1, aLambda = 1, bLambda = 1, 
+                          ZSumSignal = 2000)
+  
+  testDat <- rbind(testDat_1,
+                   cbind(testDat_2[1:20, 121:150], testDat_2[1:20, -(121:150)]), 
+                   cbind(testDat_2[21:40, 1:20], testDat_2[21:40, 121:150], testDat_2[21:40, 21:120]),
+                   cbind(testDat_3[1:25, 1:50], testDat_3[1:25, 121:150], testDat_3[1:25, 51:120]),
+                   cbind(testDat_3[26:50, 1:80], testDat_3[26:50, 121:150], testDat_3[26:50, 81:120]))
+  randIndex <- sample(1:150)
+  testDat <- testDat[randIndex, ]
+  clusAssign <- c(sort(rep(1:2, 30)), sort(rep(3:4, 20)), sort(rep(5:6, 25)))[randIndex]
+  list(dat = testDat, clus = clusAssign)
+}
+stopImplicitCluster()
+saveRDS(simu_data_case_IV, file = paste0(path, "/Simulation Study/simu_data_case_IV.rds"))
+
 
 ### Simulate the data: ---------------------------------------------------------
 nData <- 20
