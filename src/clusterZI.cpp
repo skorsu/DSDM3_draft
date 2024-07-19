@@ -790,6 +790,80 @@ Rcpp::List mod_adaptive(unsigned int iter, unsigned int Kmax, unsigned int nbeta
   
 }
 
+// DM-ZIDM: --------------------------------------------------------------------
+// [[Rcpp::export]]
+Rcpp::List DM_ZIDM(unsigned int iter, unsigned int Kmax, unsigned int nbeta_split, 
+                   arma::mat z, arma::mat beta_init, 
+                   arma::uvec ci_init, double theta, double mu, double s2, 
+                   double s2_MH, unsigned int t_thres, unsigned int launch_iter, 
+                   double r0c, double r1c, 
+                   unsigned int thin){
+  
+  std::cout << "Total Iteration: " << iter << std::endl;
+  std::cout << "Thinning: " << thin << std::endl;
+  std::cout << "Total Recorded Iteration: " << iter/thin << std::endl;
+  std::cout << "############ PERFORM THE CLUSTERING ############" << std::endl;
+  unsigned int save_col = 0;
+  
+  arma::mat atrisk_mat(z.n_rows, z.n_cols, arma::fill::value(1.0));
+  
+  arma::umat ci_result(z.n_rows, iter/thin, arma::fill::value(Kmax + 1));
+  arma::vec sm_status(iter, arma::fill::value(-2));
+  arma::vec sm_accept(iter, arma::fill::value(-2));
+  
+  arma::mat MH_accept(iter, Kmax, arma::fill::value(-2));
+  arma::cube beta_result(Kmax, z.n_cols, iter, arma::fill::value(0));
+  
+  arma::mat beta0 = beta_init; 
+  arma::mat beta_mcmc(beta_init); 
+  Rcpp::List sm_sum;
+  Rcpp::List beta_sum; 
+  arma::uvec ci_mcmc(ci_init);
+  
+  for(int t = 0; t < iter; ++t){
+    // update beta
+    beta_sum = update_beta_adaptive(t, t_thres, z, atrisk_mat, beta_result, beta0,
+                                    ci_init, mu, s2, s2_MH);
+    arma::mat bMCMC = beta_sum["beta_update"];
+    // reallocation
+    ci_mcmc = realloc_full(Kmax, z, atrisk_mat, bMCMC, ci_init, theta);
+    // sm
+    sm_sum = sm(Kmax, nbeta_split, z, atrisk_mat, bMCMC, ci_mcmc, 
+                theta, mu, s2, launch_iter, r0c, r1c);
+    
+    // record the result
+    arma::mat beta_final = sm_sum["beta_result"];
+    beta_init = beta_final;
+    
+    arma::uvec ci_final = sm_sum["ci_result"];
+    ci_init = ci_final;
+    
+    sm_status[t] = sm_sum["split_index"];
+    sm_accept[t] = sm_sum["accept_SM"];
+    
+    beta_result.slice(t) = beta_final;
+    arma::vec MHa = beta_sum["accept_MH"];
+    MH_accept.row(t) = MHa.t();
+    
+    if(((t + 1) - (floor((t + 1)/thin) * thin)) == 0){
+      std::cout << "Iter: " << (t+1) << " - Done!" << std::endl;
+      ci_result.col(save_col) = ci_final;
+      save_col += 1;
+    }
+    
+  }
+  
+  Rcpp::List result;
+  result["ci_result"] = ci_result.t();
+  result["beta_result"] = beta_result;
+  result["sm_status"] = sm_status;
+  result["sm_accept"] = sm_accept;
+  result["MH_accept"] = MH_accept;
+  return result;
+  
+}
+
+
 // // DM-x: -----------------------------------------------------------------------
 // [[Rcpp::export]]
 arma::rowvec dm_data(unsigned int Kmax, arma::rowvec zi, arma::mat z_not_i,
@@ -1256,52 +1330,52 @@ Rcpp::List DMZIDM_sm(unsigned int Kmax, arma::mat z,
 
 }
 
-// [[Rcpp::export]]
-Rcpp::List DMZIDM(unsigned int iter, unsigned int Kmax, arma::mat z,
-                  arma::mat beta_mat, arma::uvec ci_init, double theta,
-                  unsigned int launch_iter, double r0c, double r1c,
-                  unsigned int thin){
-
-  std::cout << "Total Iteration: " << iter << std::endl;
-  std::cout << "Thinning: " << thin << std::endl;
-  std::cout << "Total Recorded Iteration: " << iter/thin << std::endl;
-  std::cout << "############ PERFORM THE CLUSTERING ############" << std::endl;
-  unsigned int save_col = 0;
-
-  arma::umat ci_result(z.n_rows, iter/thin, arma::fill::value(Kmax + 1));
-  arma::vec sm_status(iter, arma::fill::value(-2));
-  arma::vec sm_accept(iter, arma::fill::value(-2));
-
-  Rcpp::List sm_sum;
-  arma::uvec ci_mcmc(ci_init);
-
-  for(int t = 0; t < iter; ++t){
-    // reallocation
-    ci_mcmc = DMZIDM_realloc(z, beta_mat, ci_init, theta);
-    // sm
-    sm_sum = DMZIDM_sm(Kmax, z, beta_mat, ci_mcmc, theta, launch_iter, r0c, r1c);
-
-    // record the result
-    arma::uvec ci_final = sm_sum["ci_result"];
-    ci_init = ci_final;
-    sm_status[t] = sm_sum["split_index"];
-    sm_accept[t] = sm_sum["accept_SM"];
-
-    if(((t + 1) - (floor((t + 1)/thin) * thin)) == 0){
-      std::cout << "Iter: " << (t+1) << " - Done!" << std::endl;
-      ci_result.col(save_col) = ci_final;
-      save_col += 1;
-    }
-
-  }
-
-  Rcpp::List result;
-  result["ci_result"] = ci_result.t();
-  result["sm_status"] = sm_status;
-  result["sm_accept"] = sm_accept;
-  return result;
-
-}
+// // [[Rcpp::export]]
+// Rcpp::List DMZIDM(unsigned int iter, unsigned int Kmax, arma::mat z,
+//                   arma::mat beta_mat, arma::uvec ci_init, double theta,
+//                   unsigned int launch_iter, double r0c, double r1c,
+//                   unsigned int thin){
+// 
+//   std::cout << "Total Iteration: " << iter << std::endl;
+//   std::cout << "Thinning: " << thin << std::endl;
+//   std::cout << "Total Recorded Iteration: " << iter/thin << std::endl;
+//   std::cout << "############ PERFORM THE CLUSTERING ############" << std::endl;
+//   unsigned int save_col = 0;
+// 
+//   arma::umat ci_result(z.n_rows, iter/thin, arma::fill::value(Kmax + 1));
+//   arma::vec sm_status(iter, arma::fill::value(-2));
+//   arma::vec sm_accept(iter, arma::fill::value(-2));
+// 
+//   Rcpp::List sm_sum;
+//   arma::uvec ci_mcmc(ci_init);
+// 
+//   for(int t = 0; t < iter; ++t){
+//     // reallocation
+//     ci_mcmc = DMZIDM_realloc(z, beta_mat, ci_init, theta);
+//     // sm
+//     sm_sum = DMZIDM_sm(Kmax, z, beta_mat, ci_mcmc, theta, launch_iter, r0c, r1c);
+// 
+//     // record the result
+//     arma::uvec ci_final = sm_sum["ci_result"];
+//     ci_init = ci_final;
+//     sm_status[t] = sm_sum["split_index"];
+//     sm_accept[t] = sm_sum["accept_SM"];
+// 
+//     if(((t + 1) - (floor((t + 1)/thin) * thin)) == 0){
+//       std::cout << "Iter: " << (t+1) << " - Done!" << std::endl;
+//       ci_result.col(save_col) = ci_final;
+//       save_col += 1;
+//     }
+// 
+//   }
+// 
+//   Rcpp::List result;
+//   result["ci_result"] = ci_result.t();
+//   result["sm_status"] = sm_status;
+//   result["sm_accept"] = sm_accept;
+//   return result;
+// 
+// }
 // 
 // // Debugging: Reallocation + Beta Update ---------------------------------------
 // 
