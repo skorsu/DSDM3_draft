@@ -771,10 +771,13 @@ Rcpp::List mod_adaptive(unsigned int iter, unsigned int Kmax, unsigned int nbeta
     MH_accept.row(t) = MHa.t();
     
     if(((t + 1) - (floor((t + 1)/thin) * thin)) == 0){
-      std::cout << "Iter: " << (t+1) << " - Done!" << std::endl;
       atrisk_result.slice(save_col) = atrisk_init;
       ci_result.col(save_col) = ci_final;
       save_col += 1;
+    }
+    
+    if(((t + 1) - (floor((t + 1)/500) * 500)) == 0){
+      std::cout << "Iter: " << (t+1) << " - Done!" << std::endl;
     }
     
   }
@@ -882,9 +885,12 @@ Rcpp::List DM_DM(unsigned int iter, unsigned int Kmax,
     MH_accept.row(t) = MHa.t();
     
     if(((t + 1) - (floor((t + 1)/thin) * thin)) == 0){
-      std::cout << "Iter: " << (t+1) << " - Done!" << std::endl;
       ci_result.col(save_col) = ci_final;
       save_col += 1;
+    }
+    
+    if(((t + 1) - (floor((t + 1)/500) * 500)) == 0){
+      std::cout << "Iter: " << (t+1) << " - Done!" << std::endl;
     }
     
   }
@@ -953,9 +959,12 @@ Rcpp::List DM_ZIDM(unsigned int iter, unsigned int Kmax, unsigned int nbeta_spli
     MH_accept.row(t) = MHa.t();
     
     if(((t + 1) - (floor((t + 1)/thin) * thin)) == 0){
-      std::cout << "Iter: " << (t+1) << " - Done!" << std::endl;
       ci_result.col(save_col) = ci_final;
       save_col += 1;
+    }
+    
+    if(((t + 1) - (floor((t + 1)/500) * 500)) == 0){
+      std::cout << "Iter: " << (t+1) << " - Done!" << std::endl;
     }
     
   }
