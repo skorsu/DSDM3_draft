@@ -41,7 +41,7 @@ foreach(t = 1:6) %dopar% {
   ### ZIDM-ZIDM
   start_time <- Sys.time()
   mod <- mod_adaptive(iter = 5000, Kmax = K_max_List[t], nbeta_split = 50, 
-                      z = as.matrix(dat[[t]]$dat), atrisk_init = matrix(1, nrow = 50, ncol = 250), 
+                      z = as.matrix(dat), atrisk_init = matrix(1, nrow = 50, ncol = 250), 
                       beta_init = matrix(0, nrow = K_max_List[t], ncol = 250), 
                       ci_init = rep(0, 50), theta = 1, mu = 0, s2 = 0.1, 
                       s2_MH = 1e-3, t_thres = 1000, launch_iter = 30, 
