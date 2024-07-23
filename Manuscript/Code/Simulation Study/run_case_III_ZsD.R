@@ -19,7 +19,7 @@ foreach(t = 1:20) %dopar% {
   
   ### ZIDM-sDM
   start_time <- Sys.time()
-  mod <- ZIDM_DM(iter = 5000, Kmax = 10, nbeta_split = 20, 
+  mod <- ZIDM_DM(iter = 5000, Kmax = 10, 
                  z = as.matrix(dat[[t]]$dat), atrisk_init = matrix(1, nrow = 50, ncol = 100), 
                  beta_init = matrix(0, nrow = 10, ncol = 100), 
                  ci_init = rep(0, 50), theta = 1e-2, mu = 0, s2 = 0.1, 
