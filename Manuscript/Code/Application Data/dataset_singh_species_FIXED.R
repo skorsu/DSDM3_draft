@@ -16,6 +16,8 @@ datapath <- paste0(path, "Data/Application Data/")
 otuTab <- readRDS(paste0(datapath, "singh/clean_singh_species.rds"))
 metaData <- read.delim(paste0(datapath, "singh/edd_singh.metadata.txt"))
 
+mean(otuTab == 0)
+
 ### Which OTU for represetn taxap traceplot
 colSums(otuTab) %>% sort(decreasing = TRUE, index.return = TRUE) %>% .$ix %>% .[1:5]
 apply(otuTab, 2, var) %>% sort(decreasing = TRUE, index.return = TRUE) %>% .$ix %>% .[1:5]
@@ -25,7 +27,7 @@ filename <- paste0("Result/Result/result_cleaned_singh_species_chain_", 1:2, "_i
                    c("oneClus", "oneClus", "3clus", "3clus", "5clus", "5clus", "20clus", "20clus"), 
                    "_s2_1_s2MH_1en5_FIXED.rds")
 
-for(i in 1:8){
+for(i in c(1, 2, 3, 5, 7)){
   file.exists(paste0(path, filename[i])) %>% print()
 }
 
@@ -36,7 +38,7 @@ xiImp <- vector("list", 8)
 lastMCMC <- vector("list", 8)
 
 start_time <- Sys.time()
-for(i in 1:8){
+for(i in c(1, 2, 3, 5, 7)){
   
   if(file.exists(paste0(path, filename[i]))){
     set.seed(1)
@@ -69,7 +71,7 @@ activeLong <- as.data.frame(activeClus) %>%
 # chainName <- paste0(sort(rep(c(1, 3, 5, 20), 2)), c(rep(" Cluster", 2), rep(" Clusters", 6)),
 #                     ": Chain ", 1:2)
 
-chainName <- paste0("Chain ", 1:8)
+chainName <- paste0("Chain ", c(1, 2, 3, 6, 4, 7, 5, 8))
 
 activeLong$name <- factor(activeLong$name, labels = chainName)
 
@@ -107,7 +109,7 @@ xiPlotList <- lapply(1:5, function(y){
   
 })
 
-xiPlotList[[5]]
+xiPlotList[[2]]
 
 ### Combined MCMC for the final cluster assignment
 combClus <- lapply(1:8, function(x){
@@ -162,7 +164,8 @@ data.frame(Cluster = paste0("Cluster ", combClus),
   ggplot(aes(y = value, x = Cluster)) +
   geom_boxplot(width = 0.5) +
   facet_wrap(. ~ name, scales = "free_y") +
-  labs(y = "")
+  labs(y = "") +
+  theme_bw()
 
 ### Phylum difference
 taxoLevel <- data.frame(p = str_remove(str_extract(colnames(otuTab), "p__[^;]*"), "p__"),
