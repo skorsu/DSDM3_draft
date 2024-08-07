@@ -1,7 +1,8 @@
 ---
-title: "ClusterZI - Vignettes"
+title: "ClusterZI - Vignette"
 output:
   pdf_document: default
+bibliography: references.bib
 ---
 
 ```{r setup, include=FALSE}
@@ -12,20 +13,23 @@ library(latex2exp)
 library(ClusterZI)
 library(salso)
 library(tictoc)
+library(gridExtra)
 ```
 
-```{r}
+```{r, include=FALSE}
 # library(Rcpp)
 # library(devtools)
-# compileAttributes()
-# build()
-# install()
-# uninstall()
+# uninstall(); compileAttributes(); build(); install()
+# compileAttributes(); build(); install()
+```
+
+```{r, eval = FALSE, include=FALSE}
+install.packages("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI_1.0.tar.gz", repos = NULL, type="source")
 ```
 
 # Introduction
 
-This vignette demonstrates how to implement the semi-parametric clustering methods on the microbiome data, which assumed to be the Zero-Inflated Dirichlet-Multinomial distribution, explained in the main manuscript, ["Main Manuscript"]. This vignette first provides the brief intstruction on how to install the packages. The document then provides the instruction on how to simulate the data used in the main manuscript. The implementation of the model on the both simulated data, and the application data is provided in the end of this vignette.
+This vignette demonstrates how to implement semi-parametric clustering methods on microbiome data, which is assumed to follow the Zero-Inflated Dirichlet-Multinomial distribution as explained in the main manuscript, ["Main Manuscript"]. It begins with brief instructions on how to install the packages for implementing the proposed model. Next, the document provides guidance on simulating the data used in the main manuscript. Finally, it covers the implementation of the model on both simulated and application data.
 
 # Installation
 
@@ -37,7 +41,7 @@ devtools::install_github("skorsu/ClusterZI")
 
 # Simulation Data
 
-In this section, we demonstrate how we obtain the simulated simulated data used in the main manuscript. After installing and loading `ClusterZI` package to the R environment, we use the the `sim_clusDat` function to generate the two-cluster Zero-Inflated Dirichlet-Multinomial distributed data.
+In this section, we demonstrate how to obtain the simulated data used in the main manuscript. After installing and loading the `ClusterZI` package into the R environment, we use the `sim_clusDat()` function to generate two-cluster Zero-Inflated Dirichlet-Multinomial distributed data.
 
 ```{r}
 ### Simulate the data
@@ -45,33 +49,117 @@ simDat <- sim_clusDat(n = 100, Jnoise = 150, Jsignal = 50, pZero = 0.35,
                       ZSumNoise = 12500, ZSumSignal = 2500, seed = 1)
 ```
 
-In order to use the `sim_clusDat` function, we need to specify the number of the observations $(n)$, the number of the noise taxa (taxon that does not contain the information about the clustering)  $(J_{\text{noise}})$, the number of the signal taxa (taxon that differentiate between clusters) $(J_{\text{signal}})$, the proportion of zero expected in the simulated dataset (pZero), the sequencing depth for both noise and signal taxa (ZSumNoise and ZSumSignal respectively), and the random seed (seed). Note that the `sim_clusDat` function split the observations into two clusters evenly. The result from the `sim_clusDat` function is a list consisted of two elements: the simulated OTU table (`dat`) and the cluster allocation for each observation (`c`).
+To use the `sim_clusDat()` function, we need to specify several parameters: the number of observations $(n)$, the number of noise taxa (taxa that do not contain information about the clustering) $(J_{\text{noise}})$, the number of signal taxa (taxa that differentiate between clusters) $(J_{\text{signal}})$, the proportion of zeros expected in the simulated dataset (pZero), the sequencing depth for both noise and signal taxa (ZSumNoise and ZSumSignal, respectively), and the random seed (seed). Note that the `sim_clusDat()` function splits the observations into two clusters evenly. The result from the `sim_clusDat()` function is a list consisting of two elements: the simulated OTU table (dat) and the cluster allocation for each observation (c). For example, in this case, we have simulated 100 observations with 200 taxa, 50 of which are considered signal taxa. In this simulated dataset, we expect that around 35% of the counts are zero. The assumed sequencing depth for each observation is 15,000, with 12,500 for the noise taxa and 2,500 for the signal taxa. We save the simulated data in the object named `simDat`. To access the simulated OTU table, we use `simDat$dat`, while `simDat$c` gives us the cluster allocation.
 
-For example, in this case, we have simulated 100 observations with 200 taxa, where 50 of them are considered as the signal taxa. In this simulated dataset, we expect that around 35% of the count are 0. Note that the assumed sequencing depth for each observations is 15,000 where 12,500 and 2,500 are for the noise and signal taxa respectively. We save the simulated data in the object name `simDat`. To access the simulated OTU table, we use `simDat$dat`, while using `simDat$c` give us the cluster allocation. 
+Note that there are six other default arguments, which are listed below:
 
+  - shuffle: Determines whether the order of observations should be shuffled. The default is TRUE. If set to FALSE, observations from the same cluster will be grouped together.
+  - caseSignal: This is the complexity index, ranging from 1 to 5, where 1 is the most complex and 5 is the least complex. The default is 3.
+  - aPhi, bPhi, aLambda, bLambda: These parameters control the characteristics of each cluster.
 
-
-
+The limitation of the `sim_clusDat()` function is that it is suitable for simulating data from only two clusters. However, we can manually extend this function to generate more than two clusters. For example, if we want to generate 200 observations with four different clusters, where the cluster sizes are 60, 60, 40, and 40, respectively, we can use the code below.
 
 ```{r}
-simDat$c
-```
+### Extend the code for simulating 4 clusters.
+#### Generate the first 120 observations, 60 from each cluster,
+simDat_1 <- sim_clusDat(n = 120, Jnoise = 150, Jsignal = 50, pZero = 0.35, 
+                        ZSumNoise = 12500, ZSumSignal = 2500, seed = 1, shuffle = FALSE) 
+#### Generate the other 80 observations, 40 from each cluster,
+simDat_2 <- sim_clusDat(n = 80, Jnoise = 150, Jsignal = 50, pZero = 0.35, 
+                        ZSumNoise = 12500, ZSumSignal = 2500, seed = 1, shuffle = FALSE)
+
+#### Rearrange the order of the taxa to differentiate among these 4 clusters
+simDat_4clus <- rbind(simDat_1$dat,
+                      cbind(simDat_2$dat[1:40, 151:200], simDat_2$dat[1:40, -(151:200)]),
+                      cbind(simDat_2$dat[41:80, 1:50], simDat_2$dat[1:40, 151:200], 
+                            simDat_2$dat[1:40, 51:150]))
 
 
-```{r, eval=FALSE}
-tic()
+#### Optional: Shuffle the order of the observations
 set.seed(1)
-mod <- mod_adaptive(iter = 1000, Kmax = 10, nbeta_split = 10, z = simDat$dat, 
-                    atrisk_init = matrix(1, nrow = 100, ncol = 200), 
-                    beta_init = matrix(0, nrow = 10, ncol = 200), 
-                    ci_init = rep(0, 100), theta = 1, mu = 0, s2 = 0.1, 
-                    s2_MH = 1e-3, t_thres = 250, launch_iter = 30, 
-                    r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 1)
-toc()
+index <- sample(1:200)
+simDat_4clus <- simDat_4clus[index, ]
+simDat_4clus_c <- c(simDat_1$c, simDat_2$c + 2)[index]
 ```
 
-```{r, eval=FALSE}
-apply(mod$ci_result, 1, function(x){length(unique(x))}) %>% plot(type = "l")
-salso(mod$ci_result)
+```{r, echo = FALSE}
+### 2 Clusters
+simDat_Long <- data.frame(simDat$dat, i = 1:100) %>%
+  pivot_longer(!i)
+simDat_Long$i <- factor(simDat_Long$i, levels = sort(simDat$c, index.return = TRUE)$ix)
+simDat_Long$name <- factor(simDat_Long$name, levels = paste0("X", 1:200))
+p1 <- ggplot(simDat_Long, aes(x = name, y = i, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "red") +
+  theme_bw() +
+  theme(legend.position = "none", axis.text = element_blank()) +
+  labs(x = "Observation", y = "Taxa")
+
+### 4 Clusters
+simDat_Long_4c <- data.frame(simDat_4clus, i = 1:200) %>%
+  pivot_longer(!i)
+simDat_Long_4c$i <- factor(simDat_Long_4c$i, levels = sort(simDat_4clus_c, index.return = TRUE)$ix)
+simDat_Long_4c$name <- factor(simDat_Long_4c$name, levels = paste0("X", 1:200))
+p2 <- ggplot(simDat_Long_4c, aes(x = name, y = i, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "red") +
+  theme_bw() +
+  theme(legend.position = "none", axis.text = element_blank()) +
+  labs(x = "Observation", y = "Taxa")
+
+grid.arrange(p1, p2, nrow = 2)
 ```
+
+# Implementing the Model
+
+In this section, we walk through how to implement the discrete sparse finite mixture model on the simulated data, along with the possible posterior inference on the parameters of interest. The primary function used for implementing the discrete sparse finite zero-inflated Dirichlet-Multinomial model is `ZIDM_dSDMMM()`.
+
+```{r, eval=FALSE}
+resultMod <- ZIDM_dSDMMM(dat = simDat$dat, iter = 1500, Kmax = 10, nxi_split = 10, 
+                         theta = 1, s2 = 0.1, s2MH = 1e-3, MHadapt = 500, 
+                         thin = 1, seed = 1)
+```
+
+```{r, include=FALSE}
+resultMod <- readRDS(file = "/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/data/resultMod_vig.rds")
+```
+
+This function requires us to specify the data to which we will apply the model (dat), the number of MCMC iterations (iter), the number of components (Kmax), the sparsity concentration parameter (theta), the variance of the cluster concentration parameter (s2), the variance for the adaptive Metropolis-Hasting when updating the cluster concentration parameter (s2MH), the number of MCMC iterations before using the adaptive proposal (MHadapt), thinning (thin), and the random seed (seed). Note that the `ZIDM_dSDMMM()` function initializes all observations in the same cluster. In this example, we specify that we will apply the model to the simulated data we previously generated (`simDat$dat`). We let the model run for 15,000 iterations, where the first 500 iterations use a non-adaptive proposal for the adaptive Metropolis-Hasting. We set the variance of the cluster concentration parameter to 0.1, and the variance of the adaptive Metropolis-Hasting to $1 \times 10^{-3}$. We limit the clusters to no more than 10 clusters. Besides, if we propose to split the cluster space, the proposed cluster concentration parameters are obtained by using the cluster concentration parameters corresponding to the original cluster, while 10 of the random taxa have different cluster concentration parameters.
+
+The result from the `ZIDM_dSDMMM()` function is a list object. To obtain the final cluster assignment, we use the `finalCLUS()` function. We need to specify the number of iterations to consider as a burn-in period. We utilize the `salso()` function from the `salso` package with the VI loss function [@salso] to determine the final cluster assignment.
+
+```{r}
+### Obtain a vector of the final cluster assignment.
+finalCLUS(resultMod, burn_in = 500, seed = 1)
+```
+
+## Posterior Inference
+
+We then proceed with the posterior inference on the parameters of interested. The first one is the number of active cluster via MCMC iterations. We use `uniqueCLUS()` to obtain the number of active cluster in each MCMC chain.
+
+```{r}
+### Obtain a vector of the number of active cluster for each MCMC iteration.
+clusMCMC <- uniqueCLUS(resultMod) 
+```
+
+```{r, echo=FALSE}
+data.frame(clusMCMC, iter = 1:1500) %>%
+  ggplot(aes(x = iter, y = clusMCMC)) +
+  geom_line() +
+  theme_bw() +
+  scale_y_continuous(breaks = seq(1, 10, 1)) +
+  labs(x = "MCMC Iteration", y = "# Active Cluster")
+```
+
+# Application Data
+
+In this section, we discuss how to apply the proposed model to the application data, mentined in the main Manuscript. We first load the data into the R environment. Note that the cleaned data is available in the package.
+
+```{r}
+data("singhEDD")
+```
+
+# Reference
+
+
 

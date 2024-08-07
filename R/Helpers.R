@@ -1,5 +1,4 @@
-library(dirmult)
-
+### Code: Simulate only the signal taxa
 sim_Signal <- function(N, J, pi_gamma, z_case, aPhi, bPhi, aLambda, bLambda, zsum){
   
   ### (a) Get the "marginal" probability
@@ -35,6 +34,7 @@ sim_Signal <- function(N, J, pi_gamma, z_case, aPhi, bPhi, aLambda, bLambda, zsu
   
 }
 
+### Code: Simulate the data
 sim_clusDat <- function(n, Jnoise, Jsignal, pZero, ZSumNoise, ZSumSignal, 
                         seed, shuffle = TRUE, caseSignal = 3, aPhi = 1, bPhi = 1, 
                         aLambda = 1, bLambda = 1){
@@ -73,5 +73,75 @@ sim_clusDat <- function(n, Jnoise, Jsignal, pZero, ZSumNoise, ZSumSignal,
   }
   
   list(dat = simulated_dat, c = simulated_ci)
+  
+}
+
+### Code: Implement the model
+ZIDM_dSDMMM <- function(dat, iter, Kmax, nxi_split, theta, s2, s2MH, MHadapt,
+                        thin, seed){
+  
+  n <- nrow(dat)
+  J <- ncol(dat)
+  
+  ### Check the specification: Kmax
+  if(Kmax > n){
+    Kmax <- n
+    print("Adjusted: Kmax = n.")
+  }
+  
+  if(Kmax == 1){
+    Kmax <- 2
+    print("Adjusted: Kmax = 2 as Kmax should be greater than 1.")
+  }
+  
+  ### Check the specification: nxi_split
+  if(nxi_split < 1){
+    stop("The number of changed xi (nxi_split) must be non-zero integer.")
+  }
+  
+  if(nxi_split > J){
+    nxi_split <- J
+    print("Adjusted: nxi_split = J.")
+  }
+  
+  ### Check the specification: MHadapt
+  if(MHadapt < 1){
+    print("Use the Adaptive MH since the beginning.")
+  }
+  
+  if(MHadapt > iter){
+    print("Not Using the Adaptive MH for the whole process")
+  }
+  
+  ### Check the specification: thin
+  if(thin < 1){
+    stop("The number of thinning (thin) must be non-zero integer.")
+  }
+  
+  set.seed(seed)
+  mod_adaptive(iter = iter, Kmax = Kmax, nbeta_split = nxi_split, 
+               z = as.matrix(dat),
+               atrisk_init = matrix(1, nrow = n, ncol = J),
+               beta_init = matrix(0, nrow = Kmax, ncol = J),
+               ci_init = rep(0, n), theta = theta, mu = 0, s2 = s2,
+               s2_MH = s2MH, t_thres = MHadapt, launch_iter = 30,
+               r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = thin)
+  
+}
+
+### Code: Number of active cluster via MCMC
+uniqueCLUS <- function(resultList){
+  apply(resultList$ci_result, 1, function(x){length(unique(x))})
+}
+
+### Code: Final Cluster Assignment
+finalCLUS <- function(resultList, burn_in, seed){
+  
+  ### Check the required packages
+  if(!require(salso)){
+    stop("Missing Package: salso")
+  }
+  
+  suppressMessages(as.numeric(salso(resultList$ci_result[-(1:burn_in), ])))
   
 }
