@@ -1,0 +1,77 @@
+---
+title: "ClusterZI - Vignettes"
+output:
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE)
+library(tidyverse)
+library(ggplot2)
+library(latex2exp)
+library(ClusterZI)
+library(salso)
+library(tictoc)
+```
+
+```{r}
+# library(Rcpp)
+# library(devtools)
+# compileAttributes()
+# build()
+# install()
+# uninstall()
+```
+
+# Introduction
+
+This vignette demonstrates how to implement the semi-parametric clustering methods on the microbiome data, which assumed to be the Zero-Inflated Dirichlet-Multinomial distribution, explained in the main manuscript, ["Main Manuscript"]. This vignette first provides the brief intstruction on how to install the packages. The document then provides the instruction on how to simulate the data used in the main manuscript. The implementation of the model on the both simulated data, and the application data is provided in the end of this vignette.
+
+# Installation
+
+To install the package, we run the command below: 
+
+```{r install, eval=FALSE}
+devtools::install_github("skorsu/ClusterZI")
+```
+
+# Simulation Data
+
+In this section, we demonstrate how we obtain the simulated simulated data used in the main manuscript. After installing and loading `ClusterZI` package to the R environment, we use the the `sim_clusDat` function to generate the two-cluster Zero-Inflated Dirichlet-Multinomial distributed data.
+
+```{r}
+### Simulate the data
+simDat <- sim_clusDat(n = 100, Jnoise = 150, Jsignal = 50, pZero = 0.35, 
+                      ZSumNoise = 12500, ZSumSignal = 2500, seed = 1)
+```
+
+In order to use the `sim_clusDat` function, we need to specify the number of the observations $(n)$, the number of the noise taxa (taxon that does not contain the information about the clustering)  $(J_{\text{noise}})$, the number of the signal taxa (taxon that differentiate between clusters) $(J_{\text{signal}})$, the proportion of zero expected in the simulated dataset (pZero), the sequencing depth for both noise and signal taxa (ZSumNoise and ZSumSignal respectively), and the random seed (seed). Note that the `sim_clusDat` function split the observations into two clusters evenly. The result from the `sim_clusDat` function is a list consisted of two elements: the simulated OTU table (`dat`) and the cluster allocation for each observation (`c`).
+
+For example, in this case, we have simulated 100 observations with 200 taxa, where 50 of them are considered as the signal taxa. In this simulated dataset, we expect that around 35% of the count are 0. Note that the assumed sequencing depth for each observations is 15,000 where 12,500 and 2,500 are for the noise and signal taxa respectively. We save the simulated data in the object name `simDat`. To access the simulated OTU table, we use `simDat$dat`, while using `simDat$c` give us the cluster allocation. 
+
+
+
+
+
+```{r}
+simDat$c
+```
+
+
+```{r, eval=FALSE}
+tic()
+set.seed(1)
+mod <- mod_adaptive(iter = 1000, Kmax = 10, nbeta_split = 10, z = simDat$dat, 
+                    atrisk_init = matrix(1, nrow = 100, ncol = 200), 
+                    beta_init = matrix(0, nrow = 10, ncol = 200), 
+                    ci_init = rep(0, 100), theta = 1, mu = 0, s2 = 0.1, 
+                    s2_MH = 1e-3, t_thres = 250, launch_iter = 30, 
+                    r0g = 1, r1g = 1, r0c = 1, r1c = 1, thin = 1)
+toc()
+```
+
+```{r, eval=FALSE}
+apply(mod$ci_result, 1, function(x){length(unique(x))}) %>% plot(type = "l")
+salso(mod$ci_result)
+```
+

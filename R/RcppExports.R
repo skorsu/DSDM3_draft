@@ -49,6 +49,10 @@ update_beta <- function(z, atrisk, beta_old, ci, mu, s2, s2_MH) {
     .Call(`_ClusterZI_update_beta`, z, atrisk, beta_old, ci, mu, s2, s2_MH)
 }
 
+update_beta_adaptive <- function(t, t_threshold, z, atrisk, beta_record, beta_init, ci, mu, s2, s2_MH) {
+    .Call(`_ClusterZI_update_beta_adaptive`, t, t_threshold, z, atrisk, beta_record, beta_init, ci, mu, s2, s2_MH)
+}
+
 realloc_full <- function(Kmax, z, atrisk, beta_mat, ci_old, theta) {
     .Call(`_ClusterZI_realloc_full`, Kmax, z, atrisk, beta_mat, ci_old, theta)
 }
@@ -61,52 +65,24 @@ mod <- function(iter, Kmax, nbeta_split, z, atrisk_init, beta_init, ci_init, the
     .Call(`_ClusterZI_mod`, iter, Kmax, nbeta_split, z, atrisk_init, beta_init, ci_init, theta, mu, s2, s2_MH, launch_iter, r0g, r1g, r0c, r1c, thin)
 }
 
-dm_data <- function(Kmax, zi, z_not_i, beta_mat, ci_not_i) {
-    .Call(`_ClusterZI_dm_data`, Kmax, zi, z_not_i, beta_mat, ci_not_i)
+mod_adaptive <- function(iter, Kmax, nbeta_split, z, atrisk_init, beta_init, ci_init, theta, mu, s2, s2_MH, t_thres, launch_iter, r0g, r1g, r0c, r1c, thin) {
+    .Call(`_ClusterZI_mod_adaptive`, iter, Kmax, nbeta_split, z, atrisk_init, beta_init, ci_init, theta, mu, s2, s2_MH, t_thres, launch_iter, r0g, r1g, r0c, r1c, thin)
 }
 
-DMDM <- function(iter, Kmax, z, beta_mat, ci_init, theta, thin) {
-    .Call(`_ClusterZI_DMDM`, iter, Kmax, z, beta_mat, ci_init, theta, thin)
+realloc_dm <- function(Kmax, z, atrisk, beta_mat, ci_old, theta) {
+    .Call(`_ClusterZI_realloc_dm`, Kmax, z, atrisk, beta_mat, ci_old, theta)
 }
 
-DMZIDM_realloc <- function(z, beta_mat, ci_old, theta) {
-    .Call(`_ClusterZI_DMZIDM_realloc`, z, beta_mat, ci_old, theta)
+DM_DM <- function(iter, Kmax, z, beta_init, ci_init, theta, mu, s2, s2_MH, t_thres, thin) {
+    .Call(`_ClusterZI_DM_DM`, iter, Kmax, z, beta_init, ci_init, theta, mu, s2, s2_MH, t_thres, thin)
 }
 
-DMZIDM_launch_mcmc <- function(z, beta_mat, ci_old, launch_iter, S, samp_clus, nk) {
-    .Call(`_ClusterZI_DMZIDM_launch_mcmc`, z, beta_mat, ci_old, launch_iter, S, samp_clus, nk)
+DM_ZIDM <- function(iter, Kmax, nbeta_split, z, beta_init, ci_init, theta, mu, s2, s2_MH, t_thres, launch_iter, r0c, r1c, thin) {
+    .Call(`_ClusterZI_DM_ZIDM`, iter, Kmax, nbeta_split, z, beta_init, ci_init, theta, mu, s2, s2_MH, t_thres, launch_iter, r0c, r1c, thin)
 }
 
-DMZIDM_log_proposal <- function(z, beta_mat, ci_A, ci_B, S, samp_clus) {
-    .Call(`_ClusterZI_DMZIDM_log_proposal`, z, beta_mat, ci_A, ci_B, S, samp_clus)
-}
-
-DMZIDM_sm <- function(Kmax, z, beta_mat, ci_old, theta, launch_iter, r0c, r1c) {
-    .Call(`_ClusterZI_DMZIDM_sm`, Kmax, z, beta_mat, ci_old, theta, launch_iter, r0c, r1c)
-}
-
-DMZIDM <- function(iter, Kmax, z, beta_mat, ci_init, theta, launch_iter, r0c, r1c, thin) {
-    .Call(`_ClusterZI_DMZIDM`, iter, Kmax, z, beta_mat, ci_init, theta, launch_iter, r0c, r1c, thin)
-}
-
-realloc <- function(Kmax, z, atrisk, beta_mat, ci_old, theta) {
-    .Call(`_ClusterZI_realloc`, Kmax, z, atrisk, beta_mat, ci_old, theta)
-}
-
-beta_realloc <- function(z, atrisk, beta_old, ci, mu, s2, s2_MH) {
-    .Call(`_ClusterZI_beta_realloc`, z, atrisk, beta_old, ci, mu, s2, s2_MH)
-}
-
-debug_r <- function(iter, Kmax, z, atrisk, beta_fixed, ci_init, theta) {
-    .Call(`_ClusterZI_debug_r`, iter, Kmax, z, atrisk, beta_fixed, ci_init, theta)
-}
-
-debug_rb <- function(iter, Kmax, z, atrisk, beta_init, ci_init, theta, mu, s2, s2_MH) {
-    .Call(`_ClusterZI_debug_rb`, iter, Kmax, z, atrisk, beta_init, ci_init, theta, mu, s2, s2_MH)
-}
-
-debug_brs <- function(iter, Kmax, nbeta_split, z, atrisk, beta_init, ci_init, theta, mu, s2, s2_MH, launch_iter, r0c, r1c) {
-    .Call(`_ClusterZI_debug_brs`, iter, Kmax, nbeta_split, z, atrisk, beta_init, ci_init, theta, mu, s2, s2_MH, launch_iter, r0c, r1c)
+ZIDM_DM <- function(iter, Kmax, z, atrisk_init, beta_init, ci_init, theta, mu, s2, s2_MH, t_thres, r0g, r1g, thin) {
+    .Call(`_ClusterZI_ZIDM_DM`, iter, Kmax, z, atrisk_init, beta_init, ci_init, theta, mu, s2, s2_MH, t_thres, r0g, r1g, thin)
 }
 
 rcpparma_hello_world <- function() {
