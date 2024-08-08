@@ -133,6 +133,8 @@ The result from the `ZIDM_dSDMMM()` function is a list object. To obtain the fin
 finalCLUS(resultMod, burn_in = 500, seed = 1)
 ```
 
+\textcolor{red}{cluster performance - Both ARI and Jaccard Index}
+
 ## Posterior Inference
 
 We then proceed with the posterior inference on the parameters of interested. The first one is the number of active cluster via MCMC iterations. We use `uniqueCLUS()` to obtain the number of active cluster in each MCMC chain.
@@ -153,11 +155,25 @@ data.frame(clusMCMC, iter = 1:1500) %>%
 
 # Application Data
 
-In this section, we discuss how to apply the proposed model to the application data, mentined in the main Manuscript. We first load the data into the R environment. Note that the cleaned data is available in the package.
+In this section, we discuss how to apply the proposed model to the application data, mentioned in the main Manuscript. In this vignette, we use the Enteric Diarrheal Disease dataset, provided by @singh2015intestinal and make it publicly available by @duvallet2017meta. We also have another dataset used in the main manuscript, which is the HIV dataset. This dataset were collected by @noguera2016gut and can be accessed from the `selbal` package [@rivera2018balances].
+
+We first load the data into the R environment. Note that the cleaned data is available in the package. Note that, for both dataset, the first few columns represent the observation ID, the demographic, and the disease status.
 
 ```{r}
 data("singhEDD")
+otuEDD <- singhEDD[, -(1:2)]
+metaEDD <- singhEDD[, 2]
 ```
+
+Then, we apply the proposed model on the EDD dataset.
+
+```{r, eval = FALSE}
+EDDMod <- ZIDM_dSDMMM(dat = metaEDD, iter = 50000, Kmax = 20, nxi_split = 10, 
+                      theta = 1, s2 = 0.1, s2MH = 1e-5, MHadapt = 500, 
+                      thin = 2, seed = 1)
+```
+
+
 
 # Reference
 
