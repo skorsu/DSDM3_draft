@@ -142,6 +142,23 @@ finalCLUS <- function(resultList, burn_in, seed){
     stop("Missing Package: salso")
   }
   
-  suppressMessages(as.numeric(salso(resultList$ci_result[-(1:burn_in), ])))
+  suppressWarnings(as.numeric(salso(resultList$ci_result[-(1:burn_in), ])))
   
 }
+
+### Code: Evaluate the cluster performance (ARI and Jaccard)
+ariCLUS <- function(c1, c2){
+  
+  ### Check the required packages
+  if(!require(mclustcomp)){
+    stop("Missing Package: mclustcomp")
+  }
+  
+  suppressWarnings(mclustcomp(c1, c2)[1, 2])
+  
+}
+
+
+
+
+

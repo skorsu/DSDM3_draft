@@ -12,7 +12,6 @@ library(ggplot2)
 library(latex2exp)
 library(ClusterZI)
 library(salso)
-library(tictoc)
 library(gridExtra)
 ```
 
@@ -74,7 +73,6 @@ simDat_4clus <- rbind(simDat_1$dat,
                       cbind(simDat_2$dat[41:80, 1:50], simDat_2$dat[1:40, 151:200], 
                             simDat_2$dat[1:40, 51:150]))
 
-
 #### Optional: Shuffle the order of the observations
 set.seed(1)
 index <- sample(1:200)
@@ -124,16 +122,22 @@ resultMod <- ZIDM_dSDMMM(dat = simDat$dat, iter = 1500, Kmax = 10, nxi_split = 1
 resultMod <- readRDS(file = "/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/data/resultMod_vig.rds")
 ```
 
-This function requires us to specify the data to which we will apply the model (dat), the number of MCMC iterations (iter), the number of components (Kmax), the sparsity concentration parameter (theta), the variance of the cluster concentration parameter (s2), the variance for the adaptive Metropolis-Hasting when updating the cluster concentration parameter (s2MH), the number of MCMC iterations before using the adaptive proposal (MHadapt), thinning (thin), and the random seed (seed). Note that the `ZIDM_dSDMMM()` function initializes all observations in the same cluster. In this example, we specify that we will apply the model to the simulated data we previously generated (`simDat$dat`). We let the model run for 15,000 iterations, where the first 500 iterations use a non-adaptive proposal for the adaptive Metropolis-Hasting. We set the variance of the cluster concentration parameter to 0.1, and the variance of the adaptive Metropolis-Hasting to $1 \times 10^{-3}$. We limit the clusters to no more than 10 clusters. Besides, if we propose to split the cluster space, the proposed cluster concentration parameters are obtained by using the cluster concentration parameters corresponding to the original cluster, while 10 of the random taxa have different cluster concentration parameters.
+This function requires us to specify the data to which we will apply the model (dat), the number of MCMC iterations (iter), the number of components (Kmax), the sparsity concentration parameter (theta), the variance of the cluster concentration parameter (s2), the variance for the adaptive Metropolis-Hasting when updating the cluster concentration parameter (s2MH), the number of MCMC iterations before using the adaptive proposal (MHadapt), thinning (thin), and the random seed (seed). Note that the `ZIDM_dSDMMM()` function initializes all observations in the same cluster. In this example, we specify that we will apply the model to the simulated data we previously generated (`simDat$dat`). We let the model run for 15,000 iterations, where the first 500 iterations use a non-adaptive proposal for the adaptive Metropolis-Hasting (AMH). We set the variance of the cluster concentration parameter to 0.1, and the variance of the adaptive Metropolis-Hasting to $1 \times 10^{-3}$. We limit the clusters to no more than 10 clusters. Besides, if we propose to split the cluster space, the proposed cluster concentration parameters are obtained by using the cluster concentration parameters corresponding to the original cluster, while 10 of the random taxa have different cluster concentration parameters.
 
 The result from the `ZIDM_dSDMMM()` function is a list object. To obtain the final cluster assignment, we use the `finalCLUS()` function. We need to specify the number of iterations to consider as a burn-in period. We utilize the `salso()` function from the `salso` package with the VI loss function [@salso] to determine the final cluster assignment.
 
 ```{r}
 ### Obtain a vector of the final cluster assignment.
-finalCLUS(resultMod, burn_in = 500, seed = 1)
+clusResult <- finalCLUS(resultMod, burn_in = 500, seed = 1)
 ```
 
-\textcolor{red}{cluster performance - Both ARI and Jaccard Index}
+We can obtain the Adjusted Rand Index (ARI) to measure the performance of the resulting cluster compared to the actual cluster assignment (if applicable) by using the `ariCLUS()` function.
+
+```{r, eval=FALSE}
+### Calculate the ARI
+ariCLUS(clusResult, simDat$c)
+# 1
+```
 
 ## Posterior Inference
 
@@ -142,9 +146,8 @@ We then proceed with the posterior inference on the parameters of interested. Th
 ```{r}
 ### Obtain a vector of the number of active cluster for each MCMC iteration.
 clusMCMC <- uniqueCLUS(resultMod) 
-```
 
-```{r, echo=FALSE}
+### Create the plot for the active cluster via MCMC iteration
 data.frame(clusMCMC, iter = 1:1500) %>%
   ggplot(aes(x = iter, y = clusMCMC)) +
   geom_line() +
@@ -155,24 +158,32 @@ data.frame(clusMCMC, iter = 1:1500) %>%
 
 # Application Data
 
-In this section, we discuss how to apply the proposed model to the application data, mentioned in the main Manuscript. In this vignette, we use the Enteric Diarrheal Disease dataset, provided by @singh2015intestinal and make it publicly available by @duvallet2017meta. We also have another dataset used in the main manuscript, which is the HIV dataset. This dataset were collected by @noguera2016gut and can be accessed from the `selbal` package [@rivera2018balances].
-
-We first load the data into the R environment. Note that the cleaned data is available in the package. Note that, for both dataset, the first few columns represent the observation ID, the demographic, and the disease status.
+In this section, we discuss how to apply the proposed model to the application data, mentioned in the main Manuscript, which are the HIV dataset, collected by @noguera2016gut and can be accessed from the `selbal` package [@rivera2018balances], and EDD dataset, provided by @singh2015intestinal and make it publicly available by @duvallet2017meta. In this vignette, we use the HIV dataset for demonstrating how to apply the proposed model on the real-world dataset. We first load the data into the R environment. The first column is the observation ID, where the second and third column are the metadata corresponding to each observation. Note that for the EDD dataset, only the second column is the metadata.
 
 ```{r}
-data("singhEDD")
-otuEDD <- singhEDD[, -(1:2)]
-metaEDD <- singhEDD[, 2]
+### Import the dataset
+data("selbalHIV")
+otuHIV <- selbalHIV[, -(1:3)] ### Obtain the OTU table
+metaHIV <- selbalHIV[, 1:3] ### Obtain the metadata
 ```
 
-Then, we apply the proposed model on the EDD dataset.
+We then apply the proposed model to the HIV dataset, running it for 25,000 MCMC iterations without thinning. We decide to use the adaptive proposal for the AMH after the first 2,500 iterations. The variance of the cluster concentration parameter is set to 1, and the variance of the adaptive Metropolis-Hastings is set to $1 \times 10^{-3}$. We limit the model to a maximum of 20 clusters. Additionally, if a split in the cluster space is proposed, the new cluster concentration parameters are derived from those of the original cluster, with 5 randomly selected taxa having different concentration parameters.
 
 ```{r, eval = FALSE}
-EDDMod <- ZIDM_dSDMMM(dat = metaEDD, iter = 50000, Kmax = 20, nxi_split = 10, 
-                      theta = 1, s2 = 0.1, s2MH = 1e-5, MHadapt = 500, 
-                      thin = 2, seed = 1)
+### Apply the model on the HIV dataset
+HIVMod <- ZIDM_dSDMMM(dat = otuHIV, iter = 25000, Kmax = 20, nxi_split = 5, 
+                      theta = 1, s2 = 1, s2MH = 1e-3, MHadapt = 2500, 
+                      thin = 1, seed = 1)
 ```
 
+```{r, include=FALSE}
+HIVMod <- readRDS(file = "/Users/kevin-imac/Desktop/Github - Repo/ClusterZI/data/resultApp_vig.rds")
+HIVMod <- HIVMod$mod
+```
+
+```{r}
+finalCLUS(HIVMod, burn_in = 5000, seed = 1)
+```
 
 
 # Reference
