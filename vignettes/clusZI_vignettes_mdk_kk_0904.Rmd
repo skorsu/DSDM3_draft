@@ -35,8 +35,10 @@ In this vignette, we demonstrates how to implement the discrete sparse Dirichlet
 To install the package, run the command below: 
 
 ```{r install, eval=FALSE}
-devtools::install_github( "skorsu/ClusterZI" )
+devtools::install_github( "skorsu/DSDM3" )
 ```
+
+\textcolor{blue}{I have changed the GitHub repo to DSDM3. I don't know is this enough for changing the package name or not.}
 
 # Simulation Data
 
@@ -101,9 +103,9 @@ resultMod <- ZIDM_DSDM3( dat = simDat$dat, iter = 1500, Kmax = 10, nxi_split = 1
 resultMod <- readRDS(file = "~/Desktop/Github Repo/ClusterZI/data/resultMod_vig.rds")
 ```
 
-This function requires us to specify \textcolor{blue}{the $N \times J$-dimentional OTU table, where each row represents the observation and each column represents the taxa} (`dat`), the number of MCMC iterations (`iter`), the number of components (`Kmax`), the number of concentration parameters proposed to change from the original cluster in a split step of the split-merge update (`nxi_split`), the sparsity concentration parameter (`theta`), the variance of the cluster concentration parameter (`s2`), the variance for the adaptive Metropolis-Hastings (AMH) step when updating the cluster concentration parameter (`s2MH`), the number of MCMC iterations before using the adaptive proposal (`MHadapt`), thinning (`thin`), and the random seed (`seed`). Note that the `ZIDM_DSDM3()` function initializes all observations in the same cluster. In this example, we will apply the model to the simulated data from above (`simDat$dat`). We run the model for 15,000 iterations, where the first 500 iterations use a non-adaptive proposal for the AMH step. We set the variance of the cluster concentration parameter to 0.1, and the variance of the adaptive Metropolis-Hasting to $1 \times 10^{-3}$. We limit the clusters to no more than 10 clusters (i.e., `Kmax` = 10). For split-merge step, the proposed cluster concentration parameters are obtained by using the cluster concentration parameters corresponding to the original cluster with `nxi_split = 10` random taxa having new cluster concentration parameters.
+This function requires us to specify \textcolor{blue}{the $N \times J$-dimentional OTU table, where each row represents the observation and each column represents the taxa} (`dat`), the number of MCMC iterations (`iter`), the number of components (`Kmax`), the number of concentration parameters proposed to change from the original cluster in a split step of the split-merge update (`nxi_split`), the sparsity concentration parameter (`theta`), the variance of the cluster concentration parameter (`s2`), the variance for the adaptive Metropolis-Hastings (AMH) step when updating the cluster concentration parameter (`s2MH`), the number of MCMC iterations before using the adaptive proposal (`MHadapt`), thinning (`thin`), and the random seed (`seed`). Note that the `ZIDM_DSDM3()` function initializes all observations in the same cluster. In this example, we will apply the model to the simulated data from above (`simDat$dat`). We run the model for 15,000 iterations, where the first 500 iterations use a non-adaptive proposal for the AMH step. We set the variance of the cluster concentration parameter to 0.1, and the variance of the adaptive Metropolis-Hasting to $1 \times 10^{-3}$. We limit the clusters to no more than 10 clusters (i.e., `Kmax` = 10). \textcolor{blue}{For split-merge step, the proposed cluster concentration parameters are obtained by using the cluster concentration parameters corresponding to the original cluster with 10 random taxa having new cluster concentration parameters} (i.e., `nxi_split` = 10). 
 
-The output from the `ZIDM_DSDM3()` function is a list object. To obtain the final cluster assignment, we use the `finalCLUS()` function. For implementation, we need to specify the number of iterations to consider as burn-in. We utilize the `salso()` function from the `salso` package with the variation of information loss function  to determine the final cluster assignment [@salso].
+The output from the `ZIDM_DSDM3()` function is a list object. To obtain the final cluster assignment, we use the `finalCLUS()` function. For implementation, we need to specify the number of iterations to consider as burn-in. We utilize the `salso()` function from the `salso` package with the variation of information loss function to determine the final cluster assignment [@salso].
 
 ```{r}
 ### Obtain a vector of the final cluster assignment.
@@ -112,7 +114,7 @@ clusResult <- finalCLUS( resultMod, burn_in = 500, seed = 1 )
 
 ## Posterior Inference
 
-Prior to performing inference on the cluster allocatation, we assess the convergence of the model by plotting the number of active clusters in each MCMC iteration using the `uniqueCLUS()` function (Figure 2). We observe that the model converges around iteration 750. 
+Prior to performing inference on the cluster allocation, we assess the convergence of the model by plotting the number of active clusters in each MCMC iteration using the `uniqueCLUS()` function (Figure 2). We observe that the model converges around iteration 750. 
 
 ```{r}
 ### Obtain a vector of the number of active cluster for each MCMC iteration.
@@ -131,7 +133,7 @@ ariCLUS( clusResult, simDat$c )
 
 # Application Data
 
-In this section, we apply the proposed model to the HIV data analyzed in the main manuscript collected by @noguera2016gut, which can be accessed in the `selbal` package [@rivera2018balances].  We first load the data into the R environment. The first column is the observation ID. \textcolor{blue}{The second and third columns represent the sexual behavior (e.g., whether the person identifies as a man who has sex with men or MSM) and HIV infection status for each observation, respectively. After removing these three columns from the loaded dataset, we obtain a 155 $\times$ 60-dimensional OTU table.}
+In this section, we apply the proposed model to the HIV data analyzed in the main manuscript collected by @noguera2016gut, which can be accessed in the `selbal` package [@rivera2018balances].  We first load the data into the R environment. The first column is the observation ID. \textcolor{blue}{The second and third columns represent the sexual behavior (e.g., whether the person identifies as a man who has sex with men or MSM) and HIV infection status for each observation, respectively. After removing these three columns from the imported dataset, we obtain a 155 $\times$ 60-dimensional OTU table.}
 
 ```{r}
 ### Import the dataset
@@ -227,6 +229,8 @@ HIV_dist %>%
   xtable2kable()
 
 ```
+
+\newpage
 
 # Reference
 
