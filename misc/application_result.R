@@ -4,12 +4,16 @@ library(doParallel)
 library(tidyverse)
 library(salso)
 library(selbal)
+library(taxize)
+library(colorspace)
 # library(ClusterZI)
 
 # User-defined function
 uniqueClus <- function(x){
   length(unique(x))
 }
+
+add <- function(x) Reduce("+", x)
 
 ### Dataset: -------------------------------------------------------------------
 #### HIV dataset
@@ -19,6 +23,33 @@ sexHIV <- factor(datHIV[, 61], labels = c("non-MSM", "MSM"))
 statusHIV <- factor(datHIV[, 62], labels = c("Healthy", "HIV-patient"))
 otuHIV <- datHIV[, 1:60]
 
+### The column name are recorded as a genus. Obtain the family and phylum from
+### NCBI database.
+
+taxaName <- data.frame(c = str_remove(str_extract(colnames(otuHIV), "c_[:alpha:]+"), "c_"),
+                       o = str_remove(str_extract(colnames(otuHIV), "o_[:alpha:]+"), "o_"),
+                       f = str_remove(str_extract(colnames(otuHIV), "f_[:alpha:]+"), "f_"),
+                       g = str_remove(str_extract(colnames(otuHIV), "g_[:alpha:]+"), "g_"))
+
+searchTERM <- ifelse(! is.na(taxaName$f), taxaName$f, 
+                     ifelse(taxaName$g == "unclassified", NA, taxaName$g))
+
+groupDB <- data.frame(matrix(NA, ncol = 2, nrow = 60))
+colnames(groupDB) <- c("Phylum", "Family")
+
+set.seed(1)
+for(i in 1:60){
+  if(!is.na(searchTERM[i])){
+    dbResult <- classification(searchTERM[i], db = "ncbi")
+    if(is.data.frame(dbResult[[1]])){
+      groupDB[i, ] <- c(subset(dbResult[[1]], rank == "phylum")$name,
+                        subset(dbResult[[1]], rank == "family")$name)
+    }
+  }
+}
+
+# groupDB[which(is.na(searchTERM)), ]
+
 ### Basic Info
 length(sexHIV)
 table(sexHIV)
@@ -26,8 +57,8 @@ table(statusHIV)
 dim(otuHIV)
 mean(otuHIV == 0)
 
-# path <- "/Users/kevinkvp/Desktop/Github Repo/Manuscript/"
-path <- "/Users/kevin-imac/Desktop/Github - Repo/ClusterZI - Manuscript Code - Draft/Manuscript/"
+path <- "/Users/kevinkvp/Desktop/Github Repo/Manuscript/"
+# path <- "/Users/kevin-imac/Desktop/Github - Repo/ClusterZI - Manuscript Code - Draft/Manuscript/"
 
 resultFilename <- c(paste0(path, "Result/selbal_hiv/result_selbal_HIV_chain_", 1:2, "_init_oneClus_JUL10_fixed.rds"),
                     paste0(path, "Result/selbal_hiv/result_selbal_HIV_chain_", 1, "_init_3clus_JUL10_fixed.rds"),
@@ -44,6 +75,161 @@ stopImplicitCluster()
 
 set.seed(1)
 clusComb <- as.numeric(salso(MCMCCombine))
+
+#### Obtain the estimated Relative Abundance
+zDEPTH <- as.numeric(rowSums(otuHIV))
+estSUMz_allCHAIN <- vector("list", 5)
+
+for(z in 1:5){
+  
+  resultTEST <- readRDS(resultFilename[z])
+  
+  registerDoParallel(5)
+  estSUMz_allCHAIN[[z]] <- foreach(i = 1:155, .combine = rbind) %dopar% {
+    ci <- resultTEST$mod$ci_result[15001:25000, i] ### Cluster Assignment
+    at_risk <- t(resultTEST$mod$atrisk_result[i, , 15001:25000]) ### At-risk indicator
+    clus_conc <- t(sapply(1:10000, function(x){resultTEST$mod$beta_result[ci[x] + 1, , 15000 + x]})) ### Cluster Concentration
+    
+    set.seed(1)
+    estUNNORMprob <- sapply(1:10000, function(t){
+      sapply(1:60, function(j){ifelse(at_risk[t, j] == 0, 0, rgamma(1, exp(clus_conc[t, j]), 1))})
+    }) %>% t()
+    
+    estNORMprob <- estUNNORMprob/rowSums(estUNNORMprob)
+    
+    set.seed(1)
+    estZ <- sapply(1:10000, function(x){
+      rmultinom(1, zDEPTH[i], estNORMprob[x, ])
+    })
+    
+    rowSums(estZ)
+    
+  }
+  stopImplicitCluster()
+  
+  rm(resultTEST)
+  
+}
+
+### Get the estimated Relative Abundance
+estSUMz <- add(estSUMz_allCHAIN)
+estRela <- estSUMz/rowSums(estSUMz)
+
+rownames(estRela) <- rownames(otuHIV)
+groupDB[is.na(groupDB)] <- "Others"
+
+### Obtain the estimated aggregate relative abundance
+agg_estRela <- matrix(NA, nrow = 155, ncol = 32)
+for(i in 1:32){
+  
+  jIndex <- which(sapply(1:60, function(x){sum(groupDB[x, ] == distinct(groupDB)[i, ]) == 2}))
+  if(length(jIndex) == 1){
+    agg_estRela[, i] <- estRela[, jIndex]
+  } else {
+    agg_estRela[, i] <- rowSums(estRela[, jIndex])
+  }
+  
+}
+
+colTab <- distinct(groupDB)
+labNames <- c("Prevotellaceae", "Oscillospiraceae", "Bacteroidaceae", "Lachnospiraceae",
+              "Succinivibrionaceae", "Tannerellaceae", "Erysipelotrichaceae", "Rikenellaceae",
+              "Acidaminococcaceae", "Barnesiellaceae", "Coprobacillaceae", "Veillonellaceae",
+              "Clostridiaceae", "Peptostreptococcaceae", "Odoribacteraceae", "Selenomonadaceae",
+              "Victivallaceae", "Sutterellaceae", "Bifidobacteriaceae", "Enterobacteriaceae", 
+              "Elusimicrobiaceae", "Streptococcaceae", "Desulfovibrionaceae", "Christensenellaceae", 
+              "Bacillota", "Brachyspiraceae", "Thalassospiraceae", "Anaeroplasmataceae",
+              "Defluviitaleaceae", "Porphyromonadaceae", "Coriobacteriaceae", "Others")
+
+colnames(agg_estRela) <- colTab$Family
+
+aggRELA_long <- data.frame(agg_estRela, ID = rownames(otuHIV)) %>%
+  inner_join(data.frame(ID = rownames(otuHIV), Cluster = paste0("Cluster ", clusComb))) %>%
+  # mutate(ID = singhEDD$SampleID, Cluster = paste0("Cluster ", combClus)) %>%
+  pivot_longer(!c(ID, Cluster))
+
+aggRELA_long$name <- factor(aggRELA_long$name, levels = labNames)
+# finalAGG <- inner_join(aggRELA_long, colorDistinct)
+# finalAGG$name <- factor(finalAGG$name, levels = colorDistinct[, 1])
+
+testCOL <- sequential_hcl(29, "PuBuGn")
+plotCOL <- c("red", testCOL[1], "yellow", testCOL[-1], "grey90")
+
+aggRELA_long %>%
+  ggplot(aes(x = ID, y = value, fill = name)) +
+  geom_bar(stat = "identity", linewidth = 0.25) +
+  theme_bw() + 
+  scale_y_continuous(labels = scales::percent) +
+  theme(legend.position = "bottom",
+        legend.box = "vertical",
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        strip.text.x = element_text(size = 30),
+        axis.title.x = element_text(size = 30),
+        axis.title.y = element_text(size = 30),
+        legend.text = element_text(size = 17.5),
+        axis.text.y = element_text(size = 15), legend.title = element_text(size = 20)) +
+  scale_fill_manual(values = plotCOL) +
+  guides(color = guide_legend(order = 1), 
+         fill = guide_legend(nrow = 4, order = 2)) +
+  labs(y = "Relative Abundances", x = "Participants", fill = "Taxon", color = "Order") +
+  facet_grid(. ~ Cluster, scales = "free")
+
+# sapply(1:32, function(x){kruskal.test(agg_estRela[, x] ~ clusComb)$p.val})
+
+
+# distinct(groupDB)
+
+
+# resultTEST <- readRDS(resultFilename[1])
+# 
+# registerDoParallel(5)
+# estSUMz_allCHAIN[[1]] <- foreach(i = 1:155, .combine = rbind) %dopar% {
+#   ci <- resultTEST$mod$ci_result[15001:25000, i] ### Cluster Assignment
+#   at_risk <- t(resultTEST$mod$atrisk_result[i, , 15001:25000]) ### At-risk indicator
+#   clus_conc <- t(sapply(1:10000, function(x){resultTEST$mod$beta_result[ci[x] + 1, , 15000 + x]})) ### Cluster Concentration
+#   
+#   set.seed(1)
+#   estUNNORMprob <- sapply(1:10000, function(t){
+#     sapply(1:60, function(j){ifelse(at_risk[t, j] == 0, 0, rgamma(1, exp(clus_conc[t, j]), 1))})
+#   }) %>% t()
+#   
+#   estNORMprob <- estUNNORMprob/rowSums(estUNNORMprob)
+#   
+#   set.seed(1)
+#   estZ <- sapply(1:10000, function(x){
+#     rmultinom(1, zDEPTH[i], estNORMprob[x, ])
+#   })
+#   
+#   rowSums(estZ)
+#   
+# }
+# stopImplicitCluster()
+# 
+# estSUMz/rowSums(estSUMz)
+# 
+# ci <- resultTEST$mod$ci_result[15001:25000, 1] ### Cluster Assignment
+# at_risk <- t(resultTEST$mod$atrisk_result[1, , 15001:25000]) ### At-risk indicator
+# clus_conc <- t(sapply(1:10000, function(x){resultTEST$mod$beta_result[ci[x] + 1, , 15000 + x]}))
+# 
+# set.seed(1)
+# estUNNORMprob <- sapply(1:10000, function(i){
+#   sapply(1:60, function(j){ifelse(at_risk[i, j] == 0, 0, rgamma(1, exp(clus_conc[i, j]), 1))})
+# }) %>% t()
+# 
+# estNORMprob <- estUNNORMprob/rowSums(estUNNORMprob)
+# 
+# set.seed(1)
+# estZ <- sapply(1:10000, function(x){
+#   rmultinom(1, zDEPTH[1], estNORMprob[x, ])
+# })
+# 
+# rowSums(estZ)
+# 
+# colSums(t(estZ))
+
+#test <- rmultinom(1, zDEPTH[1], estNORMprob[1, ])
+#data.frame(est = test/sum(test), act = as.numeric(otuHIV[1, ]/sum(otuHIV[1, ])))
 
 ### Basic Demo for Each Cluster
 demoHIV <- data.frame(datHIV[, -(1:60)], Cluster = paste0("Cluster ", clusComb))
@@ -176,15 +362,15 @@ finalAGG %>%
 
 ### EDD Dataset - de novo level
 ## data("singhEDD")
-# otuTab <- readRDS("/Users/kevinkvp/Desktop/Github Repo/Manuscript/Data/Application Data/singh/clean_singh_species.rds")
-# metaData <- read.delim("/Users/kevinkvp/Desktop/Github Repo/Manuscript/Data/Application Data/singh/edd_singh.metadata.txt")
+otuTab <- readRDS("/Users/kevinkvp/Desktop/Github Repo/Manuscript/Data/Application Data/singh/clean_singh_species.rds")
+metaData <- read.delim("/Users/kevinkvp/Desktop/Github Repo/Manuscript/Data/Application Data/singh/edd_singh.metadata.txt")
 
-otuTab <- readRDS("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI - Manuscript Code - Draft/Manuscript/Data/Application Data/singh/clean_singh_species.rds")
-metaData <- read.delim("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI - Manuscript Code - Draft/Manuscript/Data/Application Data/singh/edd_singh.metadata.txt")
+# otuTab <- readRDS("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI - Manuscript Code - Draft/Manuscript/Data/Application Data/singh/clean_singh_species.rds")
+# metaData <- read.delim("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI - Manuscript Code - Draft/Manuscript/Data/Application Data/singh/edd_singh.metadata.txt")
 
 ### Import the cluster result
-# path <- "/Users/kevinkvp/Desktop/Github Repo/Manuscript/"
-path <- "/Users/kevin-imac/Desktop/Github - Repo/ClusterZI - Manuscript Code - Draft/Manuscript/"
+path <- "/Users/kevinkvp/Desktop/Github Repo/Manuscript/"
+# path <- "/Users/kevin-imac/Desktop/Github - Repo/ClusterZI - Manuscript Code - Draft/Manuscript/"
 
 ### Filename
 filename <- paste0("Result/Result/result_cleaned_singh_species_chain_", 1:2, "_init_", 
@@ -224,8 +410,32 @@ data.frame(SampleID = rownames(otuTab), combClus) %>%
   group_by(combClus, Status) %>%
   summarise(n = n())
 
+sumTab <- data.frame(SampleID = rownames(otuTab), clus = combClus) %>%
+  inner_join(metaData)
+table(sumTab$clus, sumTab$Status)
+
 ### Obtain the relative abundance (de novo level)
 acRela <- (otuTab/rowSums(otuTab))
+
+sumTab$SampleID == rownames(acRela)
+
+rsDAT <- data.frame(Cluster = paste0("Cluster ", sumTab$clus), 
+                    Richness = rowSums(otuTab > 0), 
+                    Shannon = apply(acRela, 1, function(x){-sum(ifelse(x == 0, 0, x * log(x)))})) %>%
+  pivot_longer(!Cluster)
+
+rsDAT$name <- factor(rsDAT$name, labels = c("Richness", "Shannon Diversity"))
+
+rsDAT %>%
+  ggplot(aes(y = value, x = Cluster)) +
+  geom_boxplot(width = 0.5) +
+  facet_wrap(. ~ name, scales = "free_y") +
+  theme_bw() +
+  theme(axis.title.y = element_blank(),
+        axis.title.x = element_blank(),
+        strip.text.x = element_text(size = 30),
+        axis.text.x = element_text(size = 15),
+        axis.text.y = element_text(size = 15))
 
 ### Obtain the phylum/family
 pf <- data.frame(p = str_extract(colnames(otuTab), "p__[:alpha:]*"),
