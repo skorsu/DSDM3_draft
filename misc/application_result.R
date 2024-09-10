@@ -516,14 +516,15 @@ aggRELA_long %>%
   labs(y = "Relative Abundances", x = "Participants", fill = "Family") +
   facet_grid(. ~ Cluster, scales = "free")
 
-### EDD Dataset - grouped genus level
-# otuTab <- readRDS("/Users/kevinkvp/Desktop/Github Repo/Manuscript/Data/Application Data/singh/clean_singh.rds")
-# metaData <- read.delim("/Users/kevinkvp/Desktop/Github Repo/Manuscript/Data/Application Data/singh/edd_singh.metadata.txt")
-# path <- "/Users/kevinkvp/Desktop/Github Repo/Manuscript/"
+### EDD Dataset - grouped genus level: -----------------------------------------
 
-otuTab <- readRDS("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI - Manuscript Code - Draft/Manuscript/Data/Application Data/singh/clean_singh.rds")
-metaData <- read.delim("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI - Manuscript Code - Draft/Manuscript/Data/Application Data/singh/edd_singh.metadata.txt")
-path <- "/Users/kevin-imac/Desktop/Github - Repo/ClusterZI - Manuscript Code - Draft/Manuscript/"
+otuTab <- readRDS("/Users/kevinkvp/Desktop/Github Repo/Manuscript/Data/Application Data/singh/clean_singh.rds")
+metaData <- read.delim("/Users/kevinkvp/Desktop/Github Repo/Manuscript/Data/Application Data/singh/edd_singh.metadata.txt")
+path <- "/Users/kevinkvp/Desktop/Github Repo/Manuscript/"
+
+# otuTab <- readRDS("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI - Manuscript Code - Draft/Manuscript/Data/Application Data/singh/clean_singh.rds")
+# metaData <- read.delim("/Users/kevin-imac/Desktop/Github - Repo/ClusterZI - Manuscript Code - Draft/Manuscript/Data/Application Data/singh/edd_singh.metadata.txt")
+# path <- "/Users/kevin-imac/Desktop/Github - Repo/ClusterZI - Manuscript Code - Draft/Manuscript/"
 
 resultFilename <- c(paste0(path, "Result/singh/result_cleaned_singh_chain_", 1:2, "_init_oneClus_s2_1en1_s2MH_1en3.rds"),
                     paste0(path, "Result/singh/result_cleaned_singh_chain_", 1, "_init_3clus_s2_1en1_s2MH_1en3.rds"),
@@ -544,6 +545,140 @@ table(combSalso)
 sumTab <- data.frame(SampleID = rownames(otuTab), clus = combSalso) %>%
   inner_join(metaData)
 table(sumTab$clus, sumTab$Status)
+
+#### Obtain the estimated Relative Abundance
+zDEPTH <- as.numeric(rowSums(otuTab))
+estSUMz_allCHAIN <- vector("list", 5)
+
+for(z in 1:5){
+  
+  resultTEST <- readRDS(resultFilename[z])
+  
+  registerDoParallel(5)
+  estSUMz_allCHAIN[[z]] <- foreach(i = 1:303, .combine = rbind) %dopar% {
+    ci <- resultTEST$mod$ci_result[15001:25000, i] ### Cluster Assignment
+    at_risk <- t(resultTEST$mod$atrisk_result[i, , 15001:25000]) ### At-risk indicator
+    clus_conc <- t(sapply(1:10000, function(x){resultTEST$mod$beta_result[ci[x] + 1, , 15000 + x]})) ### Cluster Concentration
+    
+    set.seed(1)
+    estUNNORMprob <- sapply(1:10000, function(t){
+      sapply(1:79, function(j){ifelse(at_risk[t, j] == 0, 0, rgamma(1, exp(clus_conc[t, j]), 1))})
+    }) %>% t()
+    
+    estNORMprob <- estUNNORMprob/rowSums(estUNNORMprob)
+    
+    set.seed(1)
+    estZ <- sapply(1:10000, function(x){
+      rmultinom(1, zDEPTH[i], estNORMprob[x, ])
+    })
+    
+    rowSums(estZ)
+    
+  }
+  stopImplicitCluster()
+  
+  rm(resultTEST)
+  
+}
+
+### Get the estimated Relative Abundance
+estSUMz <- add(estSUMz_allCHAIN)
+estRela <- estSUMz/rowSums(estSUMz)
+
+rownames(estRela) <- rownames(otuTab)
+pf <- data.frame(p = str_extract(colnames(otuTab), "p__[:alpha:]*"),
+                 f = str_extract(colnames(otuTab), "f__[:alpha:]*"))
+
+### Obtain the estimated aggregate relative abundance
+agg_estRela <- matrix(NA, nrow = 303, ncol = 32)
+for(i in 1:32){
+  
+  jIndex <- which(sapply(1:79, function(x){sum(pf[x, ] == distinct(pf)[i, ]) == 2}))
+  if(length(jIndex) == 1){
+    agg_estRela[, i] <- estRela[, jIndex]
+  } else {
+    agg_estRela[, i] <- rowSums(estRela[, jIndex])
+  }
+  
+}
+
+colTab <- distinct(pf)
+colTab <- colTab %>%
+  mutate(famName = str_extract(colTab$f, "[:upper:][:alpha:]*"))
+
+NA_row <- which(is.na(colTab$famName))
+
+agg_estRela <- agg_estRela[, -NA_row]
+colTab <- colTab[-NA_row, ]
+colnames(agg_estRela) <- colTab$famName
+
+agg_estRela <- agg_estRela %>%
+  as.data.frame() %>%
+  mutate(Others = 1 - rowSums(agg_estRela))
+
+colTab <- colTab %>%
+  add_row(p = "Other", f = "Other", famName = "Others")
+
+colTab <- colTab %>% mutate(colorTone = NA)
+
+table(colTab$p)
+
+colTab[which(colTab$p == "p__Actinobacteria"), "colorTone"] <- sequential_hcl(3, "Blues 3")
+colTab[which(colTab$p == "p__Bacteroidetes"), "colorTone"] <- sequential_hcl(4, "Reds 3")
+colTab[which(colTab$p == "p__Firmicutes"), "colorTone"] <- sequential_hcl(13, "Mint")
+colTab[which(colTab$p == "p__Fusobacteria"), "colorTone"] <- "cyan"
+colTab[which(colTab$p == "p__Proteobacteria"), "colorTone"] <- sequential_hcl(6, "YlOrBr")
+colTab[which(colTab$p == "p__Verrucomicrobia"), "colorTone"] <- "green"
+colTab[which(colTab$p == "Other"), "colorTone"] <- "grey90"
+
+aggRELA_long <- data.frame(agg_estRela, ID = rownames(otuTab)) %>%
+  inner_join(data.frame(ID = rownames(otuTab), Cluster = paste0("Cluster ", combSalso))) %>%
+  # mutate(ID = singhEDD$SampleID, Cluster = paste0("Cluster ", combClus)) %>%
+  pivot_longer(!c(ID, Cluster))
+
+orderINDEX <- c(which(colTab$p == "p__Actinobacteria"),
+                which(colTab$p == "p__Bacteroidetes"),
+                which(colTab$p == "p__Firmicutes"),
+                which(colTab$p == "p__Fusobacteria"),
+                which(colTab$p == "p__Proteobacteria"),
+                which(colTab$p == "p__Verrucomicrobia"),
+                which(colTab$p == "Other"))
+
+aggRELA_long$name <- factor(aggRELA_long$name, levels = colTab$famName[orderINDEX])
+
+
+# 
+# colnames(colTab)[3] <- "famName"
+# 
+# 
+# inner_join(aggRELA_long, colTab)
+# 
+# aggRELA_long$name <- factor(aggRELA_long$name, levels = labNames)
+# finalAGG <- inner_join(aggRELA_long, colorDistinct)
+# finalAGG$name <- factor(finalAGG$name, levels = colorDistinct[, 1])
+
+# colTab$famName
+
+aggRELA_long %>%
+  ggplot(aes(x = ID, y = value, fill = name)) +
+  geom_bar(stat = "identity", linewidth = 0.25) +
+  theme_bw() + 
+  scale_y_continuous(labels = scales::percent) +
+  theme(legend.position = "bottom",
+        legend.box = "vertical",
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        strip.text.x = element_text(size = 30),
+        axis.title.x = element_text(size = 30),
+        axis.title.y = element_text(size = 30),
+        legend.text = element_text(size = 17.5),
+        axis.text.y = element_text(size = 15), legend.title = element_text(size = 20)) +
+  scale_fill_manual(values = colTab$colorTone[orderINDEX]) +
+  guides(color = guide_legend(order = 1), 
+         fill = guide_legend(nrow = 4, order = 2)) +
+  labs(y = "Relative Abundances", x = "Participants", fill = "Taxon", color = "Order") +
+  facet_grid(. ~ Cluster, scales = "free")
+
 
 ### Obtain the relative abundance (de novo level)
 acRela <- (otuTab/rowSums(otuTab))
